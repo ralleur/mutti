@@ -10,7 +10,7 @@ dafür kein externes Benutzerkonto und keine Kenntnisse über VPNs, Ports oder D
 Dieser Plan umfasst die Forks, eigene Repositories, das Designsystem, die Marke,
 Installation, Gerätefreigabe, direkten Fernzugriff, Updates und Release-Prüfung.
 Er übernimmt die technischen Erkenntnisse der
-[Connect-Prüfung](https://github.com/ralleur/kurtz/blob/main/docs/kurtz-connect-feasibility.md), ersetzt aber deren frühere
+[Connect-Prüfung](https://github.com/ralleur/kurtz/blob/kurtz/docs/kurtz-connect-feasibility.md), ersetzt aber deren frühere
 Produktempfehlung für eine verpflichtende externe Tailscale-Einrichtung.
 
 ## 1. Verbindliche Entscheidungen und Planannahmen
@@ -371,7 +371,7 @@ kurtz-Repository sind folgende klar abgegrenzte Änderungen vorgesehen:
 macOS dient als erster Integrationsnachweis. iPhone/iPad und **echtes Apple TV**
 folgen vor der jeweiligen Freigabe. Der bisherige tvOS-/Catalyst-Linktest ist
 kein Nachweis für Installation, Lebenszyklus oder Filmwiedergabe. Die bestehenden
-[Apple-Release-Gates](https://github.com/ralleur/kurtz/blob/main/docs/release/apple-release-plan.md) gelten weiterhin.
+[Apple-Release-Gates](https://github.com/ralleur/kurtz/blob/kurtz/docs/release/apple-release-plan.md) gelten weiterhin.
 
 ## 10. Upstream, Updates und Lizenzen
 

@@ -24,7 +24,8 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 - Mutti-Server: zwölf Tests gegen fremde Hosts/Origins, gefälschte Forwarded-Header,
   nicht lokale Zugriffe und ungültige Preview-Konfiguration bestanden.
 - Mutti Web: Produktionsbuild und TypeScript; ESLint für geänderte Abläufe,
-  Stylelint für geänderte Styles. Web-CI des ersten gepinnten Stands erfolgreich.
+  Stylelint für geänderte Styles. Web-CI des gepinnten Stands erfolgreich.
+  Auch die eigenen Server-, Mac- und Linux-amd64-Container-CI-Prüfungen bestanden.
 - Regionale Sprachauswahl wurde nach einem echten WKWebView-Sichttest korrigiert
   und gegen `de-DE`, `de_AT`, `en-gb` und ungültige Sprachcodes getestet.
 - Mac und Docker: jeweils frische Daten, Besitzerzugang, nicht administratives
@@ -33,6 +34,9 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
   geprüft, nach Geräteentfernung weitere authentifizierte Anfragen verweigert.
 - Mac-App tatsächlich gestartet, Assistent sichtbar; App-Beenden entfernt den
   lokalen Server-Listener. Lokale Ad-hoc-Signatur verifiziert. Keine Notarisierung.
+  Der finale Mac-Build stammt aus sauberen Server-/Web-Commits; die Sprachvorgabe
+  wurde erneut im echten Fenster geprüft. Docker-Neustart erhält Serveridentität
+  und abgeschlossene Einrichtung; der temporäre Testcontainer wurde entfernt.
 - `directlab`: echter Userspace-WireGuard-Datenweg und Disco-Endpunkt, weder DERP
   noch Peer-Relay. Ein Rechner; keine Aussage über NAT-Erfolgsquoten im Internet.
 
