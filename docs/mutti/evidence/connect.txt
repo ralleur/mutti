@@ -9,8 +9,7 @@ PASS real Jellyfin/Mutti synthetic-video integration, native macOS server:
   real HLS transcode: PlaybackInfo, master/media playlists, media segment
   Jellyfin WebSocket HTTP 101
   revoked device denied after new transport connection
-PASS pairing/Range/WebSocket/revocation through packaged Linux arm64 Docker sidecar and admin API
-  (HLS added subsequently; see final package test results)
+PASS the same complete flow including HLS through packaged Linux arm64 Docker sidecar and admin API
 PASS in-process test closes an ongoing synthetic stream on device revocation
 PASS expired/malformed invitations, claimed invitation replay, wrong server pin,
   local gateway Host/Origin/capability checks, broker relay/owner checks
