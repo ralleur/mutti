@@ -170,6 +170,15 @@ namespace Jellyfin.Server
             IWebHostEnvironment env,
             IConfiguration appConfig)
         {
+            // Mutti preview: enforce the boundary before proxy headers, CORS and setup.
+            var previewOrigin = Environment.GetEnvironmentVariable("MUTTI_PREVIEW_ORIGIN");
+            if (!string.IsNullOrEmpty(previewOrigin))
+            {
+                var origin = new Uri(previewOrigin, UriKind.Absolute);
+                var localOnly = Environment.GetEnvironmentVariable("MUTTI_LOCAL_ONLY") == "1";
+                app.Use(next => new Mutti.PreviewBoundaryMiddleware(next, origin, localOnly).InvokeAsync);
+            }
+
             app.UseBaseUrlRedirection();
 
             // Wrap rest of configuration so everything only listens on BaseUrl.

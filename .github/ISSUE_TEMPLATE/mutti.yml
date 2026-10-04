@@ -1,0 +1,15 @@
+name: Mutti problem
+description: Report a Mutti-specific problem without credentials or private media details.
+body:
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Mutti version, platform and reproduction steps
+    validations:
+      required: true

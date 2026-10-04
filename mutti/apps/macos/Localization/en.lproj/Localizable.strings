@@ -1,0 +1,17 @@
+"Mutti öffnen" = "Open Mutti";
+"Mutti beenden" = "Quit Mutti";
+"Auf diesem Mac bereit" = "Ready on this Mac";
+"Lokale Vorschau" = "Local preview";
+"Lokale Protokolle öffnen" = "Open local logs";
+"Deine Medien.\nGut zu Hause." = "Your media.\nAt home.";
+"Erneut starten" = "Try again";
+"Mutti wird gestartet …" = "Starting Mutti …";
+"Medienordner wählen" = "Choose media folder";
+"Mutti läuft bereits. Öffne die vorhandene App." = "Mutti is already running. Open the existing app.";
+"Der lokale Serverzugang konnte nicht vorbereitet werden." = "The local server connection could not be prepared.";
+"Der lokale Zugang ist belegt. Beende eine andere Mutti-Instanz und versuche es erneut." = "The local address is in use. Quit another Mutti instance and try again.";
+"Die Netzwerkeinstellungen konnten nicht gelesen werden." = "The network settings could not be read.";
+"Das App-Paket ist unvollständig." = "The app package is incomplete.";
+"Das App-Paket ist unvollständig. Bitte baue oder installiere Mutti erneut." = "The app package is incomplete. Please build or install Mutti again.";
+"Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll." = "Mutti stopped. You can restart the server. Details are in the local log.";
+"Der Start dauert zu lange. Prüfe das Protokoll und versuche es erneut." = "Startup is taking too long. Check the log and try again.";

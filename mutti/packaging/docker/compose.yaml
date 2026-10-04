@@ -1,0 +1,23 @@
+name: mutti-preview
+services:
+  mutti:
+    image: mutti:dev
+    build:
+      context: ../../..
+      dockerfile: mutti/packaging/docker/Dockerfile
+      additional_contexts:
+        web: ../../../../mutti-web
+    user: "${MUTTI_UID:-1000}:${MUTTI_GID:-1000}"
+    ports:
+      - "127.0.0.1:18597:8096"
+    volumes:
+      - "${MUTTI_DATA:?Set MUTTI_DATA to an empty private directory}:/config"
+      - "${MUTTI_CACHE:?Set MUTTI_CACHE to an empty cache directory}:/cache"
+      - "${MUTTI_MEDIA:?Set MUTTI_MEDIA to the media directory}:/media:ro"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

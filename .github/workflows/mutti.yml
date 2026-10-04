@@ -1,0 +1,32 @@
+name: Mutti
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: 10.0.401
+      - run: dotnet test tests/Jellyfin.Server.Tests/Jellyfin.Server.Tests.csproj --filter FullyQualifiedName~PreviewBoundary -c Release
+  mac-shell:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: swift build --package-path mutti/apps/macos -c release
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Check out pinned web sources
+        run: |
+          WEB_COMMIT=$(python3 -c 'import json; print(json.load(open("mutti/components.lock.json"))["web"]["commit"])')
+          git clone https://github.com/ralleur/mutti-web.git /tmp/mutti-web
+          git -C /tmp/mutti-web checkout --detach "$WEB_COMMIT"
+      - run: docker build --build-context web=/tmp/mutti-web -f mutti/packaging/docker/Dockerfile -t mutti:ci .

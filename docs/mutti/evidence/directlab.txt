@@ -1,0 +1,5 @@
+=== RUN   TestDirectWithoutAnyDERPServer
+    direct_test.go:117: PASS: real encrypted userspace HTTP over direct endpoint 127.0.0.1:54453; no DERP server configured or running. Scope: one host, not WAN.
+--- PASS: TestDirectWithoutAnyDERPServer (11.27s)
+PASS
+ok  	mutti.local/directlab	11.913s
