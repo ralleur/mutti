@@ -16,6 +16,10 @@ PASS expired/malformed invitations, claimed invitation replay, wrong server pin,
 PASS macOS native shell build and visual inspection of device/remote settings
 PASS signed kurtz Mac Catalyst build; iOS and tvOS arm64 simulator builds
 PASS Go C archives for Catalyst, iOS device/simulator, tvOS device/simulator
+PASS actual Catalyst C/Swift runtime: loopback gateway, status, bounded failure, cancellation
+PASS all 205 inherited Jellyfin.Controller tests after isolating shared fixtures
+  (MediaSourceManager initialized explicitly; PlaylistTests serialized with
+  other LibraryManager tests). No server behavior changed by these fixture fixes.
 
 No two-network WAN/NAT claim. No real iPhone/Apple TV camera/device runtime claim.
 No NAS hardware test. No deployed public rendezvous, no relay, no release upload.

@@ -14,6 +14,8 @@ Dies ist eine Entwicklungsvorschau, kein freigegebenes oder notarisiertes Releas
 4. Im kurtz-Testbuild unter **Verbinden → Mit Mutti koppeln** den Code mit dem
    iPhone/iPad scannen oder den Link auf Mac/Apple TV einfügen. Ein auf iOS
    gescannter `kurtz://pair`-Link öffnet auch direkt die Kopplungsansicht.
+   Falls kurtz bereits angemeldet ist: über **Einstellungen → Benutzer wechseln**
+   zur Konto-/Serverauswahl zurückkehren und dort die Verbindung hinzufügen.
 5. Den Fingerabdruck auf beiden Seiten vergleichen, in Mutti das Gerät und sein
    Wiedergabeprofil bestätigen. kurtz meldet dieses Profil an.
 6. Film starten, spulen, App neu starten, Gerät in Mutti sperren. Die Sperre muss
