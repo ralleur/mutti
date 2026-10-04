@@ -1,0 +1,24 @@
+Mutti Connect development verification — 2026-10-04
+
+PASS go test -race ./... (isolated loopback ICE, macOS arm64)
+PASS go vet ./...
+PASS real Jellyfin/Mutti synthetic-video integration, native macOS server:
+  pinned TLS device pairing, owner approval to non-admin playback profile
+  administration denied
+  encrypted Range 206 byte-exact
+  real HLS transcode: PlaybackInfo, master/media playlists, media segment
+  Jellyfin WebSocket HTTP 101
+  revoked device denied after new transport connection
+PASS pairing/Range/WebSocket/revocation through packaged Linux arm64 Docker sidecar and admin API
+  (HLS added subsequently; see final package test results)
+PASS in-process test closes an ongoing synthetic stream on device revocation
+PASS expired/malformed invitations, claimed invitation replay, wrong server pin,
+  local gateway Host/Origin/capability checks, broker relay/owner checks
+PASS macOS native shell build and visual inspection of device/remote settings
+PASS signed kurtz Mac Catalyst build; iOS and tvOS arm64 simulator builds
+PASS Go C archives for Catalyst, iOS device/simulator, tvOS device/simulator
+
+No two-network WAN/NAT claim. No real iPhone/Apple TV camera/device runtime claim.
+No NAS hardware test. No deployed public rendezvous, no relay, no release upload.
+Docker playback test runs client and server in the same disposable network
+namespace; container boundary/packaging is covered, NAT traversal is not.

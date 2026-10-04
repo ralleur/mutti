@@ -16,7 +16,8 @@
     "dotnetSDK": "10.0.401",
     "node": "26.7.0",
     "goExperiment": "1.27.1",
-    "xcodeTested": "27.0"
+    "xcodeTested": "27.0",
+    "go": "1.27.1"
   },
   "ffmpeg": {
     "version": "8.1.3-1",
@@ -46,8 +47,11 @@
     }
   },
   "transport": {
-    "production": null,
-    "experiment": "tailscale.com v1.102.5",
+    "implementation": "mutti/connect",
+    "phase": "test-preview",
+    "pion": "v4.2.22",
+    "yamux": "v0.1.2",
+    "security": "TLS 1.3 with pinned server SPKI and per-device client keys over WebRTC data channels",
     "relay": false
   }
 }

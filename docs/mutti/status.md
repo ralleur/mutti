@@ -12,8 +12,8 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 | M0 | Unveränderte Mac-Server- und Web-Referenz gebaut. Zwei echte tsnet-Knoten übertragen lokal verschlüsselt Daten mit ausschließlich STUN; kein DERP-Server läuft. | Getrennte Internetanschlüsse, gesperrtes UDP, CGNAT/IPv6, Netzwechsel; verbindliche Transport-/Control-Entscheidung. |
 | M1 | Eigene Forks, Komponenten-Pins, Mac- und Docker-Builds, Entwicklungsanleitung, Sicherheitsregeln und CI implementiert. Lokale API-/Videodatenstrecke auf beiden Paketen bestanden. | Vollständiges Quell-/Lizenzinventar für Distribution, weitere Architekturen und vollständige Wiedergabeabnahme. |
 | M2 | Eigene Mutti-Vektormarke, Sora, kurtz-Farben, Web-Assistent; native Mac-Hülle mit Serverstart, Status, Ordnerdialog-Brücke und getrennten Daten; nicht privilegiertes Docker-Paket mit schreibgeschützten Medien. | Native Ordnerauswahl durch alle Dialogschritte, Screenreader/Hellmodus vollständig, echte NAS-Installation; einfache sichere Verwaltung von einem zweiten Gerät. Der derzeitige NAS-SSH-Tunnel ist nur ein Entwicklerweg. |
-| M3 | Bestehende Jellyfin-Anmeldung und Quick Connect mit normalem Wiedergabeprofil getestet; Geräteentfernung sperrt nachfolgende API-Aufrufe. Keine Codes/Secrets mehr in den bearbeiteten Quick-Connect-Logs. | Kryptografische QR-Kopplung, gerätegebundene Schlüssel, Einmaligkeit/Ablauf, Wiederherstellung, laufende Streams beenden, kurtz-Integration. Quick Connect erfüllt dieses Gate ausdrücklich nicht. |
-| M4 | Kein produktiver Fernzugriff eingebaut. Kein Relay im Paket. | Accountloser Vermittlungsdienst, direkte sichere Verbindung, alle Client-Datenwege und Netzwechsel. |
+| M3 | QR-Einladung, TLS-Geräteidentität, bestätigte Profilfreigabe, Keychain-Integration und laufender Widerruf implementiert und lokal geprüft. | Wiederherstellung, reale Geräte und vollständige Ablauf-/Bedienabnahme. |
+| M4 | Direkter verschlüsselter Transport und Vermittlungsdienst als Teststand implementiert; siehe unten. Kein Relay. | Öffentlicher Testbetrieb, WAN-Matrix und Wiedergabe bei Netzwechseln. |
 | M5 | Lokale Sicherheits- und Integrationstests vorhanden. | Backup/Restore, Upgrade, Langzeittests, reale iOS-/tvOS-Geräte, NAS und zwei echte Anschlüsse. |
 | M6 | Lokale Mac-App und Docker-Image verfügbar. | Gemeinsame vollständige Abnahme, Developer-ID/Notarisierung, Quellpakete und freigegebenes Release. |
 
@@ -44,15 +44,27 @@ Die Testberichte unter `docs/mutti/evidence/` enthalten keine Testpasswörter,
 Zugriffstokens, realen Medien oder Benutzerkonten. Vollständige Build-/Serverlogs
 bleiben lokal unter `build/` bzw. im temporären Testverzeichnis.
 
-## Nächste notwendige Entscheidung
+## QR-Kopplung und direkter Transport
 
-Der direkte Aufbau muss zwischen zwei getrennten Anschlüssen geprüft werden,
-bevor der Transport im Produkt festgelegt und die QR-Vertrauensbindung darauf
-aufgebaut wird. Dafür wurden NAS-Plattform und ein erreichbarer Testrechner
-außerhalb des Heimnetzes beim Owner angefragt; diese Angaben stehen noch aus.
-Danach folgen Trennung der Haushalte, feste Mediendienst-Freigabe und eine
-kurzlebige, bestätigungspflichtige Gerätekopplung. Der Test-Control-Server wird
-unter keinen Umständen zu einem Produktdienst umbenannt.
+Auf den Folgeauftrag „entwickle weiter inkl qr kopplung und direkter fernzugriff
+ dann teste ich“ wurde M3/M4 weiter implementiert; der reale Netztest blockiert
+ die Implementierung nicht mehr. Details und Testanleitung: [connect.md](connect.md).
 
-Day 2 bleibt separat: Relay-Marktprüfung erst dann neu durchführen. Es wurde
-kein Hosting gebucht, kein Cloudflare-Dienst angelegt und kein Relay aktiviert.
+Der neue gemeinsame Go-Dienst enthält accountlose Signalisierung, ausschließlich
+ direkten Pion-Datenkanal, TLS-1.3-Identitätsbindung, kurzlebige Einladungen,
+ Besitzerfreigabe pro Geräteschlüssel, Profilbindung und laufenden Widerruf.
+ Mutti Mac und Docker starten ihn; kurtz erhält Keychain-Speicherung, QR-Scanner,
+ Linkannahme und einen gemeinsamen lokalen Gateway für sämtliche Clientwege.
+
+Lokal geprüft: Race-Detector und statische Go-Analyse; echte Mutti-Instanz mit
+ synthetischem Video, Gerätefreigabe, nicht administrativem Profil, Range-206-
+ Bytes, Jellyfin-WebSocket und Sperre nach erneutem Verbindungsaufbau. Die
+ Tests verwenden Loopback-ICE, keinen WAN-Nachweis. Derselbe Ablauf besteht auch
+ im tatsächlichen Docker-Paket über dessen Geräteverwaltung. Mac-, iOS- und
+ tvOS-App-Builds mit eingebettetem Transport sind erfolgreich. Builddetails stehen in der
+ Testanleitung. Physische Geräte und getrennte Anschlüsse prüft der Owner.
+
+Ein öffentlich erreichbarer HTTPS-/STUN-Vermittler ist paketiert, aber nicht
+ betrieben. Ohne dessen Adresse ist der Test auf das Heimnetz begrenzt. Es wurde
+ kein Hosting gebucht, kein Cloudflare-Dienst angelegt und kein Relay aktiviert.
+ Day 2 bleibt eine spätere neue Marktprüfung.

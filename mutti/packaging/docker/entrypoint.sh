@@ -8,4 +8,4 @@ fi
 if [ ! -f "$JELLYFIN_CONFIG_DIR/network.xml" ]; then
   printf '%s\n' '<NetworkConfiguration><EnableRemoteAccess>false</EnableRemoteAccess><AutoDiscovery>false</AutoDiscovery><EnableIPv6>false</EnableIPv6></NetworkConfiguration>' > "$JELLYFIN_CONFIG_DIR/network.xml"
 fi
-exec /jellyfin/jellyfin --webdir /jellyfin/jellyfin-web --ffmpeg /usr/lib/jellyfin-ffmpeg/ffmpeg --package-name mutti-preview "$@"
+exec /mutti/connect --listen 0.0.0.0:18595 --admin-origin http://127.0.0.1:18595 --state /config/connect --target http://127.0.0.1:8096 --target-host 127.0.0.1:18597 -- /jellyfin/jellyfin --webdir /jellyfin/jellyfin-web --ffmpeg /usr/lib/jellyfin-ffmpeg/ffmpeg --package-name mutti-preview "$@"

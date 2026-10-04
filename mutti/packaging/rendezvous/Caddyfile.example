@@ -1,0 +1,6 @@
+# Run an existing, maintained Caddy installation on your public server.
+# Replace the example hostname with your DNS name. No request/access logs.
+connect.example.org {
+    request_body { max_size 64KB }
+    reverse_proxy 127.0.0.1:18600
+}

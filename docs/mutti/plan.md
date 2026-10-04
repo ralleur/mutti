@@ -1,6 +1,6 @@
 # Mutti – Produkt- und Umsetzungsplan
 
-Stand: **4. Oktober 2026**. Status: **Umsetzung beauftragt und begonnen; noch kein Release**.
+Stand: **4. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**.
 
 Mutti wird das Server-Gegenstück zu **kurtz**: ein eigenständiges, kuratiertes
 Produkt auf Jellyfin-Basis. Das wichtigste Ziel ist eine einfache Einrichtung

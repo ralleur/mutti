@@ -12,3 +12,15 @@
 Owned Mutti code is GPL-2.0-or-later. This inventory does not relicense upstream
 files. Runtime/FFmpeg transitive dependency inventory and matching source bundles
 remain release gates. Ad-hoc signed local builds are not a distributable release.
+
+## Mutti Connect test transport
+
+New common transport sources (`mutti/connect`) and Apple bridge code use MPL-2.0.
+They are separate from the GPL-2.0-or-later Jellyfin server and Mac launcher.
+Pinned dependency graph: `mutti/connect/go.mod` and `go.sum`. Direct components:
+Pion WebRTC v4.2.22 and its Pion transport libraries (MIT), HashiCorp yamux v0.1.2
+(MPL-2.0), skip2/go-qrcode da1b6568686e (MIT), Go x/time v0.14.0 (BSD-3-Clause).
+Sora is served locally, with its OFL in `mutti/connect/Sora-OFL.txt`.
+Pion's transitive TURN package is compiled as part of ICE; no TURN server is
+configured or instantiated, and relay candidates are rejected. A complete
+redistributable license/source bundle remains a release gate.

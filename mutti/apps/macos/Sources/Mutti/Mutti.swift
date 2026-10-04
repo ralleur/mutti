@@ -40,6 +40,8 @@ final class ServerController: ObservableObject {
     @Published var starting = false
     let address = URL(string: "http://127.0.0.1:18596/web/")!
     private var child: Process?
+    private var connectChild: Process?
+    let connectAddress = URL(string: "http://127.0.0.1:18595/")!
     private var log: FileHandle?
     private var readiness: Task<Void, Never>?
     private var lockFD: Int32 = -1
@@ -98,6 +100,7 @@ final class ServerController: ObservableObject {
                 self.error = NSLocalizedString("Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll.", comment: "Server stopped")
             } }
             try process.run(); child = process
+            try startConnect(resources: resources, root: root)
             readiness = Task { [weak self] in
                 for _ in 0..<90 {
                     guard let self, !Task.isCancelled, process.isRunning else { return }
@@ -121,24 +124,80 @@ final class ServerController: ObservableObject {
             while child.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
             if child.isRunning { kill(child.processIdentifier, SIGKILL); child.waitUntilExit() }
         }
+        stopConnect()
         child = nil; try? log?.close(); log = nil; ready = false; starting = false; releaseLock()
     }
+    func stopConnect() {
+        guard let process = connectChild else { return }
+        if process.isRunning { process.terminate() }
+        let deadline = Date().addingTimeInterval(3)
+        while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+        if process.isRunning { kill(process.processIdentifier, SIGKILL); process.waitUntilExit() }
+        connectChild = nil
+    }
+
+    func startConnect(resources: URL, root: URL) throws {
+        let process = Process()
+        process.executableURL = resources.appending(path: "connect/mutti-connect")
+        process.arguments = ["--state", root.appending(path: "connect").path]
+        var environment = ProcessInfo.processInfo.environment
+        if let data = try? Data(contentsOf: root.appending(path: "connect-settings.json")),
+           let settings = try? JSONDecoder().decode(ConnectSettings.self, from: data) {
+            environment["MUTTI_SIGNAL_URL"] = settings.broker
+            environment["MUTTI_STUN_URL"] = settings.stun
+        }
+        process.environment = environment
+        process.standardOutput = log; process.standardError = log
+        process.terminationHandler = { [weak self] child in
+            Task { @MainActor [weak self] in
+                guard let self, !self.stopping, self.connectChild === child else { return }
+                self.error = "Die Geräteverbindung wurde beendet. Starte Mutti erneut."
+            }
+        }
+        try process.run(); connectChild = process
+    }
+
+    func saveConnectSettings(_ settings: ConnectSettings) throws {
+        guard let root = dataDirectory, let resources = Bundle.main.resourceURL else { return }
+        if !settings.broker.isEmpty {
+            guard let url = URL(string: settings.broker), url.scheme == "https", url.host != nil,
+                  url.user == nil, url.query == nil, url.fragment == nil, url.path.isEmpty || url.path == "/"
+            else { throw Failure("Bitte die HTTPS-Adresse des Vermittlungsdiensts eintragen.") }
+        }
+        if !settings.stun.isEmpty && (!settings.stun.hasPrefix("stun:") || settings.stun.contains("@")) {
+            throw Failure("Bitte eine STUN-Adresse verwenden. Relay ist nicht aktiviert.")
+        }
+        let path = root.appending(path: "connect-settings.json")
+        try JSONEncoder().encode(settings).write(to: path, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
+        stopConnect(); try startConnect(resources: resources, root: root)
+    }
+
     func releaseLock() { if lockFD >= 0 { flock(lockFD, LOCK_UN); close(lockFD); lockFD = -1 } }
     struct Failure: LocalizedError { let message: String; init(_ message: String) { self.message = NSLocalizedString(message, comment: "Mutti server status") }; var errorDescription: String? { message } }
 }
 
 struct ContentView: View {
     @ObservedObject var server: ServerController
+    @State private var devices = false
+    @State private var settings = false
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 24, height: 24).accessibilityHidden(true)
                 Text("Mutti").font(.headline)
                 Spacer()
+                if server.ready {
+                    Button(devices ? "Bibliothek" : "Geräte koppeln") { devices.toggle() }
+                    Button("Fernzugriff") { settings = true }
+                }
                 Label(LocalizedStringKey(server.ready ? "Auf diesem Mac bereit" : "Lokale Vorschau"), systemImage: server.ready ? "checkmark.circle.fill" : "circle").font(.caption)
                 Button { if let root = server.dataDirectory { NSWorkspace.shared.open(root.appending(path: "logs")) } } label: { Image(systemName: "doc.text.magnifyingglass") }.help("Lokale Protokolle öffnen")
             }.padding().background(Color(red: 0.12, green: 0.12, blue: 0.12)).foregroundStyle(.white)
-            if server.ready { AdminView(address: server.address) }
+            if server.ready {
+                if let error = server.error { Text(error).padding().foregroundStyle(.orange) }
+                AdminView(address: devices ? server.connectAddress : server.address).id(devices)
+            }
             else {
                 VStack(spacing: 24) {
                     Text("Deine Medien.\nGut zu Hause.").font(.system(size: 38, weight: .semibold)).multilineTextAlignment(.center)
@@ -149,6 +208,7 @@ struct ContentView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(32)
             }
         }.tint(Color(red: 0.55, green: 0.49, blue: 0))
+        .sheet(isPresented: $settings) { ConnectSettingsView(server: server) }
     }
 }
 
@@ -174,6 +234,41 @@ struct AdminView: NSViewRepresentable {
             guard message.frameInfo.isMainFrame, isLocal(message.frameInfo.request.url), message.name == "muttiFolder", let window = message.webView?.window else { replyHandler(nil, "Folder access is unavailable for this page."); return }
             let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.allowsMultipleSelection = false; panel.prompt = NSLocalizedString("Medienordner wählen", comment: "Native folder picker")
             panel.beginSheetModal(for: window) { response in replyHandler(response == .OK ? panel.url?.path : nil, nil) }
+        }
+    }
+}
+
+struct ConnectSettings: Codable {
+    var broker = ""
+    var stun = ""
+}
+
+struct ConnectSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var server: ServerController
+    @State private var settings = ConnectSettings()
+    @State private var error: String?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Direkter Fernzugriff").font(.title2.bold())
+            Text("Im Heimnetz kannst du sofort koppeln. Für den Zugriff unterwegs benötigt diese Testversion einen erreichbaren Vermittlungsdienst. Er überträgt Verbindungsdaten; deine Medien bleiben direkt zwischen Mutti und kurtz.")
+            TextField("HTTPS-Adresse des Vermittlungsdiensts", text: $settings.broker)
+            TextField("STUN-Adresse, zum Beispiel stun:connect.example.org:3478", text: $settings.stun)
+            Text("Leer lassen für die Heimnetz-Kopplung. Nach einer Änderung bitte die Geräte neu koppeln. Laufende Verbindungen werden beendet.").font(.caption).foregroundStyle(.secondary)
+            if let error { Text(error).foregroundStyle(.orange) }
+            HStack {
+                Button("Abbrechen") { dismiss() }
+                Spacer()
+                Button("Speichern") {
+                    do { try server.saveConnectSettings(settings); dismiss() }
+                    catch { self.error = error.localizedDescription }
+                }.buttonStyle(.borderedProminent)
+            }
+        }.padding(28).frame(width: 580)
+        .onAppear {
+            if let root = server.dataDirectory,
+               let data = try? Data(contentsOf: root.appending(path: "connect-settings.json")),
+               let saved = try? JSONDecoder().decode(ConnectSettings.self, from: data) { settings = saved }
         }
     }
 }
