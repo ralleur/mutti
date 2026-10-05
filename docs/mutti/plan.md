@@ -269,14 +269,55 @@ vollständigen Fernimport. Datenbank-/Konfigurationssicherung oder ein zusätzli
 Exportweg sind erforderlich. Der ursprüngliche Vollumfang bleibt bestehen;
 ein API-Teilimport darf nicht als vollständiger Umzug bezeichnet werden.
 
-Erster Importtransport ist zu entscheiden: eine vorhandene Sicherungsdatei
-annehmen oder einen ausdrücklich gestarteten Exporthelfer auf der Quelle nutzen.
-Lokale Erkennung kann diesen Schritt vereinfachen; eine laufende SQLite-Datenbank
-wird nicht unkoordiniert kopiert. Jellyfins Sicherungsfunktion kann einen
-konsistenten Online-Stand erzeugen. Relevante Primärquellen:
+**Präzisierung des Owners, 05.10.2026: möglichst Ein-Klick-Import.** Die
+Sicherung ist ein interner Arbeitsschritt. Eine manuell erstellte/ausgewählte ZIP
+ist nicht der Standardablauf. Die vorher offene Produktwahl „Archiv oder Helfer“
+ist damit durch die Priorität eines automatisierten Umzugs ersetzt.
+
+- **Quelle auf demselben Mac:** lokales Jellyfin erkennen, ausgewählten Server
+  bestätigen und erforderliche Anmeldung beziehungsweise macOS-Dateifreigabe
+  einholen. Nach der Übernahmeaktion die Online-Sicherung über Jellyfin anstoßen,
+  den zurückgegebenen lokalen Archivpfad prüfen und die abgeschlossene Sicherung
+  direkt lesen. So fehlt kein HTTP-Download-Endpunkt. Zusatzdaten außerhalb der
+  eingebauten Sicherung, insbesondere Plugin-Konfigurationen, gesondert erfassen.
+  Pfade aus der Quelle gelten nur nach Prüfung als lokale Installationspfade;
+  kein beliebiger Dateizugriff allein aufgrund einer Serverantwort.
+- **Quelle auf einem anderen Rechner/NAS:** einen temporären Mutti-Umzugshelfer
+  qualifizieren, vorzugsweise als versionsgebundenes Jellyfin-Plugin. Mutti soll
+  Einrichtung, Export und verschlüsselte Übertragung steuern. Das ist erst nach
+  ausdrücklicher Freigabe des Betreibers zulässig; mögliche Serverneustarts und
+  Betriebsunterbrechungen stehen vor dem Start fest. Plugin-Installation über
+  Admin-APIs, HTTPS-Erreichbarkeit und der tatsächliche vollständige Export sind
+  technische Gates, noch keine zugesicherte Funktion aller Jellyfin-Versionen.
+  Der Export ist kurzlebig, nur für den bestätigten Empfänger und den festgelegten
+  Datenumfang zugänglich. Nach Abschluss Zugriff sofort deaktivieren, Paket und
+  temporäre Daten über einen geprüften Bereinigungsablauf entfernen. Einen noch
+  nötigen Neustart offen ausweisen; keine falsche Selbstlöschungszusage.
+- **Ausweichweg:** Archivimport bleibt für nicht unterstützte Installationen
+  verfügbar. Docker-Volumes, Dateirechte oder nicht erreichbare Medien können
+  eine zusätzliche gezielte Freigabe erfordern. Mutti erkennt diese Fälle vor
+  dem Wechsel und bietet genau den nötigen nächsten Schritt an.
+
+Vorgesehene Journey: **Jellyfin gefunden → Übernehmen → ggf. Anmeldung/Freigabe →
+Prüfen und Übertragen → Fertig → Geräte koppeln.** Ein bereits erreichbarer,
+kompatibler und berechtigter lokaler Server soll eine einzige Startaktion
+brauchen. Bei Konflikten keine stillen Standardentscheidungen, die Daten oder
+Rechte verlieren. Der alte Server wird nicht als Teil der Erkennung beendet;
+Fortschritt und Rückkehrmöglichkeit bleiben sichtbar. Änderungen auf der Quelle
+nach dem Snapshot benötigen eine definierte finale Synchronisierung oder ein
+abgestimmtes Wechselzeitfenster, damit neuer Wiedergabestand nicht verloren geht.
+
+Eine laufende SQLite-Datenbank wird nicht unkoordiniert kopiert. Jellyfins
+Sicherungsfunktion kann einen konsistenten Online-Stand erzeugen; bei aktivem
+Bibliotheksscan verweigert der gepinnte Stand die Erstellung. Mutti muss warten
+oder den Konflikt anzeigen. Nächster Nachweis: lokaler automatisierter Import mit
+synthetischen Benutzern, Verlauf und Favoriten, anschließend Exporthelfer auf
+einer getrennten Testinstanz. Relevante Primärquellen:
 [Jellyfin Backup/Restore](https://jellyfin.org/docs/general/administration/backup-and-restore/),
 [Jellyfin Migration](https://jellyfin.org/docs/general/administration/migrate/),
-[`BackupController`](../../Jellyfin.Api/Controllers/BackupController.cs).
+[`BackupController`](../../Jellyfin.Api/Controllers/BackupController.cs),
+[`BackupService`](../../Jellyfin.Server.Implementations/FullSystemBackup/BackupService.cs),
+[Jellyfin-Plugins](https://jellyfin.org/docs/general/server/plugins/index.html).
 
 Versionsmigration, Pfadwechsel zwischen Mac/NAS/Docker, externe Anmeldeanbieter,
 Plugins, Hardware-Transcoding und Netzwerkeinstellungen müssen gesondert geprüft
