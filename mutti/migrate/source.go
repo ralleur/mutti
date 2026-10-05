@@ -137,7 +137,7 @@ type Source struct {
 type SourceInput struct {
 	Address, Username, Password, TargetUsername, TargetPassword string
 	Mappings                                                    map[string]string
-	Replace                                                     bool
+	Replace, PrepareSource                                      bool
 	Archive                                                     string
 	nativeOwner                                                 bool // Set only by the authenticated native request handler; never decoded from JSON.
 }
@@ -167,13 +167,20 @@ func (a *API) logout() {
 	a.Token = ""
 	a.Client.CloseIdleConnections()
 }
-func OpenSource(ctx context.Context, input SourceInput, targetID string) (*Source, error) {
+func OpenSource(ctx context.Context, input SourceInput, targetID string, prepare ...func(context.Context, *Source) error) (*Source, error) {
 	a, e := NewAPI(input.Address)
 	if e != nil {
 		return nil, e
 	}
 	s := &Source{API: a, Username: input.Username, Password: input.Password}
-	if _, e = login(ctx, a, input.Username, input.Password); e != nil {
+	loginContext, cancelLogin := context.WithTimeout(ctx, 20*time.Second)
+	_, e = login(loginContext, a, input.Username, input.Password)
+	loginTimeout := loginContext.Err()
+	cancelLogin()
+	if e != nil {
+		if loginTimeout != nil {
+			return nil, errors.New("Jellyfin antwortet nicht auf die Anmeldung. Der Quellserver muss zuerst wieder erreichbar sein; es wurde keine weitere Sicherung gestartet.")
+		}
 		return nil, e
 	}
 	fail := func(err error) (*Source, error) { a.logout(); return nil, err }
@@ -186,11 +193,16 @@ func OpenSource(ctx context.Context, input SourceInput, targetID string) (*Sourc
 	if !strings.HasPrefix(s.Info.Version, "12.1.") {
 		return fail(errors.New("Dieser Teststand übernimmt Jellyfin 12.1. Für diese Serverversion ist die vollständige Übernahme noch nicht geprüft."))
 	}
-	if e = checkBackupMode(ctx, a); e != nil {
-		return fail(e)
-	}
 	ip := net.ParseIP(a.Base.Hostname())
 	s.Local = a.Base.Hostname() == "localhost" || ip != nil && ip.IsLoopback()
+	if len(prepare) > 0 {
+		e = prepare[0](ctx, s)
+	} else {
+		e = checkBackupMode(ctx, a)
+	}
+	if e != nil {
+		return fail(e)
+	}
 	if e = a.call(ctx, "GET", "/Users", nil, &s.Users); e != nil {
 		return fail(e)
 	}

@@ -49,7 +49,7 @@ func TestNativeReplacementAuthorization(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			body, _ := json.Marshal(SourceInput{Address: source.URL, Replace: tc.replace})
+			body, _ := json.Marshal(SourceInput{Address: source.URL, Replace: tc.replace, PrepareSource: true})
 			if tc.extra != "" {
 				body = []byte(strings.TrimSuffix(string(body), "}") + tc.extra + "}")
 			}

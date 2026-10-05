@@ -24,6 +24,7 @@ func TestRealMigration(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	work, _ = filepath.EvalSymlinks(work)
 	t.Log("Synthetic artifacts:", work)
 	repo := os.Getenv("MUTTI_IMPORT_REPO")
 	if repo == "" {
@@ -76,7 +77,7 @@ func TestRealMigration(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	defer source.stop()
+	defer func() { source.stop() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	a, _ := NewAPI(fmt.Sprintf("http://127.0.0.1:%d", sourcePort))
@@ -265,7 +266,30 @@ func TestRealMigration(t *testing.T) {
 	if !m.State().Ready {
 		t.Fatal("target not ready")
 	}
-	input := SourceInput{Address: a.Base.String(), Username: "Import Owner", Password: password}
+	input := SourceInput{Address: a.Base.String(), Username: "Import Owner", Password: password, PrepareSource: true}
+	nativeRecovery := os.Getenv("MUTTI_TEST_LOCAL_RECOVERY") == "1"
+	if os.Getenv("MUTTI_TEST_PREPARE_SOURCE") == "1" || nativeRecovery {
+		config, _, err := readDatabaseConfig(ctx, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config["LockingBehavior"] = []byte(`"Pessimistic"`)
+		call("POST", "/System/Configuration/database", config, nil)
+		source.stop()
+		source, e = sourceOptions.startServer(filepath.Join(work, "source"), sourcePort, fmt.Sprintf("127.0.0.1:%d", sourcePort), "", false)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if _, e = waitServer(ctx, source, a); e != nil {
+			t.Fatal(e)
+		}
+		t.Log("Source starts with Pessimistic locking; import must prepare and restart automatically")
+		if nativeRecovery {
+			launchSyntheticSource(t, source, a, info)
+			input.nativeOwner = true
+		}
+
+	}
 	if os.Getenv("MUTTI_TEST_CONFIGURED_TARGET") == "1" {
 		// Reproduce the preview whose wizard is complete but whose target login
 		// is not known to the importing user. Never pass it to the import.
@@ -315,6 +339,17 @@ func TestRealMigration(t *testing.T) {
 			t.Fatal(ctx.Err())
 		case <-time.After(time.Second):
 		}
+	}
+	if os.Getenv("MUTTI_TEST_PREPARE_SOURCE") == "1" || nativeRecovery {
+		config, _, err := readDatabaseConfig(ctx, a)
+		if err != nil || string(config["LockingBehavior"]) != `"NoLock"` {
+			t.Fatal("source preparation missing", err)
+		}
+		backups, _ := filepath.Glob(filepath.Join(o.Root, "source-preparation", "*", "database-original-*"))
+		if len(backups) != 1 {
+			t.Fatal("missing preparation backup", backups)
+		}
+		t.Log("PASS: source settings saved, NoLock verified after automatic restart and import resumed")
 	}
 	if withIntro {
 		owner, _ := NewAPI(o.Backend)
@@ -386,7 +421,11 @@ func TestRealMigration(t *testing.T) {
 	if imageResponse.StatusCode != 200 {
 		t.Fatal("profile image not retained", imageResponse.StatusCode)
 	}
-	if !source.running() {
+	if nativeRecovery {
+		if _, err := sameSource(ctx, a, info.Id); err != nil {
+			t.Fatal("source unavailable after native recovery", err)
+		}
+	} else if !source.running() {
 		t.Fatal("source was stopped")
 	}
 	if imported.User.Id != viewer.Id || imported.User.Policy.IsAdministrator {

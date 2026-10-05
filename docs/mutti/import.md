@@ -50,14 +50,48 @@ von einer nicht erreichbaren Quelle und einem Benutzerabbruch unterschieden.
 Jellyfins Sicherungsauftrag läuft gegebenenfalls nach Abbruch oder Zeitlimit auf
 der Quelle weiter. Vor einem erneuten Versuch dort den Status prüfen.
 
-Vor dem Sicherungsauftrag liest Mutti über die Administrator-API den
-Datenbank-Sperrmodus. `Pessimistic` wird mit konkretem Hinweis abgewiesen:
-Jellyfins threadgebundene Sperre kann bei asynchronen Sicherungsschritten einen
-Deadlock verursachen. Für den Umzug muss die Quelle auf Jellyfins Standard
-`NoLock` umgestellt und neu gestartet werden. Mutti ändert oder startet den
-Quellserver nicht automatisch. Der Owner-Test traf genau diese Konfiguration;
-die Sicherung blieb bei `ActivityLogs` stehen, während andere Datenbankzugriffe
-`database is locked` meldeten. Der Quellen-Neustart bleibt eine bewusste Aktion.
+## Automatische Vorbereitung des Quellservers
+
+Der Importstart umfasst die nötige Vorbereitung einschließlich eines kurzen
+Jellyfin-Neustarts. Der Hinweis steht direkt am Importknopf und in der bestehenden
+nativen Wechselbestätigung; es gibt keine zusätzliche technische Auswahl.
+Mutti sichert die Originalkonfiguration privat unter
+`source-preparation/<Quellenkennung>/database-original-*` im Mutti-Datenordner,
+setzt bei Jellyfin-SQLite ausschließlich `Pessimistic` auf den Standard `NoLock`,
+begleitet den Neustart und setzt den Import nach Identitäts-/Bereitschaftsprüfung
+fort. Andere Einstellungen bleiben erhalten. Die korrigierte Einstellung bleibt
+auf Jellyfin bestehen; der problematische Modus wird nicht automatisch wieder
+aktiviert.
+
+**Mac, Browser und Docker/NAS:** Über die Jellyfin-Administrator-API werden die
+vollständigen Datenbankeinstellungen gelesen und gesichert. Die Änderung setzt
+einen gültigen Quelladministrator voraus. Mutti fordert den Neustart an, beobachtet
+den Übergang und prüft dieselbe Serveridentität und `NoLock`, bevor die Sicherung
+beginnt. Ein nur gespeicherter Konfigurationswert genügt nicht als Neustartnachweis.
+
+**Bereits blockierte lokale Quelle:** Ausschließlich die native Mac-App kann
+zusätzlich einen eigenen macOS-Benutzerdienst vorbereiten, auch wenn die
+Jellyfin-Anmeldung bereits durch die Datenbanksperre blockiert ist. Voraussetzung:
+Loopback-Adresse, genau ein passender Listener/PID, Prozess des angemeldeten
+Benutzers, direkt gestartetes `jellyfin`, eindeutiger geladener LaunchAgent mit
+`KeepAlive=true`, explizite Daten-/Konfigurationspfade und übereinstimmende
+Serveridentität aus `device.txt`. Dateien müssen dem Benutzer gehören und dürfen
+keine Symlinks oder gemeinsam beschreibbaren Konfigurationsdateien sein. Vor der
+Änderung wird die Zuordnung erneut geprüft. Nach einem normalen Beendigungsversuch
+ersetzt launchd nötigenfalls den blockierten Prozess dieses einen Dienstes; erst
+nach neuem PID und derselben bereiten Serveridentität geht es weiter. Die
+Jellyfin-Administratoranmeldung bleibt für den eigentlichen Import erforderlich.
+Browseranfragen, fremde Benutzer, Shell-Wrapper, Systemdienste und nicht eindeutig
+zuordenbare Prozesse erhalten diesen lokalen Zugriff nicht.
+
+Ein privater Vorgangsvermerk wird vor der Änderung gespeichert. Nach App-Abbruch
+kann der nächste Importversuch einen noch ausstehenden Neustart wieder aufnehmen;
+abweichende Quellen oder zwischenzeitlich geänderte Konfigurationen werden nicht
+mit diesem Vermerk verändert. Sobald die Einstellung geändert wurde, versucht
+Mutti den Neustart auch bei Importabbruch begrenzt zu Ende zu führen. Es gibt
+keine unbegrenzten Neustartschleifen. Auf einer vollständig unerreichbaren Quelle
+oder einem bereits blockierten fremden NAS kann die API allein keinen Neustart
+garantieren; eine zusätzliche NAS-/Systemdienstverwaltung ist nicht enthalten.
 
 ## Was übernommen und geprüft wird
 

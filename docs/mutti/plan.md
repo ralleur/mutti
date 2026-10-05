@@ -231,6 +231,15 @@ Die Mac-Hülle startet den Kopplungsdienst erst nach der bestätigten Fertigstel
 
 ### 5.2 — M2b: Bestehendes Jellyfin übernehmen (MK-005)
 
+**Ergänzung 05.10.2026:** Die automatische Importvorbereitung übernimmt bei
+Jellyfin-SQLite den Wechsel vom problematischen Sperrmodus auf den Standard,
+sichert die Originalkonfiguration und begleitet den Neustart. Der Hinweis beim
+Importstart genügt; Nutzer suchen keine Datenbankeinstellung. Für einen bereits
+blockierten lokalen Mac-Benutzerdienst steht ein an Prozess, LaunchAgent,
+Dateieigentümer und Serveridentität gebundener Wiederanlauf zur Verfügung.
+API-Weg und Mac-Wiederanlauf werden getrennt mit synthetischen Quellen geprüft;
+Details und Plattformgrenzen: [automatische Vorbereitung](import.md#automatische-vorbereitung-des-quellservers).
+
 **Teststand umgesetzt für Jellyfin 12.1; Owner-Abnahme ausstehend.** Aktueller
 Funktionsumfang und Grenzen: [Import-Testanleitung](import.md). Kanonischer
 Ideeneintrag: [MK-005 im gemeinsamen Ideen-Eingang](/Users/ai/workspace/vela-swiftfin/IDEEN.md).

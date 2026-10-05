@@ -69,7 +69,7 @@ final class NativeImportClient {
         if input["Replace"] as? Bool == true {
             let alert = NSAlert()
             alert.messageText = "Zu deiner Jellyfin-Bibliothek wechseln?"
-            alert.informativeText = "Mutti übernimmt und prüft deine Jellyfin-Daten. Deine bisherige Mutti-Einrichtung bleibt auf diesem Mac erhalten. Anschließend verwendest du deinen vorhandenen Jellyfin-Zugang."
+            alert.informativeText = "Mutti bereitet Jellyfin vor, übernimmt und prüft deine Daten. Falls nötig, startet Mutti deinen Jellyfin-Server kurz neu; laufende Wiedergaben werden dabei unterbrochen. Deine bisherige Mutti-Einrichtung bleibt auf diesem Mac erhalten. Anschließend verwendest du deinen vorhandenen Jellyfin-Zugang."
             alert.addButton(withTitle: "Übernehmen")
             alert.addButton(withTitle: "Abbrechen")
             let result = await alert.beginSheetModal(for: window)

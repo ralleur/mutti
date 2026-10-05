@@ -309,7 +309,7 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 			}
 		}
 	}
-	s, e := OpenSource(ctx, input, current.Id)
+	s, e := m.openImportSource(ctx, input, current.Id)
 	if e != nil {
 		return e
 	}

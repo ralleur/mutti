@@ -177,3 +177,24 @@ Mac-App unter `build/connect-preview/Mutti.app` wurde erst nach dem Zeitlimit
 des alten Imports ausgetauscht und gestartet. Ihre API liefert die neuen
 Fortschrittsdaten; der bisherige aktive Datenordner bleibt erhalten. Der
 Quellserver benötigt weiterhin die bewusste Sperrmodus-Korrektur und einen Neustart.
+
+
+### Automatische Quellvorbereitung (MK-005)
+
+Der Import übernimmt jetzt Sicherung und Korrektur des problematischen
+Jellyfin-SQLite-Sperrmodus sowie den begleiteten Neustart. Ein Hinweis am
+Importknopf und in der bestehenden nativen Wechselbestätigung ersetzt die
+manuelle Einstellungssuche. Browser/Docker verwenden ausschließlich den
+Quelladministrator; die Mac-App kann zusätzlich einen eindeutig zugeordneten
+LaunchAgent des angemeldeten Benutzers auch bei blockierter Anmeldung neu starten.
+Serveridentität und Bereitschaft werden vor dem Sicherungsauftrag erneut geprüft.
+Originalkonfiguration und ein noch ausstehender Neustart bleiben privat gespeichert.
+
+Synthetisch bestanden: vollständiger Mac-Import nach API-Umstellung/Neustart sowie
+nach absichtlich blockierter Datenbanksicherung und Wiederanlauf über launchd.
+Der zweite Lauf erhält Benutzer, Playlist, Favoriten, Wiedergabestand, Intro Skipper
+und Neustartpersistenz. Go-Race-Tests/statische Analyse prüfen Administrator- und
+Dateigrenzen, Konfigurationserhalt, fremde Identität, Wiederaufnahme und fehlenden
+Neustartnachweis. Drei Swift-Tests bestanden. Die Erkennung des vorhandenen
+Owner-Dienstes wurde ausschließlich lesend geprüft; keine echte Quellkonfiguration
+geändert und kein echter Import gestartet. Paketabnahme folgt unten.
