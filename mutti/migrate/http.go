@@ -31,7 +31,9 @@ func (m *Manager) Handler() (http.Handler, error) {
 		_ = json.NewEncoder(w).Encode(v)
 	}
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { respond(w, m.State()) })
-	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) { respond(w, map[string]string{"csrf": m.token}) })
+	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
+		respond(w, map[string]any{"csrf": m.token, "nativeOwner": m.isNativeOwner(r)})
+	})
 	mux.HandleFunc("GET /api/discover", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
@@ -73,6 +75,11 @@ func (m *Manager) Handler() (http.Handler, error) {
 			http.Error(w, "Ungültige Anfrage.", 400)
 			return
 		}
+		if r.Header.Get("X-Mutti-Native-Owner") != "" && !m.isNativeOwner(r) {
+			http.Error(w, "Die App-Freigabe ist abgelaufen. Bitte Mutti erneut öffnen.", 403)
+			return
+		}
+		input.nativeOwner = m.isNativeOwner(r)
 		if e := m.StartImport(r.Context(), input); e != nil {
 			http.Error(w, e.Error(), 409)
 			return
@@ -113,4 +120,8 @@ func (m *Manager) Handler() (http.Handler, error) {
 		}
 		mux.ServeHTTP(w, r)
 	}), nil
+}
+
+func (m *Manager) isNativeOwner(r *http.Request) bool {
+	return m.nativeOwnerToken != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Mutti-Native-Owner")), []byte(m.nativeOwnerToken)) == 1
 }

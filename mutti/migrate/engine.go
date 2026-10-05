@@ -3,6 +3,7 @@ package migrate
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,22 +40,33 @@ type State struct {
 	Active        string  `json:"active"`
 }
 type Manager struct {
-	Options         Options
-	mu              sync.Mutex
-	change          sync.Mutex
-	state           State
-	child, connect  *process
-	api             *API
-	cancel          context.CancelFunc
-	jobCancel       context.CancelFunc
-	jobs            sync.WaitGroup
-	token           string
-	lock            *os.File
-	connectSettings []byte
-	closing         bool
+	Options          Options
+	mu               sync.Mutex
+	change           sync.Mutex
+	state            State
+	child, connect   *process
+	api              *API
+	cancel           context.CancelFunc
+	jobCancel        context.CancelFunc
+	jobs             sync.WaitGroup
+	token            string
+	nativeOwnerToken string
+	lock             *os.File
+	connectSettings  []byte
+	closing          bool
 }
 
 func NewManager(o Options) (*Manager, error) {
+	if o.NativeOwnerToken != "" {
+		secret, err := hex.DecodeString(o.NativeOwnerToken)
+		host, _, listenErr := net.SplitHostPort(o.Listen)
+		if runtime.GOOS != "darwin" || o.Container || o.Bind != "127.0.0.1" || listenErr != nil || host != "127.0.0.1" || err != nil || len(secret) != 32 {
+			return nil, errors.New("Die native Importfreigabe benötigt die lokale Mac-App.")
+		}
+	}
+	nativeOwnerToken := o.NativeOwnerToken
+	o.NativeOwnerToken = ""
+
 	if o.Container {
 		if runtime.GOOS != "linux" {
 			return nil, errors.New("Container-Modus ist nur im Docker-Paket erlaubt.")
@@ -99,7 +111,7 @@ func NewManager(o Options) (*Manager, error) {
 		return nil, e
 	}
 	a.Host = target.Base.Host
-	m := &Manager{Options: o, token: randomID(), lock: lock, api: a, state: State{Phase: "idle", Target: o.TargetOrigin + "/web/", Active: root}}
+	m := &Manager{Options: o, nativeOwnerToken: nativeOwnerToken, token: randomID(), lock: lock, api: a, state: State{Phase: "idle", Target: o.TargetOrigin + "/web/", Active: root}}
 	if b, e := os.ReadFile(filepath.Join(root, "active-instance.json")); e == nil {
 		var pointer struct{ ID string }
 		if json.Unmarshal(b, &pointer) != nil || !validID(pointer.ID) {
@@ -268,12 +280,17 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 		if !input.Replace {
 			return errors.New("Bitte bestätigen, dass du zu einer importierten Bibliothek wechseln möchtest. Der bisherige Mutti-Datenstand bleibt erhalten.")
 		}
-		owner, _ := NewAPI(m.Options.Backend)
-		owner.Host = m.api.Host
-		_, e := login(ctx, owner, input.TargetUsername, input.TargetPassword)
-		owner.logout()
-		if e != nil {
-			return errors.New("Bitte den Besitzerzugang der bisherigen Mutti-Installation bestätigen.")
+		// The Mac app already owns this private data directory and child process.
+		// Its per-launch capability authorizes a retained-data switch after a native
+		// confirmation. Browser/Docker requests still require the existing admin.
+		if !input.nativeOwner {
+			owner, _ := NewAPI(m.Options.Backend)
+			owner.Host = m.api.Host
+			_, e := login(ctx, owner, input.TargetUsername, input.TargetPassword)
+			owner.logout()
+			if e != nil {
+				return errors.New("Bitte mit dem Administrator der bestehenden Bibliothek anmelden oder den Import direkt in der Mutti-Mac-App bestätigen. Ein zusätzliches Mutti-Konto wird nicht benötigt.")
+			}
 		}
 	}
 	s, e := OpenSource(ctx, input, current.Id)

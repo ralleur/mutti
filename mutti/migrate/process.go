@@ -20,6 +20,7 @@ import (
 type Options struct {
 	Root, Server, Web, FFmpeg, Connect, Listen, Origin, Backend, TargetOrigin, ConnectListen, ConnectOrigin, Bind string
 	Container                                                                                                     bool
+	NativeOwnerToken                                                                                              string `json:"-"` // Private parent pipe, never an HTTP configuration option.
 }
 type process struct {
 	cmd  *exec.Cmd

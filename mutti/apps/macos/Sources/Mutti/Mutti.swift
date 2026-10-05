@@ -52,6 +52,7 @@ final class ServerController: ObservableObject {
     private var stopping = false
     private var launchID: UUID?
     private(set) var dataDirectory: URL?
+    private(set) var nativeImportClient: NativeImportClient?
     private struct ManagerState: Decodable {
         var ready: Bool
         var setupComplete: Bool
@@ -94,10 +95,14 @@ final class ServerController: ObservableObject {
             log = try FileHandle(forWritingTo: logURL)
             let process = Process(); process.executableURL = resources.appending(path: "migrate/mutti-migrate")
             process.arguments = ["--root", root.path, "--server", resources.appending(path: "server/jellyfin").path, "--web", resources.appending(path: "web").path, "--ffmpeg", resources.appending(path: "ffmpeg/ffmpeg").path, "--connect", resources.appending(path: "connect/mutti-connect").path]
+            let importClient = try NativeImportClient()
+            try importClient.attach(to: process)
+            process.arguments?.append("--native-owner-stdin")
+            nativeImportClient = importClient
             process.standardOutput = log; process.standardError = log
             process.terminationHandler = { [weak self] _ in Task { @MainActor [weak self] in
                 guard let self, self.launchID == identifier, !self.stopping else { return }
-                self.ready = false; self.setupCompleted = false; self.starting = false; self.child = nil; self.readiness?.cancel(); self.releaseLock()
+                self.ready = false; self.setupCompleted = false; self.starting = false; self.child = nil; self.nativeImportClient = nil; self.readiness?.cancel(); self.releaseLock()
                 self.error = "Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll."
             } }
             try process.run(); child = process
@@ -141,7 +146,7 @@ final class ServerController: ObservableObject {
             while child.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
             if child.isRunning { kill(child.processIdentifier, SIGKILL); child.waitUntilExit() }
         }
-        child = nil; try? log?.close(); log = nil; ready = false; setupCompleted = false; starting = false; releaseLock()
+        child = nil; nativeImportClient = nil; try? log?.close(); log = nil; ready = false; setupCompleted = false; starting = false; releaseLock()
     }
     func saveConnectSettings(_ settings: ConnectSettings) throws {
         guard ready && setupCompleted else { throw Failure("Bitte zuerst die Einrichtung abschließen.") }
@@ -185,7 +190,7 @@ struct ContentView: View {
             if server.ready {
                 if let error = server.error { Text(error).padding().foregroundStyle(.orange) }
                 let destination = devices ? server.connectAddress : (server.showOnboarding ? (server.importEntry ? URL(string: "http://127.0.0.1:18594/#import")! : server.onboardingAddress) : server.address)
-                AdminView(address: destination).id(destination)
+                AdminView(address: destination, nativeImportClient: server.nativeImportClient).id(destination)
             }
             else {
                 VStack(spacing: 24) {
@@ -206,17 +211,20 @@ struct ContentView: View {
 
 struct AdminView: NSViewRepresentable {
     let address: URL
-    func makeCoordinator() -> Coordinator { Coordinator(address: address) }
+    let nativeImportClient: NativeImportClient?
+    func makeCoordinator() -> Coordinator { Coordinator(address: address, nativeImportClient: nativeImportClient) }
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "muttiFolder")
+        configuration.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "muttiImport")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator; view.load(URLRequest(url: address)); return view
     }
     func updateNSView(_ view: WKWebView, context: Context) {}
     @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWithReply {
         let address: URL
-        init(address: URL) { self.address = address }
+        let nativeImportClient: NativeImportClient?
+        init(address: URL, nativeImportClient: NativeImportClient?) { self.address = address; self.nativeImportClient = nativeImportClient }
         func isLocal(_ url: URL?) -> Bool {
             guard let url, url.scheme == "http", url.host == "127.0.0.1", url.user == nil else { return false }
             // Onboarding can enter the Jellyfin setup wizard; pairing stays in its own origin.
@@ -227,6 +235,23 @@ struct AdminView: NSViewRepresentable {
             else { decisionHandler(.cancel); if action.navigationType == .linkActivated, let url = action.request.url, url.scheme == "https" { NSWorkspace.shared.open(url) } }
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+            if message.name == "muttiImport" {
+                guard NativeImportClient.accepts(message.frameInfo.request.url, isMainFrame: message.frameInfo.isMainFrame),
+                      NativeImportClient.accepts(message.webView?.url, isMainFrame: true),
+                      let client = nativeImportClient, let body = message.body as? [String: Any] else {
+                    replyHandler(nil, "Import access is unavailable for this page."); return
+                }
+                Task { @MainActor in
+                    do {
+                        if body["action"] as? String == "available" { replyHandler(try await client.available(), nil) }
+                        else if body["action"] as? String == "start", let input = body["input"] as? [String: Any], let window = message.webView?.window {
+                            let accepted = try await client.start(input: input, window: window)
+                            replyHandler(["cancelled": !accepted], nil)
+                        } else { replyHandler(nil, "Unknown import action.") }
+                    } catch { replyHandler(nil, error.localizedDescription) }
+                }
+                return
+            }
             guard message.frameInfo.isMainFrame, isLocal(message.frameInfo.request.url), message.name == "muttiFolder", let window = message.webView?.window else { replyHandler(nil, "Folder access is unavailable for this page."); return }
             let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.allowsMultipleSelection = false; panel.prompt = NSLocalizedString("Medienordner wählen", comment: "Native folder picker")
             panel.beginSheetModal(for: window) { response in replyHandler(response == .OK ? panel.url?.path : nil, nil) }

@@ -33,7 +33,9 @@ try:
     try: request(28595,'/')
     except (OSError,urllib.error.URLError):pass
     else:raise AssertionError('pairing started before setup')
-    with request(28594,'/api/session') as response:csrf=json.load(response)['csrf']
+    with request(28594,'/api/session') as response:
+        session=json.load(response);csrf=session['csrf'];assert session['nativeOwner'] is False
+    with request(28594,'/api/session',headers={'X-Mutti-Native-Owner':csrf}) as response:assert json.load(response)['nativeOwner'] is False
     with request(28594,'/api/new',{}, {'Content-Type':'application/json','X-Mutti-CSRF':csrf,'Origin':'http://127.0.0.1:28594'}) as response:assert json.load(response)['target']=='http://127.0.0.1:28597/web/'
     with request(28597,'/Startup/User') as response:json.load(response)
     bindings=json.loads(subprocess.check_output(['docker','inspect',name]))[0]['HostConfig']['PortBindings']

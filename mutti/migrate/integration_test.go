@@ -224,7 +224,30 @@ func TestRealMigration(t *testing.T) {
 	if !m.State().Ready {
 		t.Fatal("target not ready")
 	}
-	if e = m.StartImport(ctx, SourceInput{Address: a.Base.String(), Username: "Import Owner", Password: password}); e != nil {
+	input := SourceInput{Address: a.Base.String(), Username: "Import Owner", Password: password}
+	if os.Getenv("MUTTI_TEST_CONFIGURED_TARGET") == "1" {
+		// Reproduce the preview whose wizard is complete but whose target login
+		// is not known to the importing user. Never pass it to the import.
+		for {
+			if e = m.api.call(ctx, "GET", "/Startup/User", nil, nil); e == nil {
+				break
+			}
+			if ctx.Err() != nil {
+				t.Fatal(ctx.Err())
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		if e = m.api.call(ctx, "POST", "/Startup/User", map[string]string{"Name": "Previous Preview", "Password": randomID()}, nil); e != nil {
+			t.Fatal(e)
+		}
+		if e = m.api.call(ctx, "POST", "/Startup/Complete", nil, nil); e != nil {
+			t.Fatal(e)
+		}
+		input.Replace = true
+		input.nativeOwner = true // HTTP capability checks are exercised separately.
+		t.Log("Configured target: importing with source credentials and native approval only")
+	}
+	if e = m.StartImport(ctx, input); e != nil {
 		t.Fatal(e)
 	}
 	phase := ""

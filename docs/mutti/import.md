@@ -10,8 +10,9 @@ erscheint zuerst **Neu einrichten / Aus Jellyfin übernehmen**. In einer bereits
 eingerichteten Mutti-App führt **Jellyfin übernehmen** oben direkt zum Import.
 
 1. Den erkannten Jellyfin-Server wählen oder seine Adresse eingeben und als
-   Administrator anmelden. Bei einer schon eingerichteten Mutti-Instanz zusätzlich
-   den bisherigen Mutti-Besitzer bestätigen; deren Daten bleiben erhalten.
+   Administrator anmelden. In der Mac-App genügt dieser vorhandene Jellyfin-Zugang.
+   Bei einer schon eingerichteten Mutti-Instanz den Wechsel im nativen Dialog
+   bestätigen; deren Daten bleiben erhalten. Kein zusätzliches Mutti-Konto anlegen.
 2. **Jellyfin übernehmen** starten. Währenddessen Wiedergabe und Änderungen auf
    Jellyfin pausieren. Nach der Abschlussprüfung mit dem bestehenden Jellyfin-
    Zugang anmelden und Geräte neu koppeln.
@@ -26,6 +27,9 @@ Docker/NAS verwendet denselben Dienst und Ablauf. Der neue Einstieg liegt auf
 `18595`. Compose veröffentlicht diese drei Verwaltungsports ausschließlich auf
 localhost. Für die NAS-Vorschau bleibt der SSH-Tunnel nötig. Medien müssen im
 Container lesbar eingebunden sein. Andere Speicherorte im Importformular zuordnen.
+Bei einem bereits eingerichteten Docker-/Browser-Ziel wird zusätzlich dessen
+bestehender Bibliotheksadministrator geprüft. Die Mac-Freigabe gilt ausschließlich
+in der App, die den privaten Datenordner und den Serverprozess verwaltet.
 Das lokale Image heißt `mutti:import-preview`; Compose baut standardmäßig `mutti:dev`.
 
 ## Was übernommen und geprüft wird
@@ -107,6 +111,8 @@ go vet -C mutti/migrate ./...
 swift test --package-path mutti/apps/macos
 MUTTI_FRESH_IMPORT_SMOKE=1 MUTTI_TEST_EXPORT=1 MUTTI_IMPORT_REPO="$PWD" \
   go test -C mutti/migrate -race -run TestRealMigration -v -count=1
+MUTTI_FRESH_IMPORT_SMOKE=1 MUTTI_TEST_CONFIGURED_TARGET=1 MUTTI_IMPORT_REPO="$PWD" \
+  go test -C mutti/migrate -race -run TestRealMigration -v -count=1
 python3 mutti/tests/import-package-smoke.py
 ```
 
@@ -122,3 +128,20 @@ fremde Hosts/Origins und gesperrte Kopplung vor Setup-Abschluss.
 Keine echten Benutzerkonten, Passwörter, Bibliotheken oder Medien für diese Tests.
 Reale NAS-Mounts, andere Plattformen/Quellversionen, Internetexport und große
 Bibliotheken bleiben Teil der Owner-/Release-Abnahme.
+
+## Native Freigabe bei vorhandener Preview-Einrichtung
+
+Der Abschlussstatus des früheren Setup-Assistenten löst auf dem Mac keine
+zusätzliche Passwortabfrage mehr aus. Die App erzeugt bei jedem Start eine neue
+256-Bit-Freigabe und übergibt sie ausschließlich über die private Standardeingabe
+an ihren lokalen Importprozess. Ein nativer Bestätigungsdialog erlaubt den
+Wechsel; der bisherige Datenbereich bleibt bestehen. Nur die Hauptseite des
+Importassistenten darf diesen Dialog anfragen. Jellyfin- und Kopplungsseiten,
+Unterframes, fremde Origins und Browser erhalten diese Berechtigung nicht.
+
+Das Geheimnis wird weder im Webinhalt noch in Prozessargumenten, Umgebungsvariablen
+oder Dateien gespeichert. Die normalen CSRF-/Host-/Origin-Prüfungen und die
+Adminprüfung des Quellservers bleiben erforderlich. Docker akzeptiert diesen
+nativen Startmodus nicht. Regressionstests decken erfundene/falsche Freigaben,
+JSON-Manipulation, fehlende Wechselbestätigung und den vollständigen Import mit
+unbekanntem bisherigen Zielpasswort ab.

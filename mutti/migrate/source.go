@@ -133,6 +133,7 @@ type SourceInput struct {
 	Mappings                                                    map[string]string
 	Replace                                                     bool
 	Archive                                                     string
+	nativeOwner                                                 bool // Set only by the authenticated native request handler; never decoded from JSON.
 }
 
 func login(ctx context.Context, a *API, name, password string) (User, error) {

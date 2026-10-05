@@ -102,3 +102,16 @@ vor Setup bestanden. Profilbild, Anzeigeeinstellungen und Neustartpersistenz
 bestehen auf Mac und Linux. Bestehende .NET-Grenztests: 12/12 bestanden.
 Der native Testbuild aus sauberem Quellstand `755b85c5d0` ist lokal signiert und
 unter `build/connect-preview/Mutti.app` für den Owner geöffnet.
+
+### Korrektur nach dem ersten Owner-Test
+
+Der bereits abgeschlossene Preview-Assistent löste eine zusätzliche Anmeldung
+als „Mutti-Besitzer“ aus, obwohl beim Jellyfin-Umzug kein weiteres Konto nötig
+sein soll. Die Mac-App bestätigt einen Wechsel jetzt nativ über ihren privaten
+Prozesszugang; der Anwender gibt nur den bestehenden Jellyfin-Administrator ein.
+Browser und Docker prüfen weiterhin den Administrator einer vorhandenen
+Zielbibliothek. Quellserver und bisherige Zieldaten bleiben erhalten.
+
+Der vollständige synthetische Mac-Import mit bereits eingerichteter Zielinstanz
+und ohne Kenntnis ihres Passworts besteht einschließlich Datenprüfung und
+Neustart. Go-Race-Tests, Autorisierungsgrenzen und drei Swift-Tests bestehen.

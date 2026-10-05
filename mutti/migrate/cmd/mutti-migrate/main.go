@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	migrate "github.com/ralleur/mutti/migrate"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -29,7 +30,16 @@ func main() {
 	flag.StringVar(&o.ConnectOrigin, "connect-origin", "http://127.0.0.1:18595", "Pairing admin origin")
 	flag.StringVar(&o.Bind, "bind", "127.0.0.1", "Jellyfin bind address")
 	flag.BoolVar(&o.Container, "container", false, "Preserve the Docker package loopback-published network boundary")
+	nativeOwner := flag.Bool("native-owner-stdin", false, "Read the Mac app's private per-launch capability from its inherited pipe")
 	flag.Parse()
+	if *nativeOwner {
+		secret, err := io.ReadAll(io.LimitReader(os.Stdin, 65))
+		if err != nil || len(secret) != 64 {
+			fmt.Fprintln(os.Stderr, "Invalid native owner pipe")
+			os.Exit(2)
+		}
+		o.NativeOwnerToken = string(secret)
+	}
 	if o.Root == "" || o.Server == "" || o.Web == "" || o.FFmpeg == "" {
 		fmt.Fprintln(os.Stderr, "root, server, web and ffmpeg are required")
 		os.Exit(2)
