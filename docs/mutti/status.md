@@ -296,3 +296,68 @@ Jellyfin-Quelle. Ausgelieferte Import-/Connect-Logos und Schriftdateien stimmen
 bytegenau mit den Quellen überein. Manager bereit, Phase `idle`; kein echter
 Import durch den Agenten gestartet. Die gemeinsame Ideenliste enthält die
 Owner-Rückmeldung unter MK-010 und die Markenreferenz unter MK-008.
+
+### Eigene Serververwaltung nach Einrichtung (UX3-Mutti / MK-008)
+
+Owner-Auftrag vom 05.10.2026: Mutti verwaltet den Server; kurtz bleibt der Client.
+Die neue Standardoberfläche folgt dem Dashboard-Konzept mit linker Navigation,
+kompakter Mutti-Marke, Sora, Graphit/Elfenbein/Gelb und sechs Bereichen:
+Übersicht, Bibliotheken, Geräte, Module, Speicher, Einstellungen.
+
+Vorhandene Daten und Aktionen sind echt: Bibliotheken und Eintragszahlen,
+Datenträger, Servername, Scanstatus, Bibliotheksanlage, Wiedergabeprofile,
+QR-Einladung und vorhandene Connect-Freigaben/Widerruf. Die Besitzeranmeldung
+wird wiederverwendet. Mac, Anmeldung und Setup-/Importabschluss führen zur
+Serverübersicht. Das native Fenster zeigt keine zusätzliche Medienclient-
+Werkzeugleiste. Erweiterte Medien- und Nutzerverwaltung bleiben verlinkt.
+
+Fotos/Immich, Dokumente/Paperless-ngx, lokale KI/Ollama und Zuhause sind
+bedienbare, klar bezeichnete **Vorschauen ohne Backend-Anbindung**. Entwürfe
+werden nicht gespeichert und starten keine Dienste. Gemeinsame Modulfreigaben,
+Sicherungen und Updates bleiben Ausbauaufgaben. Umfang und Architektur:
+[management.md](management.md). Keine neuen externen Dienste oder Abhängigkeiten.
+
+**Prüfstand:** Web `6bb66379eec53599ee7a15fccdbc1109b66adb0d`;
+Mac-Paket aus Serverstand `9be0743f0ac197f9c43d7f51989442761218c124`,
+beide im Build-Nachweis sauber. Vollständiger Mac-arm64-/Docker-arm64-Build
+bestanden; nach der letzten ausschließlich nativen Korrektur Launcher erneut
+als Release gebaut und in das unveränderte Server-/Web-Paket übernommen.
+Ad-hoc-Signatur erneut verifiziert. Docker enthält denselben Web- und API-Stand;
+der letzte Swift-Fix betrifft das Image nicht.
+
+- TypeScript, gezieltes ESLint und Stylelint ohne Fehler; fünf Modelltests
+  und fünf Swift-Tests bestanden. API-Build ohne Warnungen/Fehler, Go-Importtests
+  bestanden. Die Tests schützen auch normale und abweichende native Herkunfts-
+  URLs; Foundation normalisiert `/web/` zu `/web`.
+- Frische Docker-Paketprüfung: anonyme/nicht administrative Zugriffe verweigert,
+  vorhandener Owner-Zugang für Connect, echte Profilanlage und QR-PNG,
+  ablaufende Einladung, begrenzte Aktionsliste, korrekt erhaltene Fehlercodes,
+  16-KiB-Grenze auch bei Chunked-Übertragung, fremde Hosts/Origins verweigert.
+  Synthetische Bibliothek, Zählung, Speicher, Servername unter Erhalt anderer
+  Einstellungen und Scanstatus geprüft. Testcontainer anschließend entfernt.
+- Bisheriger Entrypoint-/Onboardingtest einschließlich Branding, Kurt, Host/
+  Origin und gesperrter Kopplung vor der Ersteinrichtung bestanden.
+- UI im echten Docker-Paket: Owner-Anmeldung zur neuen Übersicht, Bibliothek
+  mit leerem Testordner tatsächlich angelegt, QR-Dialog sichtbar, Vorschau-
+  Aktivierung ohne Dienststart, Modulkatalog/KI/Einstellungen durchlaufen.
+  390-px-Ansicht und Bibliotheksdialog ohne horizontalen Überlauf. Beim Stoppen
+  ausschließlich dieses Testcontainers verschwanden alte Kennzahlen zugunsten
+  unbekannter Werte und einer eindeutigen Fehlermeldung.
+- Finales Mac-Paket unter `build/connect-preview/Mutti.app` geöffnet. Echte
+  importierte Bibliotheken und Speicherwerte sichtbar, gespeicherte Anmeldung
+  weiter verwendbar. Dialog per Escape geschlossen, Fokus kehrt zum Auslöser
+  zurück. Native Fernzugriffseinstellungen geöffnet und ohne Speichern
+  abgebrochen. Speicheransicht mit mehreren realen Medienordnern geprüft;
+  App auf der Übersicht für den Owner belassen.
+
+Im UI-Test fiel eine vorhandene .NET-/virtiofs-Abweichung auf: Docker Desktop
+meldete Kapazitäten um Faktor 256 zu groß. Für `StorageType=Unknown` zeigt die
+Oberfläche deshalb keine angeblich verlässliche Kapazität; die zugrundeliegende
+virtuelle Messung bleibt ein eigener Backend-Punkt. Native Mac-Datenträgerwerte
+werden regulär angezeigt. Keine realen Bibliotheken verändert, kein erneuter
+Import gestartet. Vorherige App-Pakete bleiben als Rückfallkopien erhalten.
+
+Reale NAS-Hardware, WAN-Matrix, vollständige VoiceOver-Abnahme und produktive
+Auslieferung bleiben gesonderte Gates. Die neue Rechteprüfung im separaten
+kurtz-Repo wurde gelesen/ausgeführt; deren laufende Register-/Releasearbeiten
+sind keine Freigabe von kurtz-Artefakten durch diese lokale Mutti-Änderung.
