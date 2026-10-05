@@ -20,6 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - run: swift build --package-path mutti/apps/macos -c release
+      - run: swift test --package-path mutti/apps/macos
   container:
     runs-on: ubuntu-latest
     steps:

@@ -15,3 +15,6 @@
 "Das App-Paket ist unvollständig. Bitte baue oder installiere Mutti erneut." = "Das App-Paket ist unvollständig. Bitte baue oder installiere Mutti erneut.";
 "Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll." = "Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll.";
 "Der Start dauert zu lange. Prüfe das Protokoll und versuche es erneut." = "Der Start dauert zu lange. Prüfe das Protokoll und versuche es erneut.";
+
+"Einrichtung läuft" = "Einrichtung läuft";
+"Bitte zuerst die Einrichtung abschließen." = "Bitte zuerst die Einrichtung abschließen.";

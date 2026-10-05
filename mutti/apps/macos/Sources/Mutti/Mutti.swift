@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class ServerController: ObservableObject {
     @Published var ready = false
+    @Published private(set) var setupCompleted = false
     @Published var error: String?
     @Published var starting = false
     let address = URL(string: "http://127.0.0.1:18596/web/")!
@@ -51,7 +52,7 @@ final class ServerController: ObservableObject {
 
     func start() {
         guard child == nil, !starting else { return }
-        error = nil; starting = true; stopping = false
+        error = nil; starting = true; stopping = false; setupCompleted = false
         let identifier = UUID(); launchID = identifier
         do {
             let fm = FileManager.default
@@ -96,17 +97,18 @@ final class ServerController: ObservableObject {
             process.standardOutput = log; process.standardError = log
             process.terminationHandler = { [weak self] _ in Task { @MainActor [weak self] in
                 guard let self, self.launchID == identifier, !self.stopping else { return }
-                self.ready = false; self.starting = false; self.child = nil; self.readiness?.cancel(); self.releaseLock()
+                self.ready = false; self.setupCompleted = false; self.starting = false; self.child = nil; self.readiness?.cancel(); self.stopConnect(); self.releaseLock()
                 self.error = NSLocalizedString("Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll.", comment: "Server stopped")
             } }
             try process.run(); child = process
-            try startConnect(resources: resources, root: root)
             readiness = Task { [weak self] in
                 for _ in 0..<90 {
                     guard let self, !Task.isCancelled, process.isRunning else { return }
                     var request = URLRequest(url: self.address.deletingLastPathComponent().appending(path: "health")); request.timeoutInterval = 2
                     if let (_, response) = try? await URLSession.shared.data(for: request), let http = response as? HTTPURLResponse, http.statusCode == 200, process.isRunning {
-                        self.ready = true; self.starting = false; return
+                        self.ready = true; self.starting = false
+                        await self.observeSetup(process: process, resources: resources, root: root)
+                        return
                     }
                     try? await Task.sleep(for: .seconds(1))
                 }
@@ -114,6 +116,29 @@ final class ServerController: ObservableObject {
                 self.stop(); self.error = NSLocalizedString("Der Start dauert zu lange. Prüfe das Protokoll und versuche es erneut.", comment: "Startup timeout")
             }
         } catch { stop(); self.error = error.localizedDescription }
+    }
+
+    // Server health only means that the setup wizard can be displayed. Devices
+    // become available after Jellyfin confirms that the owner finished setup.
+    private func observeSetup(process: Process, resources: URL, root: URL) async {
+        let endpoint = address.deletingLastPathComponent().appending(path: "System/Info/Public")
+        while !Task.isCancelled && process.isRunning {
+            var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
+            request.timeoutInterval = 3
+            let completed: Bool
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               let http = response as? HTTPURLResponse, http.statusCode == 200,
+               let info = try? JSONDecoder().decode(SetupInfo.self, from: data) {
+                completed = info.startupWizardCompleted == true
+            } else { completed = false }
+            guard !Task.isCancelled, process.isRunning else { return }
+            setupCompleted = completed
+            if completed && connectChild == nil {
+                do { try startConnect(resources: resources, root: root) }
+                catch { self.error = error.localizedDescription }
+            }
+            try? await Task.sleep(for: .seconds(2))
+        }
     }
 
     func stop() {
@@ -125,7 +150,7 @@ final class ServerController: ObservableObject {
             if child.isRunning { kill(child.processIdentifier, SIGKILL); child.waitUntilExit() }
         }
         stopConnect()
-        child = nil; try? log?.close(); log = nil; ready = false; starting = false; releaseLock()
+        child = nil; try? log?.close(); log = nil; ready = false; setupCompleted = false; starting = false; releaseLock()
     }
     func stopConnect() {
         guard let process = connectChild else { return }
@@ -158,6 +183,7 @@ final class ServerController: ObservableObject {
     }
 
     func saveConnectSettings(_ settings: ConnectSettings) throws {
+        guard ready && setupCompleted else { throw Failure("Bitte zuerst die Einrichtung abschließen.") }
         guard let root = dataDirectory, let resources = Bundle.main.resourceURL else { return }
         if !settings.broker.isEmpty {
             guard let url = URL(string: settings.broker), url.scheme == "https", url.host != nil,
@@ -187,11 +213,11 @@ struct ContentView: View {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 24, height: 24).accessibilityHidden(true)
                 Text("Mutti").font(.headline)
                 Spacer()
-                if server.ready {
+                if server.ready && server.setupCompleted {
                     Button(devices ? "Bibliothek" : "Geräte koppeln") { devices.toggle() }
                     Button("Fernzugriff") { settings = true }
                 }
-                Label(LocalizedStringKey(server.ready ? "Auf diesem Mac bereit" : "Lokale Vorschau"), systemImage: server.ready ? "checkmark.circle.fill" : "circle").font(.caption)
+                Label(LocalizedStringKey(server.ready ? (server.setupCompleted ? "Auf diesem Mac bereit" : "Einrichtung läuft") : "Lokale Vorschau"), systemImage: server.ready && server.setupCompleted ? "checkmark.circle.fill" : "circle").font(.caption)
                 Button { if let root = server.dataDirectory { NSWorkspace.shared.open(root.appending(path: "logs")) } } label: { Image(systemName: "doc.text.magnifyingglass") }.help("Lokale Protokolle öffnen")
             }.padding().background(Color(red: 0.12, green: 0.12, blue: 0.12)).foregroundStyle(.white)
             if server.ready {
@@ -209,6 +235,9 @@ struct ContentView: View {
             }
         }.tint(Color(red: 0.55, green: 0.49, blue: 0))
         .sheet(isPresented: $settings) { ConnectSettingsView(server: server) }
+        .onChange(of: server.setupCompleted) { _, completed in
+            if !completed { devices = false; settings = false }
+        }
     }
 }
 

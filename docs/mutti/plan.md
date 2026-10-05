@@ -1,6 +1,6 @@
 # Mutti – Produkt- und Umsetzungsplan
 
-Stand: **4. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**.
+Stand: **5. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**.
 
 Mutti wird das Server-Gegenstück zu **kurtz**: ein eigenständiges, kuratiertes
 Produkt auf Jellyfin-Basis. Das wichtigste Ziel ist eine einfache Einrichtung
@@ -46,8 +46,9 @@ durch diesen Plan nicht.
 
 ## 2. Was die erste Version leisten soll
 
-Die Erstinstallation führt durch Servername, Medienordner, Besitzerzugang und
-eine erste Gerätefreigabe. Fortschritt und Fehler bleiben verständlich, auch
+Die Erstinstallation bietet gemäß MK-005 zuerst **Neu einrichten** oder
+**Aus Jellyfin übernehmen** an (M2b, noch umzusetzen). Danach folgen die jeweilige
+Einrichtung oder Importprüfung und erst nach deren Erfolg die erste Gerätefreigabe. Fortschritt und Fehler bleiben verständlich, auch
 während Jellyfin die Bibliothek noch einliest. Erweiterte Einstellungen sind
 erreichbar, stehen aber nicht im ersten Einrichtungsablauf.
 
@@ -68,8 +69,9 @@ Zum Pflichtumfang gehören:
 
 Nicht Bestandteil von Day 1 sind Relay, universelle Erreichbarkeitsversprechen,
 ein allgemeines VPN, Zugriff auf das gesamte Heimnetz, Exit-Node-Funktionen,
-eine neue Transcoding-Engine, automatische Übernahme fremder Jellyfin-Datenbanken
-oder ein vollständiger Neubau sämtlicher Jellyfin-Verwaltungsfunktionen.
+eine neue Transcoding-Engine oder ein vollständiger Neubau sämtlicher Jellyfin-
+Verwaltungsfunktionen. Die zuvor ausgeschlossene Jellyfin-Übernahme ist durch die
+Owner-Rückmeldung vom 5. Oktober als M2b in den Umfang aufgenommen worden.
 Jellyfin-Wiedergabe im Browser bleibt erhalten; kurtz ist der bevorzugte Client.
 
 ## 3. Forks und eigene Repositories
@@ -218,6 +220,71 @@ möglich“, „Einladung abgelaufen“ und „Zugriff entfernt“. Bei einem Fe
 zeigen wir einen erneuten Versuch und verständliche Hinweise zum Netzwechsel.
 Ein getrennt erreichbarer Diagnosebereich darf technische Details enthalten.
 Wir behaupten bei einem unklaren Timeout keine sicher erkannte Routerursache.
+
+### 5.1 — Reihenfolge nach dem ersten Nutzertest
+
+**Owner-Rückmeldung 05.10.2026:** Während der Ersteinrichtung keine Kopplung und
+keinen Fernzugriff anbieten. Ein erreichbarer Server ist noch kein eingerichteter
+Server. Maßgeblich ist `StartupWizardCompleted` aus `System/Info/Public`, nicht
+`/health`. Fehlende/ungültige Zustandsdaten geben die Kopplung nicht frei.
+Die Mac-Hülle startet den Kopplungsdienst erst nach der bestätigten Fertigstellung.
+
+### 5.2 — M2b: Bestehendes Jellyfin übernehmen (MK-005)
+
+**Neu aufgenommene Anforderung; noch kein implementierter Import.** Kanonischer
+Ideeneintrag: [MK-005 im gemeinsamen Ideen-Eingang](/Users/ai/workspace/vela-swiftfin/IDEEN.md).
+
+Zielablauf:
+
+1. **Neu einrichten / Aus Jellyfin übernehmen** vor dem bisherigen Assistenten.
+2. Lokale Jellyfin-Instanzen anhand erreichbarer Server und vorhandener
+   Installationen erkennen; Name, Version und Adresse anzeigen. Kein automatischer
+   Zugriff auf deren Datenbank. Die laufende Mutti-Instanz ausschließen.
+3. Alternativ Adresse und Administratorname/Passwort eingeben. Anmeldung nur an
+   der ausdrücklich ausgewählten Quelle, keine Weiterleitung von Zugangsdaten
+   an Redirect-Ziele. Zugangsdaten nur für die Übernahme halten, nicht protokollieren.
+4. Version, Besitzerrechte, Datenumfang, Medienpfade und verfügbare Zielressourcen
+   prüfen. Vor Beginn eine konkrete Übernahmeübersicht zeigen.
+5. Konsistenten Stand in einen getrennten Mutti-Datenbereich übernehmen,
+   Ergebnis prüfen und erst danach aktivieren. Die Quelle bleibt bis zum
+   kontrollierten Wechsel erhalten; fehlgeschlagene/unterbrochene Importe
+   müssen ohne Halbzustand erneut ausführbar sein.
+6. Zusammenfassung anzeigen, mit bestehendem Benutzer anmelden und anschließend
+   Geräte koppeln. Keine erneute manuelle Einrichtung bereits übernommener Inhalte.
+
+Pflichtumfang sind Bibliotheksdefinitionen samt Medienzuordnung und Metadaten,
+Benutzer und Rechte, bestehende lokale Benutzeranmeldung, Wiedergabestand
+(einschließlich Resume-Position, Zähler und letztem Wiedergabedatum), Favoriten,
+Playlists/Sammlungen und kompatible Server-/Benutzereinstellungen. Vor Freigabe
+an synthetischen Daten je Benutzer vergleichen; ein bloßer Neuscan zählt nicht
+als erfolgreiche Übernahme. Medien verbleiben an ihren Speicherorten, sofern
+nicht ausdrücklich ein Dateiumzug gewählt wurde; der Zielserver muss sie lesen
+können. Fehlende Laufwerke/Mounts sind vor Aktivierung aufzulösen.
+
+**Verifizierte technische Grenze:** Im gepinnten Jellyfin-Stand bietet
+`BackupController` Erstellen, Auflisten, Manifestlesen und Wiederherstellen,
+aber keinen Archivdownload. Die normale Admin-API exportiert auch keine lokalen
+Passworthashes. Adresse und Adminanmeldung allein erlauben daher keinen
+vollständigen Fernimport. Datenbank-/Konfigurationssicherung oder ein zusätzlicher
+Exportweg sind erforderlich. Der ursprüngliche Vollumfang bleibt bestehen;
+ein API-Teilimport darf nicht als vollständiger Umzug bezeichnet werden.
+
+Erster Importtransport ist zu entscheiden: eine vorhandene Sicherungsdatei
+annehmen oder einen ausdrücklich gestarteten Exporthelfer auf der Quelle nutzen.
+Lokale Erkennung kann diesen Schritt vereinfachen; eine laufende SQLite-Datenbank
+wird nicht unkoordiniert kopiert. Jellyfins Sicherungsfunktion kann einen
+konsistenten Online-Stand erzeugen. Relevante Primärquellen:
+[Jellyfin Backup/Restore](https://jellyfin.org/docs/general/administration/backup-and-restore/),
+[Jellyfin Migration](https://jellyfin.org/docs/general/administration/migrate/),
+[`BackupController`](../../Jellyfin.Api/Controllers/BackupController.cs).
+
+Versionsmigration, Pfadwechsel zwischen Mac/NAS/Docker, externe Anmeldeanbieter,
+Plugins, Hardware-Transcoding und Netzwerkeinstellungen müssen gesondert geprüft
+werden. Alte öffentliche Listener oder Datenbankpfade dürfen Muttis lokale
+Sicherheitsgrenzen nicht überschreiben. Inkompatible Einstellungen werden vor
+Übernahme sichtbar gemacht und erfordern eine aufgelöste Entscheidung; kein
+stilles Weglassen mit einer „alles übernommen“-Meldung. Mac und Docker/NAS
+gehören auch für diesen Import zur gemeinsamen Abnahme.
 
 ## 6. Sicherheits- und Datenschutzumfang
 

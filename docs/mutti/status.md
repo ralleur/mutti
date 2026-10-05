@@ -1,6 +1,6 @@
 # Umsetzungsstand
 
-Stand: 4. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
+Stand: 5. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
 
 Die Forks `ralleur/mutti` und `ralleur/mutti-web` behalten ihre vollständige
 Jellyfin-Historie. Die Produktbranches beginnen beim zusammenpassenden stabilen
@@ -12,6 +12,7 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 | M0 | Unveränderte Mac-Server- und Web-Referenz gebaut. Zwei echte tsnet-Knoten übertragen lokal verschlüsselt Daten mit ausschließlich STUN; kein DERP-Server läuft. | Getrennte Internetanschlüsse, gesperrtes UDP, CGNAT/IPv6, Netzwechsel; verbindliche Transport-/Control-Entscheidung. |
 | M1 | Eigene Forks, Komponenten-Pins, Mac- und Docker-Builds, Entwicklungsanleitung, Sicherheitsregeln und CI implementiert. Lokale API-/Videodatenstrecke auf beiden Paketen bestanden. | Vollständiges Quell-/Lizenzinventar für Distribution, weitere Architekturen und vollständige Wiedergabeabnahme. |
 | M2 | Eigene Mutti-Vektormarke, Sora, kurtz-Farben, Web-Assistent; native Mac-Hülle mit Serverstart, Status, Ordnerdialog-Brücke und getrennten Daten; nicht privilegiertes Docker-Paket mit schreibgeschützten Medien. | Native Ordnerauswahl durch alle Dialogschritte, Screenreader/Hellmodus vollständig, echte NAS-Installation; einfache sichere Verwaltung von einem zweiten Gerät. Der derzeitige NAS-SSH-Tunnel ist nur ein Entwicklerweg. |
+| M2b | Vollständiger Jellyfin-Import nach Owner-Test neu als Anforderung aufgenommen; API-/Backup-Grenze geprüft. | Erstwahl, lokale Erkennung, Quell-Anmeldung, konsistente Datenübernahme, Pfad-/Versionsprüfung und Abnahme. Archivtransport oder Exporthelfer noch zu entscheiden. |
 | M3 | QR-Einladung, TLS-Geräteidentität, bestätigte Profilfreigabe, Keychain-Integration und laufender Widerruf implementiert und lokal geprüft. | Wiederherstellung, reale Geräte und vollständige Ablauf-/Bedienabnahme. |
 | M4 | Direkter verschlüsselter Transport und Vermittlungsdienst als Teststand implementiert; siehe unten. Kein Relay. | Öffentlicher Testbetrieb, WAN-Matrix und Wiedergabe bei Netzwechseln. |
 | M5 | Lokale Sicherheits- und Integrationstests vorhanden. | Backup/Restore, Upgrade, Langzeittests, reale iOS-/tvOS-Geräte, NAS und zwei echte Anschlüsse. |
@@ -68,3 +69,11 @@ Ein öffentlich erreichbarer HTTPS-/STUN-Vermittler ist paketiert, aber nicht
  betrieben. Ohne dessen Adresse ist der Test auf das Heimnetz begrenzt. Es wurde
  kein Hosting gebucht, kein Cloudflare-Dienst angelegt und kein Relay aktiviert.
  Day 2 bleibt eine spätere neue Marktprüfung.
+
+## Rückmeldung nach dem ersten Nutzertest (5. Oktober)
+
+Die Mac-Hülle unterscheidet nun Serverbereitschaft und abgeschlossene Einrichtung.
+Geräte-Kopplung und Fernzugriff werden erst nach Jellyfins bestätigtem Setup-Abschluss
+angeboten; vorher startet auch der Kopplungsdienst nicht. Ein Neustart prüft den
+Zustand erneut. Die Importanforderung MK-005 ist in Foundation M2b übernommen;
+ein vollständiger Jellyfin-Import ist noch nicht vorhanden.
