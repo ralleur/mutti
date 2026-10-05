@@ -110,6 +110,12 @@ Login-Aktivitätszeiten, Aktivitätsprotokoll sowie Geräte-/Sitzungstabellen si
 von der Inhaltsgleichheit ausgenommen. Benutzerrechte und Wiedergabedaten bleiben
 vollständig im Vergleich. Alle erwarteten Tabellen müssen im Archiv vorhanden sein.
 
+Interne Sammlungspfade werden bei der Bibliotheksprüfung mit derselben Zuordnung
+wie Datenbank, XML und Verknüpfungen auf den neuen Mutti-Datenordner abgebildet.
+Das berücksichtigt die von Jellyfin in der API aufgelösten `%AppDataPath%`-Pfade.
+Bibliotheks-IDs, Namen und alle erwarteten Medienordner müssen weiterhin exakt
+übereinstimmen; bei einer Abweichung benennt die Meldung Bibliothek und Fehlerart.
+
 Eine zweite Quellsicherung prüft vor Aktivierung auf Änderungen an Daten,
 Quelldateien und Konfiguration. Bei Abweichung stoppt der Umzug mit Wiederholhinweis.
 Das ist ein kontrolliertes Wechselzeitfenster, keine kontinuierliche Replikation:
@@ -182,7 +188,8 @@ python3 mutti/tests/import-package-smoke.py
 
 Der vollständige Test erstellt ausschließlich eigene temporäre Server und ein
 synthetisches Video. Er prüft bestehende Owner-/Viewer-Logins, Rechte, identische
-Bibliotheksdaten, Playlist, Profilbild, Anzeigeeinstellungen, Favoriten,
+Bibliotheksdaten, Playlist, interne Sammlung samt ID und Inhalt, Profilbild,
+Anzeigeeinstellungen, Favoriten,
 Resume-/Wiedergabedaten, den erhaltenen
 Quellserver, Export-Ticketbindung/-Einmaligkeit und Persistenz nach Neustart.
 Derselbe Test ist für Linux arm64 im Container qualifiziert. Der Pakettest prüft

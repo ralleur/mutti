@@ -207,3 +207,19 @@ zusätzliche Korrektur einer falschen Portbelegt-Meldung beim schnellen Wiederö
 Swift-Tests bestanden; aktualisierte App unter `build/connect-preview/Mutti.app`
 bereitgestellt. Der ursprüngliche Quelldienst wurde durch den Agenten nicht neu
 gestartet; die tatsächliche Migration startet der Owner über den Importdialog.
+
+### Interne Sammlungen bei der Importprüfung (MK-005)
+
+Der Owner-Import erreichte nach mehreren Minuten die Bibliotheksprüfung und
+stoppte vor Aktivierung. Die ausschließlich lesende Diagnose zeigte erhaltene
+Bibliotheks-IDs und externe Medienpfade. Die interne Sammlung wurde korrekt in
+das neue Datenverzeichnis übernommen, aber mit ihrem alten, von Jellyfin in der
+API aufgelösten Pfad verglichen. Archivaufbereitung und Bibliotheksprüfung teilen
+jetzt dieselbe Pfadzuordnung. IDs, Namen und vollständige Ordnerlisten bleiben
+verbindlich; echte Abweichungen benennen die betroffene Bibliothek und Fehlerart.
+
+Eine künstliche Sammlung reproduziert vor der Korrektur dieselbe Fehlermeldung.
+Mit der Korrektur besteht der vollständige Mac-Import samt Sammlung/Zuordnung,
+Intro Skipper, Benutzerrechten, Wiedergabestand und Neustartpersistenz. Go-Race-
+Tests und statische Prüfung bestanden. Die echte Quelle und der fehlgeschlagene
+Importordner wurden für die Diagnose nicht verändert.

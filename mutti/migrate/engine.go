@@ -13,9 +13,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -438,7 +438,7 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if e = staged.call(ctx, "GET", "/Library/VirtualFolders", nil, &libraries); e != nil {
 		return e
 	}
-	if e = compareLibraries(s.Libraries, libraries, input.Mappings); e != nil {
+	if e = compareLibraries(s.Libraries, libraries, importPathMappings(s.Info, instance, input.Mappings)); e != nil {
 		return e
 	}
 	m.setStep("verifying", 5, "Die übernommene Datenbank wird mit der Sicherung verglichen …")
@@ -583,24 +583,38 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	return nil
 }
 func compareLibraries(source, target []Library, mappings map[string]string) error {
-	describe := func(items []Library, replace bool) []string {
-		out := []string{}
-		for _, l := range items {
-			paths := append([]string{}, l.Locations...)
-			if replace {
-				for i, p := range paths {
-					paths[i] = replacePath(p, mappings)
-				}
-			}
-			sort.Strings(paths)
-			out = append(out, l.ItemId+"|"+l.Name+"|"+strings.Join(paths, "|"))
-		}
-		sort.Strings(out)
-		return out
+	fail := func(detail string) error {
+		return fmt.Errorf("Die Bibliothekszuordnung konnte nicht vollständig bestätigt werden: %s Der bisherige Datenstand bleibt aktiv.", detail)
 	}
-	a, b := describe(source, true), describe(target, false)
-	if strings.Join(a, "\n") != strings.Join(b, "\n") {
-		return errors.New("Die Bibliothekszuordnung konnte nicht vollständig bestätigt werden. Der bisherige Datenstand bleibt aktiv.")
+	if len(source) != len(target) {
+		return fail(fmt.Sprintf("Erwartet wurden %d Bibliotheken, gefunden wurden %d.", len(source), len(target)))
+	}
+	byID := make(map[string]Library, len(target))
+	for _, library := range target {
+		if _, duplicate := byID[library.ItemId]; duplicate || library.ItemId == "" {
+			return fail("Eine übernommene Bibliothek hat keine eindeutige Kennung.")
+		}
+		byID[library.ItemId] = library
+	}
+	for _, library := range source {
+		restored, found := byID[library.ItemId]
+		if !found {
+			return fail(fmt.Sprintf("Die ursprüngliche Kennung der Bibliothek %q fehlt.", library.Name))
+		}
+		delete(byID, library.ItemId)
+		if library.Name != restored.Name {
+			return fail(fmt.Sprintf("Der Name der Bibliothek %q hat sich geändert.", library.Name))
+		}
+		expected := make([]string, len(library.Locations))
+		for i, path := range library.Locations {
+			expected[i] = replacePath(path, mappings)
+		}
+		actual := append([]string{}, restored.Locations...)
+		sort.Strings(expected)
+		sort.Strings(actual)
+		if !slices.Equal(expected, actual) {
+			return fail(fmt.Sprintf("Die Ordner der Bibliothek %q stimmen nicht mit der vorgesehenen Übernahme überein.", library.Name))
+		}
 	}
 	return nil
 }

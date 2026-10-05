@@ -139,6 +139,13 @@ func TestRealMigration(t *testing.T) {
 	item := items.Items[0].Id
 	call("POST", "/UserItems/"+item+"/UserData?userId="+viewer.Id, map[string]any{"IsFavorite": true, "Played": true, "PlayCount": 3, "PlaybackPositionTicks": int64(40000000), "LastPlayedDate": "2026-10-01T12:00:00Z"}, nil)
 	call("POST", "/Playlists", map[string]any{"Name": "Meine Merkliste", "Ids": []string{item}, "UserId": viewer.Id, "MediaType": "Video", "IsPublic": true}, nil)
+	// Collections live under Jellyfin's own data directory. Unlike external
+	// media, their API locations must change when restored into a new instance.
+	var collection struct{ Id string }
+	call("POST", "/Collections?name=Meine+Sammlung&ids="+item, nil, &collection)
+	if collection.Id == "" {
+		t.Fatal("collection was not created")
+	}
 	// A generated profile image exercises private persisted ownership fields.
 	portrait := filepath.Join(work, "portrait.png")
 	if e = exec.Command(ff, "-f", "lavfi", "-i", "color=c=yellow:s=32x32", "-frames:v", "1", portrait).Run(); e != nil {
@@ -392,6 +399,14 @@ func TestRealMigration(t *testing.T) {
 	}
 	v, _ := NewAPI(o.Backend)
 	v.Token = imported.AccessToken
+	var collectionItems struct{ Items []struct{ Id string } }
+	if e = v.call(ctx, "GET", "/Items?ParentId="+collection.Id, nil, &collectionItems); e != nil {
+		t.Fatal("imported collection", e)
+	}
+	if len(collectionItems.Items) != 1 || collectionItems.Items[0].Id != item {
+		t.Fatal("collection membership changed", collectionItems)
+	}
+	t.Log("PASS: internal collections library relocated with collection identity and membership retained")
 	var data struct {
 		IsFavorite, Played    bool
 		PlaybackPositionTicks int64

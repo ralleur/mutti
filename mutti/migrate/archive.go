@@ -281,16 +281,11 @@ func rewriteXML(data []byte, mappings map[string]string, overrides map[string]st
 func networkXML(port int, bind string) []byte {
 	return []byte(fmt.Sprintf(`<NetworkConfiguration><InternalHttpPort>%d</InternalHttpPort><PublicHttpPort>%d</PublicHttpPort><EnableRemoteAccess>false</EnableRemoteAccess><AutoDiscovery>false</AutoDiscovery><EnableIPv6>false</EnableIPv6><BaseUrl></BaseUrl><LocalNetworkAddresses><string>%s</string></LocalNetworkAddresses></NetworkConfiguration>`, port, port, bind))
 }
-func TransformArchive(input, output, instance string, port int, source SystemInfo, mediaMappings map[string]string, ffmpegPaths ...string) (Audit, error) {
-	a := newAudit()
-	z, e := zip.OpenReader(input)
-	if e != nil {
-		return a, errors.New("Die Sicherung konnte nicht geöffnet werden.")
-	}
-	defer z.Close()
-	if e = validateArchive(z); e != nil {
-		return a, e
-	}
+
+// importPathMappings is shared by archive rewriting and library verification.
+// Jellyfin expands virtual paths in its API, so internal collections need the
+// same relocation as persisted database rows, XML and shortcut files.
+func importPathMappings(source SystemInfo, instance string, mediaMappings map[string]string) map[string]string {
 	mappings := map[string]string{}
 	for k, v := range mediaMappings {
 		mappings[k] = v
@@ -304,6 +299,19 @@ func TransformArchive(input, output, instance string, port int, source SystemInf
 	if source.CachePath != "" {
 		mappings[strings.TrimRight(source.CachePath, "/\\")] = filepath.Join(instance, "cache")
 	}
+	return mappings
+}
+func TransformArchive(input, output, instance string, port int, source SystemInfo, mediaMappings map[string]string, ffmpegPaths ...string) (Audit, error) {
+	a := newAudit()
+	z, e := zip.OpenReader(input)
+	if e != nil {
+		return a, errors.New("Die Sicherung konnte nicht geöffnet werden.")
+	}
+	defer z.Close()
+	if e = validateArchive(z); e != nil {
+		return a, e
+	}
+	mappings := importPathMappings(source, instance, mediaMappings)
 	out, e := os.OpenFile(output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if e != nil {
 		return a, e
