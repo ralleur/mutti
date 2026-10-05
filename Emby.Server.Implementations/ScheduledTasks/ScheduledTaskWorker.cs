@@ -283,6 +283,13 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
     /// <exception cref="InvalidOperationException">Cannot execute a Task that is already running.</exception>
     public async Task Execute(TaskOptions options)
     {
+        // Mutti verifies an isolated restored snapshot before activating it.
+        // Background scans and cleanup must not change that snapshot or media.
+        if (Environment.GetEnvironmentVariable("MUTTI_IMPORT_VALIDATION") == "1")
+        {
+            return;
+        }
+
         var task = Task.Run(async () => await ExecuteInternal(options).ConfigureAwait(false));
 
         _currentTask = task;

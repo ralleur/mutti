@@ -47,7 +47,7 @@ durch diesen Plan nicht.
 ## 2. Was die erste Version leisten soll
 
 Die Erstinstallation bietet gemäß MK-005 zuerst **Neu einrichten** oder
-**Aus Jellyfin übernehmen** an (M2b, noch umzusetzen). Danach folgen die jeweilige
+**Aus Jellyfin übernehmen** an (M2b, für 12.1 als Teststand umgesetzt). Danach folgen die jeweilige
 Einrichtung oder Importprüfung und erst nach deren Erfolg die erste Gerätefreigabe. Fortschritt und Fehler bleiben verständlich, auch
 während Jellyfin die Bibliothek noch einliest. Erweiterte Einstellungen sind
 erreichbar, stehen aber nicht im ersten Einrichtungsablauf.
@@ -231,7 +231,8 @@ Die Mac-Hülle startet den Kopplungsdienst erst nach der bestätigten Fertigstel
 
 ### 5.2 — M2b: Bestehendes Jellyfin übernehmen (MK-005)
 
-**Neu aufgenommene Anforderung; noch kein implementierter Import.** Kanonischer
+**Teststand umgesetzt für Jellyfin 12.1; Owner-Abnahme ausstehend.** Aktueller
+Funktionsumfang und Grenzen: [Import-Testanleitung](import.md). Kanonischer
 Ideeneintrag: [MK-005 im gemeinsamen Ideen-Eingang](/Users/ai/workspace/vela-swiftfin/IDEEN.md).
 
 Zielablauf:
@@ -293,8 +294,8 @@ ist damit durch die Priorität eines automatisierten Umzugs ersetzt.
   Datenumfang zugänglich. Nach Abschluss Zugriff sofort deaktivieren, Paket und
   temporäre Daten über einen geprüften Bereinigungsablauf entfernen. Einen noch
   nötigen Neustart offen ausweisen; keine falsche Selbstlöschungszusage.
-- **Ausweichweg:** Archivimport bleibt für nicht unterstützte Installationen
-  verfügbar. Docker-Volumes, Dateirechte oder nicht erreichbare Medien können
+- **Geplanter Ausweichweg:** Manueller Archivimport für nicht unterstützte
+  Installationen ist in dieser Vorschau noch offen. Docker-Volumes, Dateirechte oder nicht erreichbare Medien können
   eine zusätzliche gezielte Freigabe erfordern. Mutti erkennt diese Fälle vor
   dem Wechsel und bietet genau den nötigen nächsten Schritt an.
 
@@ -310,9 +311,9 @@ abgestimmtes Wechselzeitfenster, damit neuer Wiedergabestand nicht verloren geht
 Eine laufende SQLite-Datenbank wird nicht unkoordiniert kopiert. Jellyfins
 Sicherungsfunktion kann einen konsistenten Online-Stand erzeugen; bei aktivem
 Bibliotheksscan verweigert der gepinnte Stand die Erstellung. Mutti muss warten
-oder den Konflikt anzeigen. Nächster Nachweis: lokaler automatisierter Import mit
-synthetischen Benutzern, Verlauf und Favoriten, anschließend Exporthelfer auf
-einer getrennten Testinstanz. Relevante Primärquellen:
+oder den Konflikt anzeigen. Der lokale automatisierte Import sowie der
+Exporthelfer wurden auf separaten synthetischen Mac-/Linux-Testinstanzen geprüft;
+die breite Versions-/Plugin-/NAS-Abnahme bleibt offen. Relevante Primärquellen:
 [Jellyfin Backup/Restore](https://jellyfin.org/docs/general/administration/backup-and-restore/),
 [Jellyfin Migration](https://jellyfin.org/docs/general/administration/migrate/),
 [`BackupController`](../../Jellyfin.Api/Controllers/BackupController.cs),

@@ -12,7 +12,7 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 | M0 | Unveränderte Mac-Server- und Web-Referenz gebaut. Zwei echte tsnet-Knoten übertragen lokal verschlüsselt Daten mit ausschließlich STUN; kein DERP-Server läuft. | Getrennte Internetanschlüsse, gesperrtes UDP, CGNAT/IPv6, Netzwechsel; verbindliche Transport-/Control-Entscheidung. |
 | M1 | Eigene Forks, Komponenten-Pins, Mac- und Docker-Builds, Entwicklungsanleitung, Sicherheitsregeln und CI implementiert. Lokale API-/Videodatenstrecke auf beiden Paketen bestanden. | Vollständiges Quell-/Lizenzinventar für Distribution, weitere Architekturen und vollständige Wiedergabeabnahme. |
 | M2 | Eigene Mutti-Vektormarke, Sora, kurtz-Farben, Web-Assistent; native Mac-Hülle mit Serverstart, Status, Ordnerdialog-Brücke und getrennten Daten; nicht privilegiertes Docker-Paket mit schreibgeschützten Medien. | Native Ordnerauswahl durch alle Dialogschritte, Screenreader/Hellmodus vollständig, echte NAS-Installation; einfache sichere Verwaltung von einem zweiten Gerät. Der derzeitige NAS-SSH-Tunnel ist nur ein Entwicklerweg. |
-| M2b | Vollständiger Jellyfin-Import nach Owner-Test neu als Anforderung aufgenommen; API-/Backup-Grenze geprüft. | Erstwahl, lokale Erkennung, Quell-Anmeldung, konsistente Datenübernahme, Pfad-/Versionsprüfung und Abnahme. Automatisierten lokalen Import und temporären Fernexporter qualifizieren; manuelles Archiv nur als Ausweichweg. |
+| M2b | Automatisierter Jellyfin-12.1-Import: Erstwahl, lokale Erkennung, Admin-Anmeldung, interne Online-Sicherung, isolierte Wiederherstellung, Daten-/Dateiprüfung und atomarer Wechsel. Exporthelfer mit einmaligem Transferzugriff vorhanden. | Owner-Test mit echter Bibliothek; große Datenmengen, reale NAS-Mounts, weitere Versionen, externe Plugins/Logins. Automatische Helferinstallation/-entfernung und manueller Archiv-Ausweichweg offen. Siehe [import.md](import.md). |
 | M3 | QR-Einladung, TLS-Geräteidentität, bestätigte Profilfreigabe, Keychain-Integration und laufender Widerruf implementiert und lokal geprüft. | Wiederherstellung, reale Geräte und vollständige Ablauf-/Bedienabnahme. |
 | M4 | Direkter verschlüsselter Transport und Vermittlungsdienst als Teststand implementiert; siehe unten. Kein Relay. | Öffentlicher Testbetrieb, WAN-Matrix und Wiedergabe bei Netzwechseln. |
 | M5 | Lokale Sicherheits- und Integrationstests vorhanden. | Backup/Restore, Upgrade, Langzeittests, reale iOS-/tvOS-Geräte, NAS und zwei echte Anschlüsse. |
@@ -76,9 +76,22 @@ Die Mac-Hülle unterscheidet nun Serverbereitschaft und abgeschlossene Einrichtu
 Geräte-Kopplung und Fernzugriff werden erst nach Jellyfins bestätigtem Setup-Abschluss
 angeboten; vorher startet auch der Kopplungsdienst nicht. Ein Neustart prüft den
 Zustand erneut. Die Importanforderung MK-005 ist in Foundation M2b übernommen;
-ein vollständiger Jellyfin-Import ist noch nicht vorhanden.
+der qualifizierte Import für Jellyfin 12.1 ist jetzt als Teststand vorhanden ([Testanleitung](import.md)).
 
 Die anschließende Owner-Präzisierung setzt einen möglichst automatischen
 Ein-Klick-Import als Produktziel: lokal Sicherung intern anstoßen und direkt
 lesen, remote einen temporären Umzugshelfer qualifizieren. Das ersetzt die offene
-Wahl eines primär manuellen Archivablaufs; noch keine neue Importimplementierung.
+Wahl eines primär manuellen Archivablaufs. Der lokale Normalfall ist umgesetzt;
+auf entfernten Servern ist die einmalige manuelle Helferinstallation noch nötig.
+
+## Import-Teststand vom 5. Oktober
+
+Mac arm64 und Linux arm64: vollständige synthetische Übernahme einschließlich
+User-IDs/Passwörtern/Rechten, Bibliothek, Playlist, Favoriten, Wiedergabe/Resume
+und erhaltenem Quellserver bestanden. Go-Race-Detector und statische Analyse,
+Archivpfad-/Unvollständigkeitsprüfungen, Weiterleitungs- und CSRF-/Origin-Schutz
+getestet. Exporthelfer gebaut und authentifizierter Transfer geprüft.
+
+Mac-App gebaut und im echten WKWebView geprüft; lokaler Jellyfin wurde automatisch
+erkannt. Die tatsächliche Benutzerbibliothek wurde für die Prüfung nicht importiert.
+Details und bewusste Grenzen stehen in [import.md](import.md). Kein Release.

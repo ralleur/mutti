@@ -286,3 +286,7 @@ dotnet/
 # Mutti build products
 mutti/apps/macos/.build/
 mutti/packaging/docker/.env
+
+# Embedded Mutti onboarding sources (not generated Jellyfin web output)
+!mutti/migrate/web/
+!mutti/migrate/web/**

@@ -37,154 +37,112 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 final class ServerController: ObservableObject {
     @Published var ready = false
     @Published private(set) var setupCompleted = false
+    @Published var showOnboarding = true
+    @Published var importEntry = false
+    @Published private(set) var importing = false
     @Published var error: String?
     @Published var starting = false
     let address = URL(string: "http://127.0.0.1:18596/web/")!
-    private var child: Process?
-    private var connectChild: Process?
+    let onboardingAddress = URL(string: "http://127.0.0.1:18594/")!
     let connectAddress = URL(string: "http://127.0.0.1:18595/")!
+    private var child: Process?
     private var log: FileHandle?
     private var readiness: Task<Void, Never>?
     private var lockFD: Int32 = -1
     private var stopping = false
     private var launchID: UUID?
     private(set) var dataDirectory: URL?
-
+    private struct ManagerState: Decodable {
+        var ready: Bool
+        var setupComplete: Bool
+        var newSetup: Bool
+        var phase: String
+        var active: String
+    }
     func start() {
         guard child == nil, !starting else { return }
-        error = nil; starting = true; stopping = false; setupCompleted = false
+        error = nil; starting = true; stopping = false; setupCompleted = false; showOnboarding = true
         let identifier = UUID(); launchID = identifier
         do {
             let fm = FileManager.default
-            // A separate preview store never opens an existing Jellyfin database.
             let root = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appending(path: "Mutti Preview", directoryHint: .isDirectory)
             try fm.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             dataDirectory = root
             lockFD = open(root.appending(path: "server.lock").path, O_CREAT | O_RDWR, 0o600)
             guard lockFD >= 0, flock(lockFD, LOCK_EX | LOCK_NB) == 0 else { throw Failure("Mutti läuft bereits. Öffne die vorhandene App.") }
-            let probe = socket(AF_INET, SOCK_STREAM, 0)
-            guard probe >= 0 else { throw Failure("Der lokale Serverzugang konnte nicht vorbereitet werden.") }
-            var addr = sockaddr_in(); addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size); addr.sin_family = sa_family_t(AF_INET); addr.sin_port = UInt16(18596).bigEndian; addr.sin_addr.s_addr = inet_addr("127.0.0.1")
-            let available = withUnsafePointer(to: &addr) { p in p.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(probe, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 } }
-            close(probe)
-            guard available else { throw Failure("Der lokale Zugang ist belegt. Beende eine andere Mutti-Instanz und versuche es erneut.") }
-            let config = root.appending(path: "config", directoryHint: .isDirectory)
-            for dir in [config, root.appending(path: "cache"), root.appending(path: "logs")] { try fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700]) }
-            // Enforce the preview boundary on every start, retaining other preferences.
-            let networkURL = config.appending(path: "network.xml")
-            let network = fm.fileExists(atPath: networkURL.path) ? try XMLDocument(contentsOf: networkURL) : XMLDocument(rootElement: XMLElement(name: "NetworkConfiguration"))
-            guard let element = network.rootElement() else { throw Failure("Die Netzwerkeinstellungen konnten nicht gelesen werden.") }
-            for key in ["InternalHttpPort", "PublicHttpPort", "EnableRemoteAccess", "AutoDiscovery", "EnableIPv6", "LocalNetworkAddresses"] { element.elements(forName: key).forEach { $0.detach() } }
-            for (key, value) in [("InternalHttpPort", "18596"), ("PublicHttpPort", "18596"), ("EnableRemoteAccess", "false"), ("AutoDiscovery", "false"), ("EnableIPv6", "false")] { element.addChild(XMLElement(name: key, stringValue: value)) }
-            let interfaces = XMLElement(name: "LocalNetworkAddresses"); interfaces.addChild(XMLElement(name: "string", stringValue: "127.0.0.1")); element.addChild(interfaces)
-            try network.xmlData(options: .nodePrettyPrint).write(to: networkURL, options: .atomic)
-            let system = config.appending(path: "system.xml")
-            if !fm.fileExists(atPath: system.path) { try Data("<ServerConfiguration><ServerName>Mutti</ServerName></ServerConfiguration>".utf8).write(to: system, options: .atomic) }
+            // Refuse occupied listeners before handing lifecycle ownership to the manager.
+            for port in [18594, 18596] {
+                let probe = socket(AF_INET, SOCK_STREAM, 0)
+                guard probe >= 0 else { throw Failure("Der lokale Serverzugang konnte nicht vorbereitet werden.") }
+                var addr = sockaddr_in(); addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size); addr.sin_family = sa_family_t(AF_INET); addr.sin_port = UInt16(port).bigEndian; addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+                let available = withUnsafePointer(to: &addr) { p in p.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(probe, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 } }
+                close(probe)
+                guard available else { throw Failure("Der lokale Zugang ist belegt. Beende eine andere Mutti-Instanz und versuche es erneut.") }
+            }
             guard let resources = Bundle.main.resourceURL else { throw Failure("Das App-Paket ist unvollständig.") }
-            let executable = resources.appending(path: "server/jellyfin")
-            guard fm.isExecutableFile(atPath: executable.path), fm.fileExists(atPath: resources.appending(path: "web/index.html").path), fm.isExecutableFile(atPath: resources.appending(path: "ffmpeg/ffmpeg").path) else { throw Failure("Das App-Paket ist unvollständig. Bitte baue oder installiere Mutti erneut.") }
+            for path in ["server/jellyfin", "ffmpeg/ffmpeg", "migrate/mutti-migrate", "connect/mutti-connect"] {
+                guard fm.isExecutableFile(atPath: resources.appending(path: path).path) else { throw Failure("Das App-Paket ist unvollständig. Bitte Mutti erneut installieren.") }
+            }
+            try fm.createDirectory(at: root.appending(path: "logs"), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             let logURL = root.appending(path: "logs/launcher.log")
-            // Keep one previous launcher log; it is never uploaded automatically.
             if fm.fileExists(atPath: logURL.path) {
                 let previous = root.appending(path: "logs/launcher.previous.log")
                 try? fm.removeItem(at: previous); try fm.moveItem(at: logURL, to: previous)
             }
             fm.createFile(atPath: logURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
             log = try FileHandle(forWritingTo: logURL)
-            let process = Process(); process.executableURL = executable
-            process.arguments = ["--datadir", root.appending(path: "data").path, "--configdir", config.path, "--cachedir", root.appending(path: "cache").path, "--logdir", root.appending(path: "logs").path, "--webdir", resources.appending(path: "web").path, "--ffmpeg", resources.appending(path: "ffmpeg/ffmpeg").path, "--package-name", "mutti-preview"]
-            var env = ProcessInfo.processInfo.environment; env["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"; env["MUTTI_LOCAL_ONLY"] = "1"; env["MUTTI_PREVIEW_ORIGIN"] = "http://127.0.0.1:18596"; process.environment = env
+            let process = Process(); process.executableURL = resources.appending(path: "migrate/mutti-migrate")
+            process.arguments = ["--root", root.path, "--server", resources.appending(path: "server/jellyfin").path, "--web", resources.appending(path: "web").path, "--ffmpeg", resources.appending(path: "ffmpeg/ffmpeg").path, "--connect", resources.appending(path: "connect/mutti-connect").path]
             process.standardOutput = log; process.standardError = log
             process.terminationHandler = { [weak self] _ in Task { @MainActor [weak self] in
                 guard let self, self.launchID == identifier, !self.stopping else { return }
-                self.ready = false; self.setupCompleted = false; self.starting = false; self.child = nil; self.readiness?.cancel(); self.stopConnect(); self.releaseLock()
-                self.error = NSLocalizedString("Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll.", comment: "Server stopped")
+                self.ready = false; self.setupCompleted = false; self.starting = false; self.child = nil; self.readiness?.cancel(); self.releaseLock()
+                self.error = "Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll."
             } }
             try process.run(); child = process
             readiness = Task { [weak self] in
-                for _ in 0..<90 {
-                    guard let self, !Task.isCancelled, process.isRunning else { return }
-                    var request = URLRequest(url: self.address.deletingLastPathComponent().appending(path: "health")); request.timeoutInterval = 2
-                    if let (_, response) = try? await URLSession.shared.data(for: request), let http = response as? HTTPURLResponse, http.statusCode == 200, process.isRunning {
-                        self.ready = true; self.starting = false
-                        await self.observeSetup(process: process, resources: resources, root: root)
-                        return
+                var observed = false
+                var attempts = 0
+                while !Task.isCancelled && process.isRunning {
+                    guard let self else { return }
+                    var request = URLRequest(url: self.onboardingAddress.appending(path: "api/state"), cachePolicy: .reloadIgnoringLocalCacheData); request.timeoutInterval = 3
+                    if let (data, response) = try? await URLSession.shared.data(for: request),
+                       (response as? HTTPURLResponse)?.statusCode == 200,
+                       let state = try? JSONDecoder().decode(ManagerState.self, from: data) {
+                        self.importing = ["checking", "backup", "importing", "verifying", "activating"].contains(state.phase)
+                        self.ready = state.ready || self.importing
+                        self.setupCompleted = state.setupComplete && !self.importing
+                        self.dataDirectory = URL(fileURLWithPath: state.active, isDirectory: true)
+                        if !observed && state.ready {
+                            self.showOnboarding = !state.setupComplete && !state.newSetup
+                            observed = true
+                        }
+                        if state.newSetup { self.showOnboarding = false }
+                        if self.ready { self.starting = false }
+                    }
+                    attempts += 1
+                    if !observed && attempts > 90 {
+                        self.stop(); self.error = "Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut."; return
                     }
                     try? await Task.sleep(for: .seconds(1))
                 }
-                guard let self, !Task.isCancelled else { return }
-                self.stop(); self.error = NSLocalizedString("Der Start dauert zu lange. Prüfe das Protokoll und versuche es erneut.", comment: "Startup timeout")
             }
         } catch { stop(); self.error = error.localizedDescription }
     }
-
-    // Server health only means that the setup wizard can be displayed. Devices
-    // become available after Jellyfin confirms that the owner finished setup.
-    private func observeSetup(process: Process, resources: URL, root: URL) async {
-        let endpoint = address.deletingLastPathComponent().appending(path: "System/Info/Public")
-        while !Task.isCancelled && process.isRunning {
-            var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
-            request.timeoutInterval = 3
-            let completed: Bool
-            if let (data, response) = try? await URLSession.shared.data(for: request),
-               let http = response as? HTTPURLResponse, http.statusCode == 200,
-               let info = try? JSONDecoder().decode(SetupInfo.self, from: data) {
-                completed = info.startupWizardCompleted == true
-            } else { completed = false }
-            guard !Task.isCancelled, process.isRunning else { return }
-            setupCompleted = completed
-            if completed && connectChild == nil {
-                do { try startConnect(resources: resources, root: root) }
-                catch { self.error = error.localizedDescription }
-            }
-            try? await Task.sleep(for: .seconds(2))
-        }
-    }
-
     func stop() {
         stopping = true; launchID = nil; readiness?.cancel(); readiness = nil
         if let child, child.isRunning {
             child.terminate()
-            let deadline = Date().addingTimeInterval(8)
+            // The manager first cancels staging, then stops Connect and Jellyfin.
+            let deadline = Date().addingTimeInterval(35)
             while child.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
             if child.isRunning { kill(child.processIdentifier, SIGKILL); child.waitUntilExit() }
         }
-        stopConnect()
         child = nil; try? log?.close(); log = nil; ready = false; setupCompleted = false; starting = false; releaseLock()
     }
-    func stopConnect() {
-        guard let process = connectChild else { return }
-        if process.isRunning { process.terminate() }
-        let deadline = Date().addingTimeInterval(3)
-        while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
-        if process.isRunning { kill(process.processIdentifier, SIGKILL); process.waitUntilExit() }
-        connectChild = nil
-    }
-
-    func startConnect(resources: URL, root: URL) throws {
-        let process = Process()
-        process.executableURL = resources.appending(path: "connect/mutti-connect")
-        process.arguments = ["--state", root.appending(path: "connect").path]
-        var environment = ProcessInfo.processInfo.environment
-        if let data = try? Data(contentsOf: root.appending(path: "connect-settings.json")),
-           let settings = try? JSONDecoder().decode(ConnectSettings.self, from: data) {
-            environment["MUTTI_SIGNAL_URL"] = settings.broker
-            environment["MUTTI_STUN_URL"] = settings.stun
-        }
-        process.environment = environment
-        process.standardOutput = log; process.standardError = log
-        process.terminationHandler = { [weak self] child in
-            Task { @MainActor [weak self] in
-                guard let self, !self.stopping, self.connectChild === child else { return }
-                self.error = "Die Geräteverbindung wurde beendet. Starte Mutti erneut."
-            }
-        }
-        try process.run(); connectChild = process
-    }
-
     func saveConnectSettings(_ settings: ConnectSettings) throws {
         guard ready && setupCompleted else { throw Failure("Bitte zuerst die Einrichtung abschließen.") }
-        guard let root = dataDirectory, let resources = Bundle.main.resourceURL else { return }
+        guard let root = dataDirectory else { return }
         if !settings.broker.isEmpty {
             guard let url = URL(string: settings.broker), url.scheme == "https", url.host != nil,
                   url.user == nil, url.query == nil, url.fragment == nil, url.path.isEmpty || url.path == "/"
@@ -196,9 +154,7 @@ final class ServerController: ObservableObject {
         let path = root.appending(path: "connect-settings.json")
         try JSONEncoder().encode(settings).write(to: path, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
-        stopConnect(); try startConnect(resources: resources, root: root)
     }
-
     func releaseLock() { if lockFD >= 0 { flock(lockFD, LOCK_UN); close(lockFD); lockFD = -1 } }
     struct Failure: LocalizedError { let message: String; init(_ message: String) { self.message = NSLocalizedString(message, comment: "Mutti server status") }; var errorDescription: String? { message } }
 }
@@ -214,7 +170,10 @@ struct ContentView: View {
                 Text("Mutti").font(.headline)
                 Spacer()
                 if server.ready && server.setupCompleted {
-                    Button(devices ? "Bibliothek" : "Geräte koppeln") { devices.toggle() }
+                    Button(devices || server.showOnboarding ? "Bibliothek" : "Geräte koppeln") {
+                        if server.showOnboarding { server.showOnboarding = false; devices = false } else { devices.toggle() }
+                    }
+                    if !server.showOnboarding { Button("Jellyfin übernehmen") { devices = false; server.importEntry = true; server.showOnboarding = true } }
                     Button("Fernzugriff") { settings = true }
                 }
                 Label(LocalizedStringKey(server.ready ? (server.setupCompleted ? "Auf diesem Mac bereit" : "Einrichtung läuft") : "Lokale Vorschau"), systemImage: server.ready && server.setupCompleted ? "checkmark.circle.fill" : "circle").font(.caption)
@@ -222,7 +181,8 @@ struct ContentView: View {
             }.padding().background(Color(red: 0.12, green: 0.12, blue: 0.12)).foregroundStyle(.white)
             if server.ready {
                 if let error = server.error { Text(error).padding().foregroundStyle(.orange) }
-                AdminView(address: devices ? server.connectAddress : server.address).id(devices)
+                let destination = devices ? server.connectAddress : (server.showOnboarding ? (server.importEntry ? URL(string: "http://127.0.0.1:18594/#import")! : server.onboardingAddress) : server.address)
+                AdminView(address: destination).id(destination)
             }
             else {
                 VStack(spacing: 24) {
@@ -254,7 +214,11 @@ struct AdminView: NSViewRepresentable {
     @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWithReply {
         let address: URL
         init(address: URL) { self.address = address }
-        func isLocal(_ url: URL?) -> Bool { url?.scheme == address.scheme && url?.host == address.host && url?.port == address.port }
+        func isLocal(_ url: URL?) -> Bool {
+            guard let url, url.scheme == "http", url.host == "127.0.0.1", url.user == nil else { return false }
+            // Onboarding can enter the Jellyfin setup wizard; pairing stays in its own origin.
+            return address.port == 18595 ? url.port == 18595 : [18594, 18596].contains(url.port ?? 0)
+        }
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
             if isLocal(action.request.url) { decisionHandler(.allow) }
             else { decisionHandler(.cancel); if action.navigationType == .linkActivated, let url = action.request.url, url.scheme == "https" { NSWorkspace.shared.open(url) } }

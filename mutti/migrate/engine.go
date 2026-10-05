@@ -1,0 +1,562 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+package migrate
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+)
+
+type Report struct {
+	Source                            string `json:"source"`
+	Users, Libraries, Items, UserData int
+	Instance                          string    `json:"instance"`
+	Verified                          bool      `json:"verified"`
+	Notes                             []string  `json:"notes"`
+	Finished                          time.Time `json:"finished"`
+}
+type State struct {
+	Ready         bool    `json:"ready"`
+	SetupComplete bool    `json:"setupComplete"`
+	NewSetup      bool    `json:"newSetup"`
+	Phase         string  `json:"phase"`
+	Message       string  `json:"message"`
+	Report        *Report `json:"report,omitempty"`
+	Target        string  `json:"target"`
+	Active        string  `json:"active"`
+}
+type Manager struct {
+	Options         Options
+	mu              sync.Mutex
+	change          sync.Mutex
+	state           State
+	child, connect  *process
+	api             *API
+	cancel          context.CancelFunc
+	jobCancel       context.CancelFunc
+	jobs            sync.WaitGroup
+	token           string
+	lock            *os.File
+	connectSettings []byte
+	closing         bool
+}
+
+func NewManager(o Options) (*Manager, error) {
+	if o.Container {
+		if runtime.GOOS != "linux" {
+			return nil, errors.New("Container-Modus ist nur im Docker-Paket erlaubt.")
+		}
+		if _, e := os.Stat("/.dockerenv"); e != nil {
+			return nil, errors.New("Container-Modus benötigt eine Docker-Umgebung.")
+		}
+	}
+	if o.Bind != "127.0.0.1" && !o.Container {
+		return nil, errors.New("Außerhalb des Docker-Pakets ist ausschließlich Loopback erlaubt.")
+	}
+	root, e := filepath.Abs(o.Root)
+	if e != nil {
+		return nil, e
+	}
+	o.Root = root
+	if e = os.MkdirAll(root, 0700); e != nil {
+		return nil, e
+	}
+	lock, e := os.OpenFile(filepath.Join(root, "manager.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if e != nil {
+		return nil, e
+	}
+	if e = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
+		lock.Close()
+		return nil, errors.New("Mutti wird bereits verwaltet.")
+	}
+	success := false
+	defer func() {
+		if !success {
+			lock.Close()
+		}
+	}()
+	a, e := NewAPI(o.Backend)
+	if e != nil {
+		lock.Close()
+		return nil, e
+	}
+	target, e := NewAPI(o.TargetOrigin)
+	if e != nil {
+		lock.Close()
+		return nil, e
+	}
+	a.Host = target.Base.Host
+	m := &Manager{Options: o, token: randomID(), lock: lock, api: a, state: State{Phase: "idle", Target: o.TargetOrigin + "/web/", Active: root}}
+	if b, e := os.ReadFile(filepath.Join(root, "active-instance.json")); e == nil {
+		var pointer struct{ ID string }
+		if json.Unmarshal(b, &pointer) != nil || !validID(pointer.ID) {
+			return nil, errors.New("Die aktive Importinstanz ist ungültig.")
+		}
+		instance := filepath.Join(root, "instances", pointer.ID)
+		b, e = os.ReadFile(filepath.Join(instance, "report.json"))
+		var report Report
+		if e != nil || json.Unmarshal(b, &report) != nil || !report.Verified {
+			return nil, errors.New("Für die importierte Instanz fehlt der Prüfnachweis.")
+		}
+		m.state.Active = instance
+		m.state.Report = &report
+	}
+	if _, e := os.Stat(filepath.Join(m.state.Active, "setup-new")); e == nil {
+		m.state.NewSetup = true
+	}
+	success = true
+	return m, nil
+}
+func validID(id string) bool {
+	if len(id) != 48 {
+		return false
+	}
+	for _, r := range id {
+		if !(r >= '0' && r <= '9' || r >= 'a' && r <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+func (m *Manager) State() State { m.mu.Lock(); defer m.mu.Unlock(); return m.state }
+func (m *Manager) setPhase(phase, message string) {
+	m.mu.Lock()
+	m.state.Phase = phase
+	m.state.Message = message
+	m.mu.Unlock()
+}
+func (m *Manager) launch(root string) error {
+	_, port, e := net.SplitHostPort(m.api.Base.Host)
+	if e != nil {
+		return e
+	}
+	n, e := strconv.Atoi(port)
+	if e != nil {
+		return e
+	}
+	child, e := m.Options.startServer(root, n, m.api.Host, "", false)
+	if e != nil {
+		return e
+	}
+	m.child = child
+	return nil
+}
+func (m *Manager) Run(ctx context.Context) error {
+	ctx, m.cancel = context.WithCancel(ctx)
+
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	defer func() {
+		m.cancel()
+		m.mu.Lock()
+		m.closing = true
+		if m.jobCancel != nil {
+			m.jobCancel()
+		}
+		m.mu.Unlock()
+		m.jobs.Wait()
+		m.change.Lock()
+		m.connect.stop()
+		m.child.stop()
+		m.change.Unlock()
+		syscall.Flock(int(m.lock.Fd()), syscall.LOCK_UN)
+		m.lock.Close()
+	}()
+	if e := m.launch(m.state.Active); e != nil {
+		return e
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+		m.change.Lock()
+		requestCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		var info PublicInfo
+		e := m.api.call(requestCtx, "GET", "/System/Info/Public", nil, &info)
+		cancel()
+		ready := e == nil && info.Id != "" && m.child.running()
+		if ready {
+			healthCtx, healthCancel := context.WithTimeout(ctx, 2*time.Second)
+			ready = m.api.call(healthCtx, "GET", "/Users/Public", nil, nil) == nil
+			healthCancel()
+		}
+		m.mu.Lock()
+		m.state.Ready = ready
+		m.state.SetupComplete = ready && info.StartupWizardCompleted
+		active := m.state.Active
+		m.mu.Unlock()
+		if !m.child.running() {
+			m.setPhase("error", "Mutti wurde beendet. Bitte die App erneut starten.")
+			m.connect.stop()
+			m.connect = nil
+		}
+		if ready && info.StartupWizardCompleted && m.Options.Connect != "" {
+			settings, _ := os.ReadFile(filepath.Join(active, "connect-settings.json"))
+			if !m.connect.running() || string(settings) != string(m.connectSettings) {
+				m.connect.stop()
+				m.connect = nil
+				var cs struct{ Broker, Stun string }
+				_ = json.Unmarshal(settings, &cs)
+				args := []string{"--state", filepath.Join(active, "connect"), "--listen", m.Options.ConnectListen, "--admin-origin", m.Options.ConnectOrigin, "--target", m.Options.Backend, "--target-host", m.api.Host}
+				if cs.Broker != "" {
+					args = append(args, "--broker", cs.Broker)
+				}
+				if cs.Stun != "" {
+					args = append(args, "--stun", cs.Stun)
+				}
+				m.connect, e = startProcess(m.Options.Connect, args, os.Environ(), filepath.Join(active, "logs", "connect.log"))
+				if e != nil {
+					m.setPhase("error", "Die Geräteverbindung konnte nicht gestartet werden.")
+				}
+				m.connectSettings = settings
+			}
+		}
+		m.change.Unlock()
+	}
+}
+func (m *Manager) StartImport(ctx context.Context, input SourceInput) error {
+	m.mu.Lock()
+	if m.jobCancel != nil || m.closing {
+		m.mu.Unlock()
+		return errors.New("Eine Übernahme läuft bereits.")
+	}
+	jobCtx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+	m.jobCancel = cancel
+	m.state.Report = nil
+	m.state.Phase = "checking"
+	m.state.Message = "Jellyfin und Zugriffsrechte werden geprüft …"
+	m.jobs.Add(1)
+	m.mu.Unlock()
+	go func() {
+		defer m.jobs.Done()
+		defer cancel()
+		e := m.importSource(jobCtx, input)
+		m.mu.Lock()
+		m.jobCancel = nil
+		m.mu.Unlock()
+		if e != nil {
+			if jobCtx.Err() != nil {
+				e = errors.New("Übernahme abgebrochen. Deine bisherige Einrichtung bleibt erhalten.")
+			}
+			m.setPhase("error", e.Error())
+		}
+	}()
+	return nil
+}
+func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
+	m.setPhase("checking", "Jellyfin und Zugriffsrechte werden geprüft …")
+	var current PublicInfo
+	if e := m.api.call(ctx, "GET", "/System/Info/Public", nil, &current); e != nil {
+		return e
+	}
+	if current.StartupWizardCompleted {
+		if !input.Replace {
+			return errors.New("Bitte bestätigen, dass du zu einer importierten Bibliothek wechseln möchtest. Der bisherige Mutti-Datenstand bleibt erhalten.")
+		}
+		owner, _ := NewAPI(m.Options.Backend)
+		owner.Host = m.api.Host
+		_, e := login(ctx, owner, input.TargetUsername, input.TargetPassword)
+		owner.logout()
+		if e != nil {
+			return errors.New("Bitte den Besitzerzugang der bisherigen Mutti-Installation bestätigen.")
+		}
+	}
+	s, e := OpenSource(ctx, input, current.Id)
+	if e != nil {
+		return e
+	}
+	defer s.API.logout()
+	if s.Local {
+		sourceRoot, err := filepath.EvalSymlinks(s.Info.ProgramDataPath)
+		targetRoot, _ := filepath.EvalSymlinks(m.Options.Root)
+		if err == nil && (sourceRoot == targetRoot || within(targetRoot, sourceRoot) || within(sourceRoot, targetRoot)) {
+			return errors.New("Die Quelle und Mutti müssen getrennte Datenordner verwenden.")
+		}
+	}
+	// This preview must not silently lose plugin functionality or external login.
+	var plugins []struct {
+		Name         string
+		CanUninstall bool
+		Status       string
+	}
+	if e = s.API.call(ctx, "GET", "/Plugins", nil, &plugins); e != nil {
+		return e
+	}
+	for _, p := range plugins {
+		if p.CanUninstall && p.Status != "Disabled" && p.Name != "Mutti Export" {
+			return fmt.Errorf("Das zusätzliche Plugin „%s“ benötigt eine geprüfte Übernahme. Der Import wurde vor der Änderung gestoppt.", p.Name)
+		}
+	}
+	for _, library := range s.Libraries {
+		for _, location := range library.Locations {
+			p := replacePath(location, input.Mappings)
+			st, e := os.Stat(p)
+			if e != nil || !st.IsDir() {
+				return fmt.Errorf("Der Medienordner %s ist hier nicht erreichbar. Ordnerzuordnung ergänzen und erneut versuchen.", location)
+			}
+		}
+	}
+	id := randomID()
+	instance := filepath.Join(m.Options.Root, "instances", id)
+	if e = os.MkdirAll(instance, 0700); e != nil {
+		return e
+	}
+	m.setPhase("backup", "Jellyfin erstellt die Sicherung im Hintergrund …")
+	var archive string
+	if input.Archive != "" {
+		return errors.New("Bitte den automatischen Import verwenden. Archivdateien werden nur nach Quellenprüfung angenommen.")
+	}
+	if s.Local && locallyReadable(s.Info.ProgramDataPath) {
+		archive, e = s.Backup(ctx)
+	} else {
+		archive, e = remoteBackup(ctx, s, instance)
+	}
+	if e != nil {
+		return e
+	}
+	m.setPhase("importing", "Bibliotheken, Benutzer und Wiedergabestand werden übernommen …")
+	port, e := freePort()
+	if e != nil {
+		return e
+	}
+	prepared := filepath.Join(instance, "prepared.zip")
+	audit, e := TransformArchive(archive, prepared, instance, port, s.Info, input.Mappings)
+	if e != nil {
+		return e
+	}
+	if e = ctx.Err(); e != nil {
+		return errors.New("Übernahme abgebrochen. Der bisherige Datenstand bleibt erhalten.")
+	}
+	validationOptions := m.Options
+	validationOptions.Bind = "127.0.0.1"
+	// Jellyfin's restore purges existing tables; initialize a fresh schema first.
+	bootstrap, e := validationOptions.startServer(instance, port, fmt.Sprintf("127.0.0.1:%d", port), "", true)
+	if e != nil {
+		return e
+	}
+	staged, _ := NewAPI(fmt.Sprintf("http://127.0.0.1:%d", port))
+	timeout, cancel := context.WithTimeout(ctx, 90*time.Second)
+	_, e = waitServer(timeout, bootstrap, staged)
+	if e == nil {
+		for {
+			e = staged.call(timeout, "GET", "/Startup/User", nil, nil)
+			if e == nil || timeout.Err() != nil {
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	cancel()
+	bootstrap.stop()
+	if e != nil {
+		return e
+	}
+	p, e := validationOptions.startServer(instance, port, fmt.Sprintf("127.0.0.1:%d", port), prepared, true)
+	if e != nil {
+		return e
+	}
+	defer p.stop()
+	timeout, cancel = context.WithTimeout(ctx, 5*time.Minute)
+	info, e := waitServer(timeout, p, staged)
+	cancel()
+	if e != nil {
+		return e
+	}
+	if !info.StartupWizardCompleted {
+		return errors.New("Die importierte Einrichtung wurde nicht korrekt wiederhergestellt.")
+	}
+	m.setPhase("verifying", "Die übernommene Bibliothek wird vollständig geprüft …")
+	if _, e = login(ctx, staged, s.Username, s.Password); e != nil {
+		return errors.New("Der bestehende Benutzerzugang funktioniert in der importierten Instanz nicht. Es wurde nicht umgeschaltet.")
+	}
+	defer staged.logout()
+	var libraries []Library
+	if e = staged.call(ctx, "GET", "/Library/VirtualFolders", nil, &libraries); e != nil {
+		return e
+	}
+	if e = compareLibraries(s.Libraries, libraries, input.Mappings); e != nil {
+		return e
+	}
+	var verifiedBackup struct{ Path string }
+	if e = staged.call(ctx, "POST", "/Backup/Create", map[string]bool{"Database": true}, &verifiedBackup); e != nil {
+		return e
+	}
+	if !within(instance, verifiedBackup.Path) {
+		return errors.New("Ungültiger Prüfpfad.")
+	}
+	actual, e := ReadAudit(verifiedBackup.Path)
+	if e != nil {
+		return e
+	}
+	if e = CompareAudit(audit, actual); e != nil {
+		return e
+	}
+	if e = VerifyFiles(audit, instance); e != nil {
+		return e
+	}
+	staged.logout()
+	p.stop()
+	// Refuse activation if the source changed while the snapshot was checked.
+	// This catches new playback, favorites, settings and library changes.
+	m.setPhase("verifying", "Jellyfin wird abschließend auf Änderungen geprüft …")
+	var finalArchive string
+	if s.Local && locallyReadable(s.Info.ProgramDataPath) {
+		finalArchive, e = s.Backup(ctx)
+	} else {
+		_ = os.Remove(filepath.Join(instance, "source.zip"))
+		finalArchive, e = remoteBackup(ctx, s, instance)
+	}
+	if e != nil {
+		return e
+	}
+	finalPrepared := filepath.Join(instance, "source-final.zip")
+	latest, e := TransformArchive(finalArchive, finalPrepared, instance, port, s.Info, input.Mappings)
+	if e != nil {
+		return e
+	}
+	_ = os.Remove(finalPrepared)
+	if e = CompareAudit(audit, latest); e != nil {
+		return errors.New("Jellyfin wurde während des Umzugs verändert. Bitte die Wiedergabe pausieren und die Übernahme erneut starten. Es wurde nicht umgeschaltet.")
+	}
+	if len(audit.Files) != len(latest.Files) {
+		return errors.New("Die Quelldateien haben sich während des Umzugs geändert. Bitte erneut versuchen.")
+	}
+	if len(audit.Settings) != len(latest.Settings) {
+		return errors.New("Die Quelleinstellungen wurden während des Imports verändert. Bitte erneut versuchen.")
+	}
+	for name, hash := range audit.Settings {
+		if latest.Settings[name] != hash {
+			return errors.New("Die Quelleinstellungen wurden während des Imports verändert. Bitte erneut versuchen.")
+		}
+	}
+	for name, hash := range audit.Files {
+		if latest.Files[name] != hash {
+			return errors.New("Die Quelldateien haben sich während des Umzugs geändert. Bitte erneut versuchen.")
+		}
+	}
+	report := Report{Source: s.Info.ServerName, Users: audit.Counts["Users"], Libraries: len(libraries), Items: audit.Counts["BaseItems"], UserData: audit.Counts["UserData"], Instance: id, Verified: true, Finished: time.Now(), Notes: []string{"Benutzerzugänge, Rechte, Bibliotheken und Wiedergabestand wurden verglichen.", "Alte Gerätesitzungen und API-Schlüssel werden nicht übernommen; Geräte neu koppeln.", "Netzwerkzugang und Transcoding sind auf Mutti angepasst. Hardwarebeschleunigung bei Bedarf erneut wählen.", "Jellyfin bleibt erhalten. Ab jetzt bitte Mutti verwenden; spätere Änderungen auf Jellyfin werden nicht synchronisiert."}}
+	b, _ := json.Marshal(report)
+	if e = privateWrite(filepath.Join(instance, "report.json"), b); e != nil {
+		return e
+	}
+	if e = ctx.Err(); e != nil {
+		return errors.New("Übernahme abgebrochen. Es wurde nicht umgeschaltet.")
+	}
+	m.setPhase("activating", "Die geprüfte Bibliothek wird aktiviert …")
+	m.change.Lock()
+	defer m.change.Unlock()
+	old := m.State().Active
+	if settings, err := os.ReadFile(filepath.Join(old, "connect-settings.json")); err == nil {
+		if err = privateWrite(filepath.Join(instance, "connect-settings.json"), settings); err != nil {
+			return err
+		}
+	}
+	m.connect.stop()
+	m.connect = nil
+	m.child.stop()
+	if e = m.launch(instance); e != nil {
+		_ = m.launch(old)
+		return e
+	}
+	timeout, cancel = context.WithTimeout(ctx, 90*time.Second)
+	_, e = waitServer(timeout, m.child, m.api)
+	cancel()
+	if e != nil {
+		m.child.stop()
+		_ = m.launch(old)
+		return errors.New("Die Aktivierung ist fehlgeschlagen. Der bisherige Mutti-Datenstand wurde wieder gestartet.")
+	}
+	b, _ = json.Marshal(map[string]string{"ID": id})
+	if e = privateWrite(filepath.Join(m.Options.Root, "active-instance.json"), b); e != nil {
+		m.child.stop()
+		_ = m.launch(old)
+		return e
+	}
+	m.mu.Lock()
+	m.state.Active = instance
+	m.state.Report = &report
+	m.state.Phase = "complete"
+	m.state.Message = "Deine Jellyfin-Bibliothek ist jetzt in Mutti bereit."
+	m.state.NewSetup = false
+	m.mu.Unlock()
+	// Only generated staging artifacts are removed, never the source backup/data.
+	_ = os.Remove(prepared)
+	_ = os.Remove(filepath.Join(instance, "source.zip"))
+	_ = os.Remove(verifiedBackup.Path)
+	return nil
+}
+func compareLibraries(source, target []Library, mappings map[string]string) error {
+	describe := func(items []Library, replace bool) []string {
+		out := []string{}
+		for _, l := range items {
+			paths := append([]string{}, l.Locations...)
+			if replace {
+				for i, p := range paths {
+					paths[i] = replacePath(p, mappings)
+				}
+			}
+			sort.Strings(paths)
+			out = append(out, l.ItemId+"|"+l.Name+"|"+strings.Join(paths, "|"))
+		}
+		sort.Strings(out)
+		return out
+	}
+	a, b := describe(source, true), describe(target, false)
+	if strings.Join(a, "\n") != strings.Join(b, "\n") {
+		return errors.New("Die Bibliothekszuordnung konnte nicht vollständig bestätigt werden. Der bisherige Datenstand bleibt aktiv.")
+	}
+	return nil
+}
+func remoteBackup(ctx context.Context, s *Source, instance string) (string, error) {
+	var job struct{ Id, Secret string }
+	if e := s.API.call(ctx, "POST", "/MuttiExport/Begin", map[string]string{"Recipient": s.API.Device}, &job); e != nil {
+		return "", errors.New("Auf diesem entfernten Server fehlt der Mutti-Umzugshelfer. Installiere das mitgelieferte Mutti-Export-Plugin auf Jellyfin und starte Jellyfin neu; danach läuft der Transfer automatisch.")
+	}
+	if !validID(job.Id) || len(job.Secret) != 64 {
+		return "", errors.New("Ungültige Antwort des Umzugshelfers.")
+	}
+	defer func() {
+		c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.API.call(c, "POST", "/MuttiExport/Finish", job, nil)
+	}()
+	r, e := s.API.request(ctx, "POST", "/MuttiExport/Download", job)
+	if e != nil {
+		return "", e
+	}
+	defer r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		return "", errors.New("Der geschützte Export wurde abgelehnt.")
+	}
+	path := filepath.Join(instance, "source.zip")
+	f, e := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if e != nil {
+		return "", e
+	}
+	defer f.Close()
+	n, e := io.Copy(f, io.LimitReader(r.Body, (20<<30)+1))
+	if e != nil || n > 20<<30 {
+		return "", errors.New("Der Export wurde abgebrochen oder ist zu groß.")
+	}
+	return path, f.Sync()
+}
+
+func locallyReadable(path string) bool {
+	st, e := os.Stat(path)
+	return filepath.IsAbs(path) && e == nil && st.IsDir()
+}

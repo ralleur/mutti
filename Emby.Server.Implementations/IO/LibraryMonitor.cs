@@ -232,6 +232,11 @@ namespace Emby.Server.Implementations.IO
         /// <param name="path">The path.</param>
         private void StartWatchingPath(string path)
         {
+            if (Environment.GetEnvironmentVariable("MUTTI_IMPORT_VALIDATION") == "1")
+            {
+                return;
+            }
+
             if (!Directory.Exists(path))
             {
                 // Seeing a crash in the mono runtime due to an exception being thrown on a different thread

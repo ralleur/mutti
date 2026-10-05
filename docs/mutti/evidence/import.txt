@@ -1,0 +1,26 @@
+Mutti import development preview — 2026-10-05
+
+macOS arm64:
+- go test -race ./... and go vet ./...: passed.
+- Swift shell build and both SetupInfo tests: passed.
+- Full synthetic Jellyfin 12.1 -> Mutti import: passed.
+- Two existing user accounts/passwords, owner/viewer rights, library/media IDs,
+  playlist, favorite, played flag, play count, last played date, resume position,
+  generated profile image and saved display preferences preserved.
+- Semantic database comparison, restored-file verification, source-change check,
+  atomic activation and restart persistence passed; source remains running.
+- Export plugin: authenticated download, wrong-device rejection, single use passed.
+- Existing native app: importer visible, local server discovered; real source not imported.
+
+Linux arm64:
+- Full synthetic import and authenticated helper transfer passed in a non-root,
+  read-only Docker container. No production volumes or real media mounted.
+- Final Docker package/browser and restart checks are recorded in import.md/status.md.
+
+Unit/security checks:
+Archive traversal, case collisions, symbolic links, missing tables, changed rights,
+lost watch data, stale/new rows, login-provider mismatch, no credential redirects,
+remote HTTP rejection, Host/Origin/CSRF, no unconfirmed target replacement.
+
+No real account names, passwords, tokens, media or library contents in this evidence.
+Internet and physical NAS tests remain pending owner/release acceptance.

@@ -39,3 +39,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - run: go test -race ./... && go vet ./...
         working-directory: mutti/connect
+
+  import:
+    runs-on: ubuntu-latest
+    container: golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - run: go test -race ./... && go vet ./...
+        working-directory: mutti/migrate

@@ -72,3 +72,11 @@ Ein-Rechner-Nachweis, kein WAN-Nachweis und kein deploybarer Control-Dienst.
 Logs bleiben lokal und können Mediennamen enthalten. Vor Weitergabe manuell
 bereinigen. Es gibt keinen automatischen Diagnoseupload. Backups/Restore,
 QR-Widerruf und Plattform-Langzeittests gehören zu den offenen Release-Gates.
+
+## Jellyfin-Übernahme
+
+Der Importdienst `mutti/migrate` gehört zum Mac- und Docker-Paket. Er startet
+Jellyfin und erst nach dessen abgeschlossenem Setup den unveränderten Connect-
+Dienst. Einstieg auf Port 18594, Details und Tests unter [import.md](import.md).
+Die Go-Module sind getrennt; der im kurtz-Client gepinnte Connect-Quellstand
+wird durch den Import nicht geändert.
