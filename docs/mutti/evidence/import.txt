@@ -15,7 +15,10 @@ macOS arm64:
 Linux arm64:
 - Full synthetic import and authenticated helper transfer passed in a non-root,
   read-only Docker container. No production volumes or real media mounted.
-- Final Docker package/browser and restart checks are recorded in import.md/status.md.
+- Final Docker entrypoint/browser check passed: first-run choice, public API,
+  exact Host/Origin enforcement, only loopback-published admin ports, no pairing
+  before setup. Profile image/preferences and restart persistence also passed.
+- Existing .NET PreviewBoundary regression suite: 12/12 passed.
 
 Unit/security checks:
 Archive traversal, case collisions, symbolic links, missing tables, changed rights,

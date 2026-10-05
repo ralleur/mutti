@@ -95,3 +95,10 @@ getestet. Exporthelfer gebaut und authentifizierter Transfer geprüft.
 Mac-App gebaut und im echten WKWebView geprüft; lokaler Jellyfin wurde automatisch
 erkannt. Die tatsächliche Benutzerbibliothek wurde für die Prüfung nicht importiert.
 Details und bewusste Grenzen stehen in [import.md](import.md). Kein Release.
+
+Finale Paketprüfung: Docker-Entrypoint mit ausschließlich localhost-veröffentlichten
+Verwaltungsports, Browser-Einstieg, Host-/Origin-Abweisung und gesperrter Kopplung
+vor Setup bestanden. Profilbild, Anzeigeeinstellungen und Neustartpersistenz
+bestehen auf Mac und Linux. Bestehende .NET-Grenztests: 12/12 bestanden.
+Der native Testbuild aus sauberem Quellstand `755b85c5d0` ist lokal signiert und
+unter `build/connect-preview/Mutti.app` für den Owner geöffnet.
