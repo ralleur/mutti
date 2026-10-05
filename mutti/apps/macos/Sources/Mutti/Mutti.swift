@@ -76,6 +76,13 @@ final class ServerController: ObservableObject {
             for port in [18594, 18596] {
                 let probe = socket(AF_INET, SOCK_STREAM, 0)
                 guard probe >= 0 else { throw Failure("Der lokale Serverzugang konnte nicht vorbereitet werden.") }
+                // Match the manager's listener semantics: completed connections
+                // in TIME_WAIT must not look like another running server.
+                var reuse: Int32 = 1
+                guard setsockopt(probe, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size)) == 0 else {
+                    close(probe)
+                    throw Failure("Der lokale Serverzugang konnte nicht vorbereitet werden.")
+                }
                 var addr = sockaddr_in(); addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size); addr.sin_family = sa_family_t(AF_INET); addr.sin_port = UInt16(port).bigEndian; addr.sin_addr.s_addr = inet_addr("127.0.0.1")
                 let available = withUnsafePointer(to: &addr) { p in p.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(probe, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 } }
                 close(probe)
