@@ -12,6 +12,10 @@ Dashboard-Konzept mit kompakter Mutti-Marke, Sora und gelben Hauptaktionen.
 - Echte API-Werte für Bibliotheken/Einträge, Datenträger, Server und Scanstatus.
   Ausfälle oder fehlende Messungen werden als unbekannt angezeigt. Mehrere
   Ordner auf demselben Datenträger werden nicht zu einer erfundenen Kapazität addiert.
+  Bei `StorageType=Unknown` wird keine Kapazität behauptet: Docker Desktops
+  virtiofs meldete im Test über .NET DriveInfo um Faktor 256 falsche Bytewerte
+  (Transferblock 1 MiB, Dateisystemblock 4 KiB). Die Oberfläche markiert diese
+  Messung als nicht verlässlich; eine Backend-Korrektur bleibt separat offen.
 - Bibliothek anlegen, Ordnerwahl auf dem Mac, Bibliotheken neu prüfen,
   Servername ändern unter Erhalt der übrigen Konfiguration.
 - QR-Einladung, bestehende Geräte, Profilanlage, Freigabe und Widerruf über
