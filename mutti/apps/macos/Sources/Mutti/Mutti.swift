@@ -260,11 +260,7 @@ struct AdminView: NSViewRepresentable {
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
             if message.name == "muttiNavigate" {
-                guard message.frameInfo.isMainFrame, let frame = message.frameInfo.request.url,
-                      frame.scheme == "http", frame.host == "127.0.0.1", frame.port == 18596,
-                      frame.user == nil, ["/web/", "/web/index.html"].contains(frame.path),
-                      let visible = message.webView?.url, visible.scheme == "http", visible.host == "127.0.0.1", visible.port == 18596,
-                      visible.fragment?.hasPrefix("/mutti") == true,
+                guard NativeManagementNavigation.accepts(frame: message.frameInfo.request.url, visible: message.webView?.url, isMainFrame: message.frameInfo.isMainFrame),
                       let body = message.body as? [String: String], let action = body["action"], ["import", "remote"].contains(action)
                 else { replyHandler(nil, "Navigation is unavailable for this page."); return }
                 onNavigate(action); replyHandler(true, nil); return
