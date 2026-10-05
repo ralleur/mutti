@@ -135,10 +135,19 @@ Quellarchiv und GPL-Lizenz. Der Exporthelfer 0.1.1.0 enthält dieselben Zusatzda
 
 Mac- und Linux-Synthetik: vollständiger Umzug mit vorhandenen Einstellungen und
 Sprungmarken, erweiterter Export samt Einmaltickets sowie Neustart bestanden.
-Quelle ohne Plugin ebenfalls auf dem Mac geprüft. Die Prüfung fordert den
+Quelle ohne Plugin ebenfalls auf Mac und Linux geprüft. Die Prüfung fordert den
 FFmpeg-Funktionsstatus „okay“ des Plugins, nicht nur seinen Installationsstatus.
 14 .NET-Tests einschließlich konsistenter WAL-Sicherung, Quellen-Erhalt und
 Pfadgrenzen, drei Swift-Tests sowie Go-Race-Tests/statische Analyse bestanden.
 Der Restore setzt Hardwarebeschleunigung korrekt auf `none` und bewahrt den
 Paket-FFmpeg-Pfad beim internen Neustart. Andere aktive Plugins oder
 unqualifizierte Intro-Skipper-Versionen werden weiterhin erkannt.
+
+Finale Pakete aus sauberem Quellstand `2e97113d81`: Mac vollständig gebaut und
+lokale Signatur verifiziert; Docker-Entrypoint inklusive automatisch installiertem
+Plugin und bisherigen Netzwerk-/Setup-Grenzen bestanden. Der geöffnete Mac-Build
+unter `build/connect-preview/Mutti.app` lädt Intro Skipper 12.0.4.0 aktiv und ohne
+Chromaprint-Startfehler. Importdialog und lokale Servererkennung geprüft; keine
+zusätzlichen Zielkonto-Felder. Der Manager bleibt vor dem Owner-Import auf dem
+ursprünglichen Datenordner im Zustand `idle`. Die echte Jellyfin-Bibliothek wurde
+für diese Abnahme nicht importiert.
