@@ -281,3 +281,18 @@ Sichtprüfung mit künstlichem Fortschritt: Desktop, minimales Mac-Fenster und
 einzeilig. Laufanimation, markierte erledigte Schritte und Pause geprüft; keine
 Browserwarnungen. Die Bibliotheksdaten wurden für diese Änderung nicht angefasst.
 Paketabnahme folgt unten.
+
+Paketabnahme aus sauberem Server-Commit `7d07aa9fca` und Web-Commit
+`6a67f6eef7`: vollständiger Mac-arm64-Build mit verifizierter Ad-hoc-Signatur
+und Docker-arm64-Build bestanden. Der Docker-Entrypoint-Test bestätigt die
+verpackten Logos, alle drei Schriftgewichte, Kurt-Ressourcen und bisherigen
+Host-/Origin-/Setup-Grenzen. Sieben Animationstests, drei Swift-Tests, Go-Tests
+für Import/Connect sowie die gezielte Ressourcen-/Herkunftsprüfung bestanden.
+
+Die vorher beendete Test-App wurde unter `build/connect-preview/Mutti.app`
+ausgetauscht und geöffnet; ihre Vorgängerversion liegt als Paketkopie daneben.
+Der reale Importdialog ist im neuen Design sichtbar und erkennt die lokale
+Jellyfin-Quelle. Ausgelieferte Import-/Connect-Logos und Schriftdateien stimmen
+bytegenau mit den Quellen überein. Manager bereit, Phase `idle`; kein echter
+Import durch den Agenten gestartet. Die gemeinsame Ideenliste enthält die
+Owner-Rückmeldung unter MK-010 und die Markenreferenz unter MK-008.
