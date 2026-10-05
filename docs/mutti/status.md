@@ -254,3 +254,11 @@ Weboberfläche wurde mit synthetischen Zuständen angesehen: Schlafen, Übergang
 Sichern, Kotze/Häufchen, Pause und unverändertes Bild, Verbindungsabbruch und Fehler
 mit gestoppter Animation. Der Importkern und echte Benutzerdaten wurden dafür
 nicht verändert. Mac-/Docker-Paketabnahme folgt für diesen Stand unten.
+
+Paketabnahme aus sauberem Commit `00797474c3`: Mac arm64 vollständig gebaut,
+Ad-hoc-Signatur verifiziert, laufende Test-App ausgetauscht und geöffnet. Der
+Importdialog erkennt die lokale Quelle; der Manager ist bereit auf dem bisherigen
+Datenordner. Das ausgelieferte Kurt-Manifest und ein Atlas wurden über die echte
+Mac-API mit dem Quellpaket verglichen. Docker arm64 gebaut; Entrypoint-Test mit
+sämtlichen benötigten Clip-/Bildressourcen, Herkunftsgrenzen und gesperrter
+Kopplung vor Setup bestanden. Der echte Import wurde nicht vom Agenten gestartet.
