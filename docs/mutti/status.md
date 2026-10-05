@@ -262,3 +262,22 @@ Datenordner. Das ausgelieferte Kurt-Manifest und ein Atlas wurden über die echt
 Mac-API mit dem Quellpaket verglichen. Docker arm64 gebaut; Entrypoint-Test mit
 sämtlichen benötigten Clip-/Bildressourcen, Herkunftsgrenzen und gesperrter
 Kopplung vor Setup bestanden. Der echte Import wurde nicht vom Agenten gestartet.
+
+### Importlayout und Mutti-Marke (MK-010 / MK-008)
+
+Owner-Korrektur vom 5. Oktober: vertikale Schrittliste links, Kurt rechts in der
+freien Fläche; auf kleinen Displays untereinander. Das aktuelle Stadium trägt
+die gelbe Markierung. Status und Zeiten stehen direkt unter beiden Spalten.
+Kein Eingriff in Importzustände oder Animationstiming.
+
+Die beigefügte Vorlage „03 / Kompakte Bögen“ ist als skalierbare Vektormarke mit
+Ringelschwanz, zwei gelben Strahlen und kompakter Wortmarke nachgebaut. Onboarding,
+Connect, Bibliothekslogos, Web-Icons und Mac-App-Icon verwenden dieselbe Marke.
+Onboarding folgt Graphit `#1F1F1F`, Elfenbein `#FAF8F1`, Gelb `#FFE600` und echten
+Sora-Schnitten 400/600/700. Native Bedienelemente bleiben macOS-Standard.
+
+Sichtprüfung mit künstlichem Fortschritt: Desktop, minimales Mac-Fenster und
+390-px-Mobilansicht ohne horizontalen Überlauf; die Schrittnamen bleiben jeweils
+einzeilig. Laufanimation, markierte erledigte Schritte und Pause geprüft; keine
+Browserwarnungen. Die Bibliotheksdaten wurden für diese Änderung nicht angefasst.
+Paketabnahme folgt unten.

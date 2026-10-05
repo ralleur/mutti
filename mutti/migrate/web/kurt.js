@@ -126,9 +126,9 @@
             const ctx = this.context, width = 180, size = width / a.bodyRatio, y = 215;
             const tile = frame.tile, page = Math.floor(tile / 64), column = tile % 8, row = Math.floor(tile % 64 / 8);
             ctx.clearRect(0, 0, 640, 240);
-            ctx.strokeStyle = '#dfdacd'; ctx.lineWidth = 1;
+            ctx.strokeStyle = '#484843'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(30, y + 1); ctx.lineTo(610, y + 1); ctx.stroke();
-            ctx.fillStyle = 'rgba(93, 80, 55, .10)';
+            ctx.fillStyle = 'rgba(0, 0, 0, .22)';
             ctx.beginPath(); ctx.ellipse(pose.x, y, width * .36, 6, 0, 0, 2 * Math.PI); ctx.fill();
             ctx.save(); ctx.translate(pose.x, y - (frame.liftInBodies || 0) * width); ctx.scale(pose.facing, 1);
             ctx.drawImage(this.images[a.pages[page]], column * a.cell, row * a.cell, a.cell, a.cell, -a.anchor.x * size, -a.anchor.y * size, size, size);

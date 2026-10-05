@@ -29,7 +29,7 @@ function progress(){
  if($('progress-wait').textContent!==warning)$('progress-wait').textContent=warning;
  if($('progress-steps').dataset.step!==String(p.step)){
   $('progress-steps').dataset.step=p.step;$('progress-steps').replaceChildren();
-  steps.forEach((label,i)=>{const li=document.createElement('li');li.textContent=`${i<p.step-1?'✓':i+1} ${label}`;li.className=i<p.step-1?'done':i===p.step-1?'current':'';if(i===p.step-1)li.setAttribute('aria-current','step');$('progress-steps').append(li)});
+  steps.forEach((label,i)=>{const li=document.createElement('li');const number=document.createElement('span');number.className='step-number';number.textContent=i<p.step-1?'✓':String(i+1);number.setAttribute('aria-hidden','true');const name=document.createElement('span');name.textContent=label;li.append(number,name);li.className=i<p.step-1?'done':i===p.step-1?'current':'';if(i===p.step-1)li.setAttribute('aria-current','step');$('progress-steps').append(li)});
  }
 }
 setInterval(progress,1000);

@@ -20,6 +20,18 @@ var adminHTML []byte
 //go:embed sora.woff2
 var adminFont []byte
 
+//go:embed sora-semibold.woff2
+var adminSemibold []byte
+
+//go:embed sora-bold.woff2
+var adminBold []byte
+
+//go:embed mark-light.svg
+var adminMark []byte
+
+//go:embed wordmark-light.svg
+var adminWordmark []byte
+
 type jellyUser struct {
 	ID     string `json:"Id"`
 	Name   string `json:"Name"`
@@ -35,15 +47,33 @@ func (s *Server) Admin(origin string) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; font-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 		if r.Host != parsed.Host || (r.Header.Get("Origin") != "" && r.Header.Get("Origin") != origin) {
 			http.Error(w, "forbidden", 403)
 			return
 		}
-		if r.URL.Path == "/sora.woff2" && r.Method == "GET" {
-			w.Header().Set("Content-Type", "font/woff2")
-			_, _ = w.Write(adminFont)
-			return
+		if r.Method == "GET" {
+			var data []byte
+			contentType := "font/woff2"
+			switch r.URL.Path {
+			case "/sora.woff2":
+				data = adminFont
+			case "/sora-semibold.woff2":
+				data = adminSemibold
+			case "/sora-bold.woff2":
+				data = adminBold
+			case "/mark-light.svg":
+				data = adminMark
+				contentType = "image/svg+xml"
+			case "/wordmark-light.svg":
+				data = adminWordmark
+				contentType = "image/svg+xml"
+			}
+			if data != nil {
+				w.Header().Set("Content-Type", contentType)
+				_, _ = w.Write(data)
+				return
+			}
 		}
 		if r.URL.Path == "/" && r.Method == "GET" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")

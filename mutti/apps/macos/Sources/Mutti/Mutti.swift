@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import AppKit
+import CoreText
 import SwiftUI
 import WebKit
 import Darwin
 
 @main
 struct MuttiApp: App {
+    init() {
+        if let font = Bundle.main.url(forResource: "Sora-Bold", withExtension: "ttf") {
+            CTFontManagerRegisterFontsForURL(font as CFURL, .process, nil)
+        }
+    }
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     var body: some Scene {
         Window("Mutti", id: "main") {
@@ -183,7 +189,9 @@ struct ContentView: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 24, height: 24).accessibilityHidden(true)
-                Text("Mutti").font(.headline)
+                if let url = Bundle.main.url(forResource: "wordmark-light", withExtension: "png"), let image = NSImage(contentsOf: url) {
+                    Image(nsImage: image).resizable().aspectRatio(contentMode: .fit).frame(width: 64, height: 22).accessibilityLabel("Mutti")
+                } else { Text("Mutti").font(.headline) }
                 Spacer()
                 if server.ready && server.setupCompleted {
                     Button(devices || server.showOnboarding ? "Bibliothek" : "Geräte koppeln") {
@@ -194,7 +202,7 @@ struct ContentView: View {
                 }
                 Label(LocalizedStringKey(server.ready ? (server.setupCompleted ? "Auf diesem Mac bereit" : "Einrichtung läuft") : "Lokale Vorschau"), systemImage: server.ready && server.setupCompleted ? "checkmark.circle.fill" : "circle").font(.caption)
                 Button { if let root = server.dataDirectory { NSWorkspace.shared.open(root.appending(path: "logs")) } } label: { Image(systemName: "doc.text.magnifyingglass") }.help("Lokale Protokolle öffnen")
-            }.padding().background(Color(red: 0.12, green: 0.12, blue: 0.12)).foregroundStyle(.white)
+            }.padding().background(Color(red: 31/255, green: 31/255, blue: 31/255)).foregroundStyle(Color(red: 250/255, green: 248/255, blue: 241/255))
             if server.ready {
                 if let error = server.error { Text(error).padding().foregroundStyle(.orange) }
                 let destination = devices ? server.connectAddress : (server.showOnboarding ? (server.importEntry ? URL(string: "http://127.0.0.1:18594/#import")! : server.onboardingAddress) : server.address)
@@ -202,14 +210,16 @@ struct ContentView: View {
             }
             else {
                 VStack(spacing: 24) {
-                    Text("Deine Medien.\nGut zu Hause.").font(.system(size: 38, weight: .semibold)).multilineTextAlignment(.center)
+                    Text("Deine Medien.\nGut zu Hause.").font(.custom("Sora-Bold", size: 38)).multilineTextAlignment(.center)
                     if let error = server.error {
                         Text(error).multilineTextAlignment(.center).frame(maxWidth: 480)
                         Button("Erneut starten", action: server.restart).buttonStyle(.borderedProminent)
                     } else { ProgressView("Mutti wird gestartet …") }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(32)
             }
-        }.tint(Color(red: 0.55, green: 0.49, blue: 0))
+        }.background(Color(red: 31/255, green: 31/255, blue: 31/255))
+        .tint(Color(red: 1, green: 230/255, blue: 0))
+        .preferredColorScheme(.dark)
         .sheet(isPresented: $settings) { ConnectSettingsView(server: server) }
         .onChange(of: server.setupCompleted) { _, completed in
             if !completed { devices = false; settings = false }

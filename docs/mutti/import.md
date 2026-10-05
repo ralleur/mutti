@@ -264,3 +264,17 @@ Geprüfte Kombination: Jellyfin 12.1 und Intro Skipper 12.0.4.0. Andere
 Pluginversionen werden nicht stillschweigend gleichgesetzt. Sprungmarken werden
 über Jellyfins Media-Segments-Schnittstelle bereitgestellt; die konkrete
 Sprungschaltfläche hängt vom verwendeten Player ab.
+
+### Layout und Marke – 5. Oktober 2026
+
+Die sieben Schritte stehen jetzt untereinander links; Kurt bespielt die freie
+rechte Spalte. Aktueller Schritt: gelbe Fläche, erledigte Schritte: Haken.
+Statusmeldung, Zeiten, Dateiaktivität und Verbindungszustand folgen darunter.
+Unter 650 px bleibt die Liste vertikal und Kurt steht darunter. Seine vollständige
+Bewegungsfläche bleibt proportional erhalten. Animationen und Importlogik bleiben
+unverändert, einschließlich Pause und reduzierter Bewegung.
+
+Die Owner-Vorlage „03 / Kompakte Bögen“ bestimmt Graphit, Elfenbein und Gelb sowie
+das neue kompakte m mit Ringelschwanz. Die vektorielle Wortmarke und die lokalen
+Sora-Schnitte werden auch für Connect, Web-Bibliothek und Mac-Paket verwendet.
+Kanonische Quellen und Nachbauhinweise: [Mutti Design](../../mutti/design/README.md).

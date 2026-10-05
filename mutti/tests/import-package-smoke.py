@@ -26,6 +26,11 @@ try:
     assert not state['setupComplete'] and not state['newSetup']
     assert (config/'data/plugins/Intro Skipper_12.0.4.0/IntroSkipper.dll').is_file()
     with request(28594,'/') as response:assert b'Jellyfin' in response.read()
+    for asset in ['symbol.svg','mark-light.svg','wordmark-light.svg','sora.woff2','sora-semibold.woff2','sora-bold.woff2']:
+        with request(28594,'/'+asset) as response:
+            expected_type='image/svg+xml' if asset.endswith('.svg') else 'font/woff2'
+            assert response.headers['Content-Type'].startswith(expected_type)
+            assert response.read()==(root/'mutti/migrate/web'/asset).read_bytes()
     with request(28594,'/kurt/manifest.json') as response:
         kurt=json.load(response)
     assert all(clip in kurt['clips'] for clip in ('idle-sleep','wake-seat','rise-seat','scoot-floor','walk-floor','run-floor','eat-floor','vomit-floor','poop-floor','turn-floor'))
@@ -49,7 +54,7 @@ try:
     with request(28597,'/Startup/User') as response:json.load(response)
     bindings=json.loads(subprocess.check_output(['docker','inspect',name]))[0]['HostConfig']['PortBindings']
     assert all(binding['HostIp']=='127.0.0.1' for port in bindings.values() for binding in port)
-    print('PASS: actual Docker entrypoint, bundled Kurt clips/images, onboarding choice, browser access, Host/Origin rejection, loopback-only published ports, pairing gated until setup')
+    print('PASS: actual Docker entrypoint, bundled branding/fonts and Kurt clips/images, onboarding choice, browser access, Host/Origin rejection, loopback-only published ports, pairing gated until setup')
 finally:
     with (work/'container.log').open('w') as log:subprocess.run(['docker','logs',name],stdout=log,stderr=log)
     subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,check=True)
