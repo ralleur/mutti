@@ -301,7 +301,13 @@ func TestRealMigration(t *testing.T) {
 		if s.Phase == "error" {
 			t.Fatal(s.Message)
 		}
+		if s.Progress.Step < 1 || s.Progress.Step > 7 || s.Progress.StartedAt.IsZero() {
+			t.Fatal("missing progress", s.Progress)
+		}
 		if s.Phase == "complete" {
+			if s.Progress.Step != 7 || s.Progress.FinishedAt.IsZero() {
+				t.Fatal("unfinished progress", s.Progress)
+			}
 			break
 		}
 		select {

@@ -151,3 +151,21 @@ Chromaprint-Startfehler. Importdialog und lokale Servererkennung geprüft; keine
 zusätzlichen Zielkonto-Felder. Der Manager bleibt vor dem Owner-Import auf dem
 ursprünglichen Datenordner im Zustand `idle`. Die echte Jellyfin-Bibliothek wurde
 für diese Abnahme nicht importiert.
+
+### Importfortschritt und blockierte Quellsicherung (MK-005)
+
+Nach dem Owner-Test zeigt der Import sieben Arbeitsschritte, Gesamt-/Schrittdauer,
+beobachtete Sicherungsgrößen und die Zeit seit messbarer Änderung. Nach 90 Sekunden
+erscheint ein qualifizierter Wartehinweis. Verbindungsabbruch, 30-Minuten-API-Limit,
+45-Minuten-Gesamtlimit und Benutzerabbruch werden unterschieden. Keine geschätzte
+Prozentzahl oder Erfolgsmeldung aus bloßen Statusabfragen.
+
+Die reale Quelle blieb im Sperrmodus `Pessimistic` in der Datenbanksicherung
+stehen. Mutti fragt diesen Modus jetzt vor dem Backup ab und startet dafür keine
+weitere Sicherung. Die vorhandene Quelle wurde für die Diagnose ausschließlich
+lesend geprüft; keine Konfiguration geändert und kein Neustart ausgelöst.
+Der bisherige Mutti-Datenstand blieb aktiv. Details: [import.md](import.md).
+
+Synthetischer vollständiger Mac-Import, Go-Race-Tests und statische Analyse sowie
+Sichtprüfung für Wartehinweis und unterbrochene Verbindung bestanden. Gemeinsame
+Paketprüfung dieses Standes wird im nächsten Eintrag festgehalten.

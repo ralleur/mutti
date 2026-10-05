@@ -32,6 +32,33 @@ bestehender Bibliotheksadministrator geprüft. Die Mac-Freigabe gilt ausschließ
 in der App, die den privaten Datenordner und den Serverprozess verwaltet.
 Das lokale Image heißt `mutti:import-preview`; Compose baut standardmäßig `mutti:dev`.
 
+## Fortschritt und ausbleibende Aktivität
+
+Der Import zeigt sieben Schritte einschließlich der zweiten Quellsicherung für
+den abschließenden Vergleich. Gesamt- und Schrittdauer kommen vom Manager und
+bleiben beim Neuladen erhalten. Wo eine lokale Sicherungsdatei eindeutig zum
+neuen Vorgang gehört oder ein Transfer/Archivaufbau beobachtet werden kann,
+zeigt Mutti Dateigröße und Zeit seit der letzten gemessenen Änderung. Alte ZIPs,
+Symlinks und mehrere konkurrierende Sicherungen gelten nicht als Fortschritt.
+Nach 90 Sekunden ohne weitere messbare Aktivität erscheint ein Wartehinweis;
+interne Pufferung kann solche Pausen verursachen, deshalb keine unbelegte
+Stillstandsbehauptung, Prozentzahl oder Restzeit. Ein Verbindungsabbruch wird
+getrennt angezeigt; die Anzeige versucht selbstständig eine erneute Verbindung.
+
+Ein API-Zeitlimit (30 Minuten) und das gesamte Importlimit (45 Minuten) werden
+von einer nicht erreichbaren Quelle und einem Benutzerabbruch unterschieden.
+Jellyfins Sicherungsauftrag läuft gegebenenfalls nach Abbruch oder Zeitlimit auf
+der Quelle weiter. Vor einem erneuten Versuch dort den Status prüfen.
+
+Vor dem Sicherungsauftrag liest Mutti über die Administrator-API den
+Datenbank-Sperrmodus. `Pessimistic` wird mit konkretem Hinweis abgewiesen:
+Jellyfins threadgebundene Sperre kann bei asynchronen Sicherungsschritten einen
+Deadlock verursachen. Für den Umzug muss die Quelle auf Jellyfins Standard
+`NoLock` umgestellt und neu gestartet werden. Mutti ändert oder startet den
+Quellserver nicht automatisch. Der Owner-Test traf genau diese Konfiguration;
+die Sicherung blieb bei `ActivityLogs` stehen, während andere Datenbankzugriffe
+`database is locked` meldeten. Der Quellen-Neustart bleibt eine bewusste Aktion.
+
 ## Was übernommen und geprüft wird
 
 - Benutzer-IDs, lokale Passwörter und Rechte; keine Neuanlage der Konten.

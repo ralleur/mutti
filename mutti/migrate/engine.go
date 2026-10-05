@@ -30,14 +30,15 @@ type Report struct {
 	Finished                          time.Time `json:"finished"`
 }
 type State struct {
-	Ready         bool    `json:"ready"`
-	SetupComplete bool    `json:"setupComplete"`
-	NewSetup      bool    `json:"newSetup"`
-	Phase         string  `json:"phase"`
-	Message       string  `json:"message"`
-	Report        *Report `json:"report,omitempty"`
-	Target        string  `json:"target"`
-	Active        string  `json:"active"`
+	Progress      Progress `json:"progress"`
+	Ready         bool     `json:"ready"`
+	SetupComplete bool     `json:"setupComplete"`
+	NewSetup      bool     `json:"newSetup"`
+	Phase         string   `json:"phase"`
+	Message       string   `json:"message"`
+	Report        *Report  `json:"report,omitempty"`
+	Target        string   `json:"target"`
+	Active        string   `json:"active"`
 }
 type Manager struct {
 	Options          Options
@@ -143,11 +144,20 @@ func validID(id string) bool {
 	}
 	return true
 }
-func (m *Manager) State() State { m.mu.Lock(); defer m.mu.Unlock(); return m.state }
+func (m *Manager) State() State {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.state
+	s.Progress = s.Progress.at(time.Now())
+	return s
+}
 func (m *Manager) setPhase(phase, message string) {
 	m.mu.Lock()
 	m.state.Phase = phase
 	m.state.Message = message
+	if phase == "error" {
+		m.state.Progress.FinishedAt = time.Now()
+	}
 	m.mu.Unlock()
 }
 func (m *Manager) launch(root string) error {
@@ -250,6 +260,8 @@ func (m *Manager) StartImport(ctx context.Context, input SourceInput) error {
 	jobCtx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	m.jobCancel = cancel
 	m.state.Report = nil
+	now := time.Now()
+	m.state.Progress = Progress{StartedAt: now, StepStartedAt: now, LastActivityAt: now, Step: 1}
 	m.state.Phase = "checking"
 	m.state.Message = "Jellyfin und Zugriffsrechte werden geprüft …"
 	m.jobs.Add(1)
@@ -260,18 +272,22 @@ func (m *Manager) StartImport(ctx context.Context, input SourceInput) error {
 		e := m.importSource(jobCtx, input)
 		m.mu.Lock()
 		m.jobCancel = nil
-		m.mu.Unlock()
 		if e != nil {
-			if jobCtx.Err() != nil {
-				e = errors.New("Übernahme abgebrochen. Deine bisherige Einrichtung bleibt erhalten.")
+			if errors.Is(jobCtx.Err(), context.DeadlineExceeded) {
+				e = errors.New("Die Übernahme hat das Zeitlimit von 45 Minuten erreicht. Es wurde nicht umgeschaltet. Jellyfin kann die angeforderte Sicherung noch weiterführen; bitte vor einem neuen Versuch seinen Status prüfen.")
+			} else if jobCtx.Err() != nil {
+				e = errors.New("Übernahme abgebrochen. Deine bisherige Einrichtung bleibt erhalten. Eine bereits angeforderte Jellyfin-Sicherung kann auf der Quelle weiterlaufen.")
 			}
-			m.setPhase("error", e.Error())
+			m.state.Phase = "error"
+			m.state.Message = e.Error()
+			m.state.Progress.FinishedAt = time.Now()
 		}
+		m.mu.Unlock()
 	}()
 	return nil
 }
 func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
-	m.setPhase("checking", "Jellyfin und Zugriffsrechte werden geprüft …")
+	m.setStep("checking", 1, "Jellyfin und Zugriffsrechte werden geprüft …")
 	var current PublicInfo
 	if e := m.api.call(ctx, "GET", "/System/Info/Public", nil, &current); e != nil {
 		return e
@@ -330,39 +346,39 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if e = os.MkdirAll(instance, 0700); e != nil {
 		return e
 	}
-	m.setPhase("backup", "Jellyfin erstellt die Sicherung im Hintergrund …")
+	m.setStep("backup", 2, "Jellyfin sichert Benutzer, Bibliotheken und Metadaten …")
 	var archive string
 	if input.Archive != "" {
 		return errors.New("Bitte den automatischen Import verwenden. Archivdateien werden nur nach Quellenprüfung angenommen.")
 	}
-	if s.Local && locallyReadable(s.Info.ProgramDataPath) {
-		archive, e = s.Backup(ctx)
-	} else {
-		archive, e = remoteBackup(ctx, s, instance)
-	}
+	archive, e = m.sourceBackup(ctx, s, instance)
 	if e != nil {
 		return e
 	}
 	var intro introSnapshot
 	if hasIntro {
+		m.setStep("importing", 3, "Intro-Skipper-Einstellungen und Analysedaten werden gesichert …")
 		intro, e = m.Options.sourceIntro(ctx, s, archive, filepath.Join(instance, "intro-source"))
 		if e != nil {
 			return e
 		}
 	}
-	m.setPhase("importing", "Bibliotheken, Benutzer und Wiedergabestand werden übernommen …")
+	m.setStep("importing", 3, "Sicherung wird für Mutti vorbereitet …")
 	port, e := freePort()
 	if e != nil {
 		return e
 	}
 	prepared := filepath.Join(instance, "prepared.zip")
+	stopProgress := m.watchFiles(ctx, fixedFile(prepared), "Vorbereitete Sicherung")
 	audit, e := TransformArchive(archive, prepared, instance, port, s.Info, input.Mappings, m.Options.FFmpeg)
+	stopProgress()
 	if e != nil {
 		return e
 	}
 	if e = ctx.Err(); e != nil {
 		return errors.New("Übernahme abgebrochen. Der bisherige Datenstand bleibt erhalten.")
 	}
+	m.setStep("importing", 4, "Benutzer, Bibliotheken und Wiedergabestand werden in Mutti wiederhergestellt …")
 	validationOptions := m.Options
 	validationOptions.Bind = "127.0.0.1"
 	// Jellyfin's restore purges existing tables; initialize a fresh schema first.
@@ -408,7 +424,7 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if !info.StartupWizardCompleted {
 		return errors.New("Die importierte Einrichtung wurde nicht korrekt wiederhergestellt.")
 	}
-	m.setPhase("verifying", "Die übernommene Bibliothek wird vollständig geprüft …")
+	m.setStep("verifying", 5, "Benutzerzugänge, Bibliotheken und Intro Skipper werden geprüft …")
 	if _, e = login(ctx, staged, s.Username, s.Password); e != nil {
 		return errors.New("Der bestehende Benutzerzugang funktioniert in der importierten Instanz nicht. Es wurde nicht umgeschaltet.")
 	}
@@ -425,8 +441,12 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if e = compareLibraries(s.Libraries, libraries, input.Mappings); e != nil {
 		return e
 	}
+	m.setStep("verifying", 5, "Die übernommene Datenbank wird mit der Sicherung verglichen …")
+	stopProgress = m.watchFiles(ctx, newBackup(filepath.Join(instance, "data", "data", "backups")), "Prüfsicherung")
 	var verifiedBackup struct{ Path string }
-	if e = staged.call(ctx, "POST", "/Backup/Create", map[string]bool{"Database": true}, &verifiedBackup); e != nil {
+	e = staged.call(ctx, "POST", "/Backup/Create", map[string]bool{"Database": true}, &verifiedBackup)
+	stopProgress()
+	if e != nil {
 		return e
 	}
 	if !within(instance, verifiedBackup.Path) {
@@ -455,13 +475,13 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	}
 	// Refuse activation if the source changed while the snapshot was checked.
 	// This catches new playback, favorites, settings and library changes.
-	m.setPhase("verifying", "Jellyfin wird abschließend auf Änderungen geprüft …")
+	m.setStep("verifying", 6, "Jellyfin erstellt eine zweite Sicherung zur Abschlussprüfung …")
 	var finalArchive string
 	if s.Local && locallyReadable(s.Info.ProgramDataPath) {
-		finalArchive, e = s.Backup(ctx)
+		finalArchive, e = m.sourceBackup(ctx, s, instance)
 	} else {
 		_ = os.Remove(filepath.Join(instance, "source.zip"))
-		finalArchive, e = remoteBackup(ctx, s, instance)
+		finalArchive, e = m.sourceBackup(ctx, s, instance)
 	}
 	if e != nil {
 		return e
@@ -476,7 +496,10 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 		}
 	}
 	finalPrepared := filepath.Join(instance, "source-final.zip")
+	m.setStep("verifying", 6, "Die Abschlussprüfung sucht nach Änderungen während des Umzugs …")
+	stopProgress = m.watchFiles(ctx, fixedFile(finalPrepared), "Abschließend geprüfte Sicherung")
 	latest, e := TransformArchive(finalArchive, finalPrepared, instance, port, s.Info, input.Mappings, m.Options.FFmpeg)
+	stopProgress()
 	if e != nil {
 		return e
 	}
@@ -515,7 +538,7 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if e = ctx.Err(); e != nil {
 		return errors.New("Übernahme abgebrochen. Es wurde nicht umgeschaltet.")
 	}
-	m.setPhase("activating", "Die geprüfte Bibliothek wird aktiviert …")
+	m.setStep("activating", 7, "Die geprüfte Bibliothek wird aktiviert …")
 	m.change.Lock()
 	defer m.change.Unlock()
 	old := m.State().Active
@@ -548,6 +571,7 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	m.mu.Lock()
 	m.state.Active = instance
 	m.state.Report = &report
+	m.state.Progress.FinishedAt = time.Now()
 	m.state.Phase = "complete"
 	m.state.Message = "Deine Jellyfin-Bibliothek ist jetzt in Mutti bereit."
 	m.state.NewSetup = false
@@ -583,7 +607,7 @@ func compareLibraries(source, target []Library, mappings map[string]string) erro
 func remoteBackup(ctx context.Context, s *Source, instance string) (string, error) {
 	var job struct{ Id, Secret string }
 	if e := s.API.call(ctx, "POST", "/MuttiExport/Begin", map[string]string{"Recipient": s.API.Device}, &job); e != nil {
-		return "", errors.New("Auf diesem entfernten Server fehlt der Mutti-Umzugshelfer. Installiere das mitgelieferte Mutti-Export-Plugin auf Jellyfin und starte Jellyfin neu; danach läuft der Transfer automatisch.")
+		return "", fmt.Errorf("Der Jellyfin-Export konnte nicht bereitgestellt werden: %w Für entfernte Server muss der mitgelieferte Mutti-Umzugshelfer installiert und Jellyfin danach neu gestartet sein.", e)
 	}
 	if !validID(job.Id) || len(job.Secret) != 64 {
 		return "", errors.New("Ungültige Antwort des Umzugshelfers.")

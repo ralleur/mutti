@@ -89,6 +89,12 @@ func (a *API) request(ctx context.Context, method, path string, body any) (*http
 func (a *API) call(ctx context.Context, method, path string, body, out any) error {
 	r, e := a.request(ctx, method, path, body)
 	if e != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if errors.Is(e, context.DeadlineExceeded) {
+			return errors.New("Der Server hat innerhalb von 30 Minuten nicht geantwortet. Eine angeforderte Sicherung kann auf Jellyfin weiterlaufen. Bitte dort den Status prüfen, bevor du erneut startest.")
+		}
 		return errors.New("Der Server ist nicht erreichbar. Adresse und Verbindung prüfen.")
 	}
 	defer r.Body.Close()
@@ -180,6 +186,9 @@ func OpenSource(ctx context.Context, input SourceInput, targetID string) (*Sourc
 	if !strings.HasPrefix(s.Info.Version, "12.1.") {
 		return fail(errors.New("Dieser Teststand übernimmt Jellyfin 12.1. Für diese Serverversion ist die vollständige Übernahme noch nicht geprüft."))
 	}
+	if e = checkBackupMode(ctx, a); e != nil {
+		return fail(e)
+	}
 	ip := net.ParseIP(a.Base.Hostname())
 	s.Local = a.Base.Hostname() == "localhost" || ip != nil && ip.IsLoopback()
 	if e = a.call(ctx, "GET", "/Users", nil, &s.Users); e != nil {
@@ -254,4 +263,18 @@ func Discover(ctx context.Context) []map[string]string {
 		}
 	}
 	return result
+}
+
+// Jellyfin's thread-affine pessimistic lock can deadlock across asynchronous
+// backup continuations. Read the source setting; never change/restart the source.
+func checkBackupMode(ctx context.Context, a *API) error {
+	var config struct{ LockingBehavior json.RawMessage }
+	if e := a.call(ctx, "GET", "/System/Configuration/database", nil, &config); e != nil {
+		return fmt.Errorf("Jellyfins Datenbankeinstellungen konnten vor der Sicherung nicht geprüft werden: %w", e)
+	}
+	mode := strings.Trim(string(config.LockingBehavior), "\" ")
+	if strings.EqualFold(mode, "Pessimistic") || mode == "1" {
+		return errors.New("Jellyfin verwendet den Datenbank-Sperrmodus Pessimistic. Dabei kann die Sicherung hängen bleiben. Bitte in Jellyfin den Standardmodus NoLock wählen und Jellyfin neu starten, bevor du den Umzug erneut beginnst. Mutti hat keine Sicherung gestartet und keine Quelldaten verändert.")
+	}
+	return nil
 }
