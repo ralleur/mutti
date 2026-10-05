@@ -26,6 +26,14 @@ try:
     assert not state['setupComplete'] and not state['newSetup']
     assert (config/'data/plugins/Intro Skipper_12.0.4.0/IntroSkipper.dll').is_file()
     with request(28594,'/') as response:assert b'Jellyfin' in response.read()
+    with request(28594,'/kurt/manifest.json') as response:
+        kurt=json.load(response)
+    assert all(clip in kurt['clips'] for clip in ('idle-sleep','wake-seat','rise-seat','scoot-floor','walk-floor','run-floor','eat-floor','vomit-floor','poop-floor','turn-floor'))
+    for image in kurt['pages']+['rest.png','poop.png','vomit.png','poop-drop.png','vomit-drop.png']:
+        with request(28594,'/kurt/'+image) as response:
+            assert response.headers['Content-Type'].startswith('image/')
+            assert len(response.read(32))==32
+    with request(28594,'/kurt.js') as response:assert b'MuttiKurt' in response.read()
     with request(28597,'/System/Info/Public') as response:assert not json.load(response)['StartupWizardCompleted']
     for headers in ({'Host':'attacker.example'},{'Origin':'https://attacker.example'}):
         try:request(28597,'/System/Info/Public',headers=headers)
@@ -41,7 +49,7 @@ try:
     with request(28597,'/Startup/User') as response:json.load(response)
     bindings=json.loads(subprocess.check_output(['docker','inspect',name]))[0]['HostConfig']['PortBindings']
     assert all(binding['HostIp']=='127.0.0.1' for port in bindings.values() for binding in port)
-    print('PASS: actual Docker entrypoint, onboarding choice, browser access, Host/Origin rejection, loopback-only published ports, pairing gated until setup')
+    print('PASS: actual Docker entrypoint, bundled Kurt clips/images, onboarding choice, browser access, Host/Origin rejection, loopback-only published ports, pairing gated until setup')
 finally:
     with (work/'container.log').open('w') as log:subprocess.run(['docker','logs',name],stdout=log,stderr=log)
     subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,check=True)

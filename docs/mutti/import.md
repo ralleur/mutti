@@ -50,6 +50,30 @@ von einer nicht erreichbaren Quelle und einem Benutzerabbruch unterschieden.
 Jellyfins Sicherungsauftrag läuft gegebenenfalls nach Abbruch oder Zeitlimit auf
 der Quelle weiter. Vor einem erneuten Versuch dort den Status prüfen.
 
+## Kurt begleitet den Umzug (MK-010)
+
+Die vorhandenen Kurt-Zeichnungen aus Hauser ersetzen den Spinner. Die sieben
+Manager-Schritte steuern Schlafen → Po-Rutschen → Gehen → Laufen → Leckerli →
+Kotzen → Häufchen. Nach der Zugangsprüfung wacht Kurt einmal auf und steht auf.
+Bewegungen mit Wegstrecke wenden am Ende und laufen zurück; Hinterlassenschaften
+werden pro Schleife neu dargestellt und sammeln sich nicht an.
+
+Schritttext, Dauer, gemessene Aktivität und Hinweise bleiben unabhängig sichtbar.
+„Kurt pausieren“ hält nur die Figur an. Die Systemeinstellung für reduzierte
+Bewegung zeigt eine feste Pose. Bei verlorener Statusverbindung oder unsichtbarer
+Seite pausiert die Animation; Fehler, Abbruch und Erfolg beenden sie. Ein kurzer
+Importschritt wartet nicht auf eine Animation. Nach Neuladen wird der aktuelle
+Manager-Schritt angezeigt; bereits vergangene Schritte werden nicht nachgespielt.
+
+Die lokal eingebetteten Ressourcen benötigen keine externe Verbindung. Fehlende
+Animationsdateien blockieren weder Statusanzeige noch Import. Fassung 11 ist als
+kleiner Auszug mit unveränderten Zeichnungen und SHA-256-Herkunftsnachweis unter
+`mutti/migrate/web/kurt` paketiert; Mac und Docker nutzen dieselben Dateien.
+Die Herkunft und der lokale Testumfang stehen in `mutti/THIRD-PARTY.md`.
+
+Fokussierter Zustands-/Schleifentest:
+`node --test mutti/tests/kurt-animation.test.cjs`.
+
 ## Automatische Vorbereitung des Quellservers
 
 Der Importstart umfasst die nötige Vorbereitung einschließlich eines kurzen

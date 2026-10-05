@@ -1,6 +1,7 @@
 const $=id=>document.getElementById(id);let csrf='',state={},screen='welcome',polling=false,nativeOwner=false,submitting=false,lastStateAt=0,pollFailed=false;
+const kurt=new window.MuttiKurt($('kurt'));
 const nativeImport=window.webkit?.messageHandlers?.muttiImport;
-function show(id){screen=id;for(const s of ['welcome','import-panel','progress','complete'])$(s).hidden=s!==id}
+function show(id){screen=id;kurt.setVisible(id==='progress');for(const s of ['welcome','import-panel','progress','complete'])$(s).hidden=s!==id}
 function error(message){$('error').textContent=message;$('error').hidden=!message}
 async function request(path,body){const r=await fetch(path,body===undefined?{cache:'no-store',signal:AbortSignal.timeout(8000)}:{method:'POST',headers:{'Content-Type':'application/json','X-Mutti-CSRF':csrf},body:JSON.stringify(body)});if(!r.ok)throw new Error(await r.text());return r.status===204||r.status===202?null:r.json()}
 async function discover(){try{const found=await request('/api/discover');$('found').replaceChildren();if(!found.length){$('found').textContent='Keinen eingerichteten Jellyfin-Server gefunden. Trage seine Adresse ein.';return}for(const s of found){const button=document.createElement('button');button.type='button';button.textContent=`${s.name} · ${s.version} · ${s.address}`;button.onclick=()=>{$('address').value=s.address};$('found').append(button)}if(!$('address').value)$('address').value=found[0].address}catch(e){$('found').textContent='Automatische Suche nicht verfügbar. Trage die Serveradresse ein.'}}
@@ -15,6 +16,7 @@ function duration(seconds){seconds=Math.max(0,Math.floor(seconds));const h=Math.
 function byteSize(bytes){const units=['B','KiB','MiB','GiB'];let i=0;while(bytes>=1024&&i<3){bytes/=1024;i++}return `${bytes.toLocaleString('de-DE',{maximumFractionDigits:i?1:0})} ${units[i]}`}
 function progress(){
  if(screen!=='progress')return;
+ kurt.setState({step:state.progress?.step||0,job:state.progress?.startedAt||'',connected:!pollFailed});
  const p=state.progress,age=lastStateAt?Math.floor((performance.now()-lastStateAt)/1000):0;
  $('progress-connection').textContent=lastStateAt?pollFailed?`Verbindung zu Mutti unterbrochen. Letzte Rückmeldung vor ${duration(age)} Der Vorgang kann weiterlaufen; die Anzeige versucht automatisch, sich wieder zu verbinden.`:`Status wird laufend aktualisiert · letzte Rückmeldung vor ${duration(age)}`:'Status wird geladen …';
  if(!p?.step)return;

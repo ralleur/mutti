@@ -7,6 +7,7 @@
 | Intro Skipper | 12.0.4.0, `6e0cb179007ac4c16cd9f358e9a617e791e9bf06`, official DLL | GPL-3.0-only. Unmodified plugin; license and matching source archive included in `intro-skipper/`. Hashes in components.lock.json. |
 | .NET | SDK 10.0.401; self-contained runtime | MIT and third-party notices supplied with runtime; inspect publish output. |
 | Jellyfin FFmpeg | v8.1.3-1 on Mac; pinned upstream image on Docker | GPL build. Full matching source, build configuration and external-library sources required before redistributing a release. |
+| Kurt artwork | Hauser private Kurt lab, `kurt-a-refined-11`; source hashes in `mutti/migrate/web/kurt/provenance.json` | Reused for the local Mutti preview at the owner's explicit request (2026-10-05). Original drawings repacked losslessly. No new public artwork license is inferred from this integration. |
 | Sora | Copied from approved kurtz font assets | SIL Open Font License 1.1, bundled next to fonts. |
 | Tailscale | v1.102.5 in isolated directlab | Experiment only. Not linked into the Mac app or container. Preserve upstream BSD/file-specific notices if adopted. |
 

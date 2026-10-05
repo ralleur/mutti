@@ -1,0 +1,29 @@
+{
+  "source": "Hauser private Kurt lab, docs/kurt/animation-v11/ios-assets",
+  "version": "kurt-a-refined-11",
+  "authorization": "Owner requested reuse in Mutti import, 2026-10-05",
+  "changes": "Selected original frames, lossless atlas repacking and pixel-identical deduplication; no redrawing.",
+  "uniqueTiles": 127,
+  "inputs": {
+    "manifest.json": "48fc12f4cb76ae7b4ed93c81bc0d5cc3bcd34bf87907b657acbfee5844bb6c1e",
+    "kurt-a-18.png": "b67ffdd8c2e446b2b8da7e82e91e5d0aca56d2bf855599035817066f794812d5",
+    "kurt-a-19.png": "f18936dc70a7b96472f97dd9250a9e0b05bd66435be72ab439b67831cb2fbf81",
+    "kurt-a-5.png": "ec36008a323f210a8fe3b59e3dec7ea511ee660d3fa7c20452e96adc9edecce4",
+    "kurt-a-6.png": "135737df4d09fb9e0312e575fc043deae0e080e3af394a249398948d2aec955d",
+    "kurt-a-7.png": "09b18e2230a56c1e321c5ba0c813683a97065a64fadcbb7196b08652fb029b42",
+    "kurt-a-12.png": "e871cab87b0acb6d050960bc13bdcad9a701422e9204f29fdca7e56c4502c8b6",
+    "kurt-a-13.png": "ad79f85584af769681bc6a9eb535814c99bb15f52454f472c96fbb7dd32bf891",
+    "kurt-a-9.png": "0fbf733db8914c2367c1437ca1fb71e7f515990175dd8bbf6e58387e9da9f4a9",
+    "kurt-a-10.png": "100e64078f5cc3ed594b8b6edb2e702682cc0cce7493f2fbd405fa418f034635",
+    "kurt-a-11.png": "c47033bdaca709d9b36ebf0c8482cc34765557d0708a66e38e491aad05030464",
+    "kurt-a-3.png": "29e7b1d855f9185a77fd23f38b23e876961938088335d49bf21c4483f5c74a69",
+    "kurt-a-4.png": "a08cfad540ce137956655a97cceedd47d55fe3edce0f16fc3d95f7f3e611a04b",
+    "kurt-a-14.png": "349c39e3d412a38075fc385959c69076900ec3bf95870ad8667ad875e2edcaeb",
+    "kurt-a-15.png": "689ada3c7765103dbb7681eedb538cfd01294bfecb380a4abdd3ef0d4c707264",
+    "kurt-a-16.png": "7831a7112850e327009f0492035f15e42a3c293326f13e64ed8f4c7daff15eba",
+    "poop.png": "b4a56f577155cebe03a71c85964a1afb0bc4e99159a3cc2a815eb37dc429e20c",
+    "vomit.png": "d77ed5fddcd99b14627031cf1163409f04fb7c49102cf11c2e19e8517620389b",
+    "poop-drop.png": "183231f884fdf216a5fc7f41a8ed659bd622e32d5b14eef73573df079b31a156",
+    "vomit-drop.png": "f15c4f498da14bdad8395ee443820dc363a23c311d6e2bf56a3c9b47f0049549"
+  }
+}

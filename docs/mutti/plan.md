@@ -231,6 +231,12 @@ Die Mac-Hülle startet den Kopplungsdienst erst nach der bestätigten Fertigstel
 
 ### 5.2 — M2b: Bestehendes Jellyfin übernehmen (MK-005)
 
+**MK-010, beauftragt am 05.10.2026:** Kurt aus Hauser begleitet jeden der sieben
+Importschritte mit der vom Owner festgelegten Animation. Die echte Statusanzeige
+bleibt sichtbar, die Figur ist pausierbar und berücksichtigt reduzierte Bewegung.
+Lokale Ressourcen, identischer Mac-/Docker-Pfad; Zustände und Auslieferung werden
+mit künstlichen Importdaten geprüft. [Umsetzung](import.md#kurt-begleitet-den-umzug-mk-010).
+
 **Ergänzung 05.10.2026:** Die automatische Importvorbereitung übernimmt bei
 Jellyfin-SQLite den Wechsel vom problematischen Sperrmodus auf den Standard,
 sichert die Originalkonfiguration und begleitet den Neustart. Der Hinweis beim

@@ -232,3 +232,25 @@ und Zugriffsgrenzen ebenfalls. Die aktualisierte App unter
 Quelle. Der Manager steht auf `idle` mit dem bisherigen aktiven Datenordner.
 Der nächste echte Import bleibt beim Owner; keine echte Bibliothek wurde durch
 den Agenten importiert oder aktiviert.
+
+
+### Kurt begleitet den Import (MK-010)
+
+Die beauftragten sieben Animationen ersetzen den Spinner: Schlafen, Po-Rutschen,
+Gehen, Laufen, Leckerli, Kotzen, Häufchen. Nach der Zugangsprüfung läuft einmal
+Aufwachen/Aufstehen; die echte Verarbeitung wartet nie darauf. Bewegungen wenden
+an den Bühnenrändern, Hinterlassenschaften werden je Schleife neu dargestellt.
+Die übrigen Fortschrittsdaten bleiben sichtbar. Pause, reduzierte Bewegung,
+verlorene Statusverbindung, ausgeblendete Seite und Beendigung halten die Figur an.
+
+Das lokale Paket enthält die unveränderten benötigten Zeichnungen aus Hausers
+Kurt-Fassung 11: 127 einzigartige Bildzellen auf zwei verlustfreien WebP-Atlanten,
+insgesamt rund 3 MiB einschließlich Effekten und Herkunftsnachweisen. Keine neuen
+Bilder erzeugt, keine Hauser-Anwendungslogik übernommen, kein externer Abruf.
+Die öffentliche Lizenzierung der privaten Zeichnungen wird damit nicht verändert.
+
+Sieben fokussierte Animationstests und die Go-Importtests bestanden. Die echte
+Weboberfläche wurde mit synthetischen Zuständen angesehen: Schlafen, Übergang zum
+Sichern, Kotze/Häufchen, Pause und unverändertes Bild, Verbindungsabbruch und Fehler
+mit gestoppter Animation. Der Importkern und echte Benutzerdaten wurden dafür
+nicht verändert. Mac-/Docker-Paketabnahme folgt für diesen Stand unten.
