@@ -57,6 +57,7 @@ final class ServerController: ObservableObject {
         var setupComplete: Bool
         var newSetup: Bool
         var phase: String
+        var message: String
         var active: String
     }
     func start() {
@@ -118,7 +119,8 @@ final class ServerController: ObservableObject {
                             observed = true
                         }
                         if state.newSetup { self.showOnboarding = false }
-                        if self.ready { self.starting = false }
+                        if self.ready { self.starting = false; self.error = nil }
+                        else if state.phase == "error" { self.starting = false; self.error = state.message }
                     }
                     attempts += 1
                     if !observed && attempts > 90 {
@@ -129,6 +131,7 @@ final class ServerController: ObservableObject {
             }
         } catch { stop(); self.error = error.localizedDescription }
     }
+    func restart() { stop(); start() }
     func stop() {
         stopping = true; launchID = nil; readiness?.cancel(); readiness = nil
         if let child, child.isRunning {
@@ -189,7 +192,7 @@ struct ContentView: View {
                     Text("Deine Medien.\nGut zu Hause.").font(.system(size: 38, weight: .semibold)).multilineTextAlignment(.center)
                     if let error = server.error {
                         Text(error).multilineTextAlignment(.center).frame(maxWidth: 480)
-                        Button("Erneut starten", action: server.start).buttonStyle(.borderedProminent)
+                        Button("Erneut starten", action: server.restart).buttonStyle(.borderedProminent)
                     } else { ProgressView("Mutti wird gestartet …") }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(32)
             }
