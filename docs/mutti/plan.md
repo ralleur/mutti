@@ -328,6 +328,26 @@ Sicherheitsgrenzen nicht überschreiben. Inkompatible Einstellungen werden vor
 stilles Weglassen mit einer „alles übernommen“-Meldung. Mac und Docker/NAS
 gehören auch für diesen Import zur gemeinsamen Abnahme.
 
+### 5.3 — Intro Skipper als kuratierter Standard (MK-006)
+
+**Owner-Entscheidung 05.10.2026:** Intro Skipper gehört zu jeder Mutti-Einrichtung
+und wird bei einem Jellyfin-Umzug ohne gesonderte Plugin-Rückfrage mitgenommen.
+Kanonischer Eintrag: [MK-006](/Users/ai/workspace/vela-swiftfin/IDEEN.md).
+
+- Offizielles Plugin 12.0.4.0, Quellcommit und SHA-256 im Komponentenmanifest.
+  Identische DLL in Mac und Docker; kein Laufzeitdownload und keine Neuanmeldung.
+- Beim Import von Intro Skipper 12.0.4.0: Konfiguration, Ausschlüsse, Segmentdaten,
+  manuelle Änderungen und Analysecache über konsistente SQLite-Online-Snapshots
+  übernehmen. Jellyfins eigene MediaSegments bleiben Teil des Vollimports.
+- Lokale und durch den Exporthelfer übertragene Daten gleich prüfen; keine
+  Übernahme fremder Pluginprogramme. Vor Aktivierung Vergleich der logischen
+  Datenbankinhalte und erneute Quellenprüfung. Originaldaten bleiben bestehen.
+- Ohne Plugin auf der Quelle und bei neuer Einrichtung: geprüfte Standardversion
+  automatisch aktiv. Bundled FFmpeg muss die benötigten Analysefunktionen erfüllen.
+- Gemeinsame Abnahme: Mac/Docker, Quelle mit und ohne Plugin, vorhandene Segmente
+  und Konfiguration, FFmpeg-Funktionsprüfung, WAL-Sicherung und Neustart.
+  Weitere Quell-Pluginversionen benötigen eine qualifizierte Schemaübernahme.
+
 ## 6. Sicherheits- und Datenschutzumfang
 
 Diese Anforderungen sind Teil der Umsetzung und ihrer Abnahme:

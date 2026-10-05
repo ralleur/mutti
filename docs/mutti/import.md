@@ -63,7 +63,10 @@ Das ist ein kontrolliertes Wechselzeitfenster, keine kontinuierliche Replikation
   Transcodingpfade werden für das Ziel zurückgesetzt und im Ergebnis ausgewiesen.
 - Alte API-Schlüssel und Gerätesitzungen werden entfernt. Geräte danach neu
   anmelden/koppeln. Bestehende Mutti-Vermittler-/STUN-Einstellungen bleiben erhalten.
-- Zusätzliche aktive Plugins und externe Anmeldeanbieter blockieren die Übernahme,
+- **Intro Skipper 12.0.4.0 ist enthalten.** Bestehende Konfiguration, Ausschlüsse,
+  Segmentdaten und Analysecache werden ohne separate Plugin-Rückfrage übernommen.
+  Ohne Plugin auf der Quelle steht es danach mit seinen Standardeinstellungen bereit.
+- Weitere aktive Plugins und externe Anmeldeanbieter blockieren die Übernahme,
   solange ihre Migration nicht qualifiziert ist. Keine stille Teilübernahme.
 - Medien bleiben an ihrem Ort. Fehlende Laufwerke oder fehlende Leserechte zuerst
   auflösen; Mutti zeigt den betroffenen Pfad an. Ein Dateiumzug ist nicht enthalten.
@@ -109,7 +112,7 @@ Medien. Nach der Aktivierung gelten die regulären Bibliothekseinstellungen.
 go test -C mutti/migrate -race ./...
 go vet -C mutti/migrate ./...
 swift test --package-path mutti/apps/macos
-MUTTI_FRESH_IMPORT_SMOKE=1 MUTTI_TEST_EXPORT=1 MUTTI_IMPORT_REPO="$PWD" \
+MUTTI_FRESH_IMPORT_SMOKE=1 MUTTI_TEST_EXPORT=1 MUTTI_TEST_INTRO_SKIPPER=1 MUTTI_IMPORT_REPO="$PWD" \
   go test -C mutti/migrate -race -run TestRealMigration -v -count=1
 MUTTI_FRESH_IMPORT_SMOKE=1 MUTTI_TEST_CONFIGURED_TARGET=1 MUTTI_IMPORT_REPO="$PWD" \
   go test -C mutti/migrate -race -run TestRealMigration -v -count=1
@@ -145,3 +148,27 @@ Adminprüfung des Quellservers bleiben erforderlich. Docker akzeptiert diesen
 nativen Startmodus nicht. Regressionstests decken erfundene/falsche Freigaben,
 JSON-Manipulation, fehlende Wechselbestätigung und den vollständigen Import mit
 unbekanntem bisherigen Zielpasswort ab.
+
+## Intro Skipper
+
+Die gleiche geprüfte Intro-Skipper-Version wird mit Mac und Docker ausgeliefert,
+einschließlich Lizenz und passendem Quellarchiv. Eine Neuinstallation erhält das
+Plugin automatisch; ein Import übernimmt es auch dann, wenn es bisher fehlte.
+Vorhandene Intro-Skipper-12.0.4.0-Daten werden zusätzlich zur Jellyfin-Sicherung
+übernommen, da diese Plugin-Daten außerhalb des Standardarchivs liegen.
+
+SQLite-Online-Backup erfasst auch bestätigte WAL-Änderungen. Die Quelle wird nur
+gelesen; Segmentdatenbank, ältere Segmentdatenbank (falls vorhanden), Analysecache
+und Konfiguration bleiben erhalten. Vor Aktivierung werden die logischen Inhalte
+verglichen, Pfadausschlüsse angepasst und die Quelle erneut auf Änderungen geprüft.
+Eine laufende Analyse mit neuen Daten kann deshalb eine Wiederholung erforderlich
+machen. Das ist kein Anlass für eine manuelle Plugininstallation.
+
+Der Fernexport benötigt **Mutti Export 0.1.1.0** oder neuer; dessen Einmaltransfer
+enthält jetzt denselben Plugin-Snapshot. Eine ältere Helferversion darf keine
+scheinbar vollständige Übernahme ohne Plugin-Daten melden.
+
+Geprüfte Kombination: Jellyfin 12.1 und Intro Skipper 12.0.4.0. Andere
+Pluginversionen werden nicht stillschweigend gleichgesetzt. Sprungmarken werden
+über Jellyfins Media-Segments-Schnittstelle bereitgestellt; die konkrete
+Sprungschaltfläche hängt vom verwendeten Player ab.

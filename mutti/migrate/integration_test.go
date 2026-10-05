@@ -43,6 +43,14 @@ func TestRealMigration(t *testing.T) {
 		o.FFmpeg = ffmpeg
 		ff = ffmpeg
 	}
+	withIntro := os.Getenv("MUTTI_TEST_INTRO_SKIPPER") == "1"
+	sourceWithIntro := withIntro && os.Getenv("MUTTI_TEST_SOURCE_WITHOUT_INTRO") != "1"
+	if withIntro {
+		o.IntroSkipper = filepath.Join(repo, "build/intro-skipper")
+		if path := os.Getenv("MUTTI_INTRO_BUNDLE"); path != "" {
+			o.IntroSkipper = path
+		}
+	}
 	media := filepath.Join(work, "media")
 	_ = os.Mkdir(media, 0700)
 	cmd := exec.Command(ff, "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=10", "-t", "12", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", filepath.Join(media, "Synthetic Film (2026).mp4"))
@@ -50,7 +58,7 @@ func TestRealMigration(t *testing.T) {
 		t.Fatal(e)
 	}
 	if os.Getenv("MUTTI_TEST_EXPORT") == "1" {
-		pluginDir := filepath.Join(work, "source", "data", "plugins", "Mutti Export_0.1.0.0")
+		pluginDir := filepath.Join(work, "source", "data", "plugins", "Mutti Export_0.1.1.0")
 		_ = os.MkdirAll(pluginDir, 0700)
 		data, e := os.ReadFile(filepath.Join(repo, "build/export/Mutti.Export.dll"))
 		if e != nil {
@@ -60,7 +68,11 @@ func TestRealMigration(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	source, e := o.startServer(filepath.Join(work, "source"), sourcePort, fmt.Sprintf("127.0.0.1:%d", sourcePort), "", false)
+	sourceOptions := o
+	if !sourceWithIntro {
+		sourceOptions.IntroSkipper = ""
+	}
+	source, e := sourceOptions.startServer(filepath.Join(work, "source"), sourcePort, fmt.Sprintf("127.0.0.1:%d", sourcePort), "", false)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -96,6 +108,17 @@ func TestRealMigration(t *testing.T) {
 	call("POST", "/Startup/RemoteAccess", map[string]bool{"EnableRemoteAccess": false}, nil)
 	if _, e = login(ctx, a, "Import Owner", password); e != nil {
 		t.Fatal(e)
+	}
+	if sourceWithIntro {
+		if e = verifyIntroLoaded(ctx, a); e != nil {
+			t.Fatal(e)
+		}
+		var config map[string]any
+		call("GET", "/Plugins/"+introID+"/Configuration", nil, &config)
+		config["AutoDetectIntros"] = false
+		config["MinimumIntroDuration"] = 27
+		config["SkipFirstEpisode"] = true
+		call("POST", "/Plugins/"+introID+"/Configuration", config, nil)
 	}
 	var viewer User
 	call("POST", "/Users/New", map[string]string{"Name": "Import Viewer", "Password": viewerPassword}, &viewer)
@@ -155,6 +178,9 @@ func TestRealMigration(t *testing.T) {
 		}
 		time.Sleep(time.Second)
 	}
+	if sourceWithIntro {
+		call("POST", "/Episode/"+item+"/Segments", map[string]any{"Type": "Introduction", "Start": 2.0, "End": 5.0}, nil)
+	}
 	if os.Getenv("MUTTI_TEST_EXPORT") == "1" {
 		s, e := OpenSource(ctx, SourceInput{Address: a.Base.String(), Username: "Import Owner", Password: password}, "")
 		if e != nil {
@@ -169,6 +195,21 @@ func TestRealMigration(t *testing.T) {
 		}
 		if _, e = ReadAudit(archive); e != nil {
 			t.Fatal("remote archive", e)
+		}
+		if sourceWithIntro {
+			local, err := o.snapshotIntro(ctx, s.Info.ProgramDataPath, filepath.Join(work, "helper-local"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.Local = false // Exercise the remote archive extraction branch.
+			remote, err := o.sourceIntro(ctx, s, archive, filepath.Join(work, "helper-remote"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = compareIntro(local.Hashes, remote.Hashes, true); err != nil {
+				t.Fatal(err)
+			}
+			t.Log("PASS: export helper carries complete Intro Skipper snapshot")
 		}
 		// A download ticket is single-use and bound to the issuing device.
 		s, e = OpenSource(ctx, SourceInput{Address: a.Base.String(), Username: "Import Owner", Password: password}, "")
@@ -268,6 +309,38 @@ func TestRealMigration(t *testing.T) {
 			t.Fatal(ctx.Err())
 		case <-time.After(time.Second):
 		}
+	}
+	if withIntro {
+		owner, _ := NewAPI(o.Backend)
+		if _, e = login(ctx, owner, "Import Owner", password); e != nil {
+			t.Fatal(e)
+		}
+		if e = verifyIntroLoaded(ctx, owner); e != nil {
+			t.Fatal(e)
+		}
+		if sourceWithIntro {
+			var config struct {
+				MinimumIntroDuration int
+				SkipFirstEpisode     bool
+			}
+			if e = owner.call(ctx, "GET", "/Plugins/"+introID+"/Configuration", nil, &config); e != nil {
+				t.Fatal(e)
+			}
+			if config.MinimumIntroDuration != 27 || !config.SkipFirstEpisode {
+				t.Fatal("Intro Skipper settings lost")
+			}
+			var segments []struct{ Start, End float64 }
+			if e = owner.call(ctx, "GET", "/Episode/"+item+"/Segments", nil, &segments); e != nil {
+				t.Fatal(e)
+			}
+			if len(segments) != 1 || segments[0].Start != 2 || segments[0].End != 5 {
+				t.Fatalf("Intro Skipper segments changed: %+v", segments)
+			}
+			t.Log("PASS: bundled Intro Skipper active, custom settings and existing segment preserved")
+		} else {
+			t.Log("PASS: Intro Skipper included even when absent on source")
+		}
+		owner.logout()
 	}
 	var imported struct {
 		AccessToken string

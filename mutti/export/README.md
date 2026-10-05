@@ -6,9 +6,11 @@ deinem Mac-Benutzer lesbar ist. Mutti erstellt und liest die Sicherung selbst.
 Auf einem anderen Rechner oder bei einem getrennten Container benötigt Mutti
 zusätzlich zur Admin-Anmeldung einen Weg zum vollständigen Backup. Der Helfer
 stellt diesen Transfer ohne öffentlich abrufbare Backup-URL bereit.
+Version 0.1.1.0 ergänzt konsistente Intro-Skipper-Datenbanksicherungen und die
+Plugin-Konfiguration; für einen Import mit Intro Skipper diesen Stand verwenden.
 
 1. Auf dem **Quellserver** im Jellyfin-Pluginordner einen Unterordner
-   `Mutti Export_0.1.0.0` anlegen und `Mutti.Export.dll` dort ablegen.
+   `Mutti Export_0.1.1.0` anlegen und `Mutti.Export.dll` dort ablegen.
    Der Pluginordner liegt unter Jellyfins Programmdaten (`plugins`).
 2. Jellyfin neu starten. Unter Plugins erscheint **Mutti Export**.
 3. In Mutti „Aus Jellyfin übernehmen“ wählen, die HTTPS-Adresse und den

@@ -98,6 +98,7 @@ final class ServerController: ObservableObject {
             let importClient = try NativeImportClient()
             try importClient.attach(to: process)
             process.arguments?.append("--native-owner-stdin")
+            process.arguments?.append(contentsOf: ["--intro-skipper", resources.appending(path: "intro-skipper").path])
             nativeImportClient = importClient
             process.standardOutput = log; process.standardError = log
             process.terminationHandler = { [weak self] _ in Task { @MainActor [weak self] in

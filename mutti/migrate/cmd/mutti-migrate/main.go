@@ -21,6 +21,7 @@ func main() {
 	flag.StringVar(&o.Server, "server", "", "Jellyfin executable")
 	flag.StringVar(&o.Web, "web", "", "Jellyfin web directory")
 	flag.StringVar(&o.FFmpeg, "ffmpeg", "", "FFmpeg executable")
+	flag.StringVar(&o.IntroSkipper, "intro-skipper", "", "Bundled, checksum-pinned Intro Skipper directory")
 	flag.StringVar(&o.Connect, "connect", "", "Optional Mutti Connect executable")
 	flag.StringVar(&o.Listen, "listen", "127.0.0.1:18594", "Onboarding listener")
 	flag.StringVar(&o.Origin, "origin", "http://127.0.0.1:18594", "Onboarding browser origin")

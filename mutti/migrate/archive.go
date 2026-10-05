@@ -208,6 +208,7 @@ func rewriteXML(data []byte, mappings map[string]string, overrides map[string]st
 	e := xml.NewEncoder(&b)
 	depth := 0
 	skip := 0
+	seenOverrides := map[string]bool{}
 	for {
 		token, err := d.Token()
 		if err == io.EOF {
@@ -225,6 +226,7 @@ func rewriteXML(data []byte, mappings map[string]string, overrides map[string]st
 				continue
 			}
 			if v, ok := overrides[t.Name.Local]; ok {
+				seenOverrides[t.Name.Local] = true
 				if err = e.EncodeToken(t); err != nil {
 					return nil, err
 				}
@@ -238,6 +240,20 @@ func rewriteXML(data []byte, mappings map[string]string, overrides map[string]st
 				continue
 			}
 		case xml.EndElement:
+			if depth == 1 && skip == 0 {
+				keys := []string{}
+				for key := range overrides {
+					if !seenOverrides[key] {
+						keys = append(keys, key)
+					}
+				}
+				sort.Strings(keys)
+				for _, key := range keys {
+					if err = e.EncodeElement(overrides[key], xml.StartElement{Name: xml.Name{Local: key}}); err != nil {
+						return nil, err
+					}
+				}
+			}
 			if skip > 0 {
 				if depth == skip {
 					skip = 0
@@ -265,7 +281,7 @@ func rewriteXML(data []byte, mappings map[string]string, overrides map[string]st
 func networkXML(port int, bind string) []byte {
 	return []byte(fmt.Sprintf(`<NetworkConfiguration><InternalHttpPort>%d</InternalHttpPort><PublicHttpPort>%d</PublicHttpPort><EnableRemoteAccess>false</EnableRemoteAccess><AutoDiscovery>false</AutoDiscovery><EnableIPv6>false</EnableIPv6><BaseUrl></BaseUrl><LocalNetworkAddresses><string>%s</string></LocalNetworkAddresses></NetworkConfiguration>`, port, port, bind))
 }
-func TransformArchive(input, output, instance string, port int, source SystemInfo, mediaMappings map[string]string) (Audit, error) {
+func TransformArchive(input, output, instance string, port int, source SystemInfo, mediaMappings map[string]string, ffmpegPaths ...string) (Audit, error) {
 	a := newAudit()
 	z, e := zip.OpenReader(input)
 	if e != nil {
@@ -296,6 +312,14 @@ func TransformArchive(input, output, instance string, port int, source SystemInf
 	w := zip.NewWriter(out)
 	for _, f := range z.File {
 		if f.FileInfo().IsDir() {
+			continue
+		}
+		// Curated plugin payload is restored and audited separately, never executed from the source.
+		if strings.HasPrefix(f.Name, "Mutti/IntroSkipper/") {
+			name := strings.TrimPrefix(f.Name, "Mutti/IntroSkipper/")
+			if name != "snapshot.json" && !introFiles[name] {
+				return a, errors.New("Unbekannte Plugin-Sicherungsdatei.")
+			}
 			continue
 		}
 		// Platform/database/log destinations are controlled by Mutti. No imported
@@ -340,7 +364,11 @@ func TransformArchive(input, output, instance string, port int, source SystemInf
 						overrides = map[string]string{"IsStartupWizardCompleted": "true", "CachePath": filepath.Join(instance, "cache"), "MetadataPath": filepath.Join(instance, "data", "metadata"), "EnableAutoUpdate": "false", "EnableAutomaticRestart": "false"}
 					}
 					if f.Name == "Config/encoding.xml" {
-						overrides = map[string]string{"EncoderAppPath": "", "EncoderAppPathDisplay": "", "TranscodingTempPath": filepath.Join(instance, "cache", "transcodes"), "HardwareAccelerationType": ""}
+						ffmpeg := ""
+						if len(ffmpegPaths) > 0 {
+							ffmpeg = ffmpegPaths[0]
+						}
+						overrides = map[string]string{"EncoderAppPath": ffmpeg, "EncoderAppPathDisplay": ffmpeg, "TranscodingTempPath": filepath.Join(instance, "cache", "transcodes"), "HardwareAccelerationType": "none"}
 					}
 					data, err = rewriteXML(data, mappings, overrides)
 				}

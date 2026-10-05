@@ -305,19 +305,16 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 			return errors.New("Die Quelle und Mutti müssen getrennte Datenordner verwenden.")
 		}
 	}
-	// This preview must not silently lose plugin functionality or external login.
-	var plugins []struct {
-		Name         string
-		CanUninstall bool
-		Status       string
-	}
+	var plugins []PluginInfo
 	if e = s.API.call(ctx, "GET", "/Plugins", nil, &plugins); e != nil {
 		return e
 	}
-	for _, p := range plugins {
-		if p.CanUninstall && p.Status != "Disabled" && p.Name != "Mutti Export" {
-			return fmt.Errorf("Das zusätzliche Plugin „%s“ benötigt eine geprüfte Übernahme. Der Import wurde vor der Änderung gestoppt.", p.Name)
-		}
+	hasIntro, e := qualifyPlugins(plugins)
+	if e != nil {
+		return e
+	}
+	if hasIntro && m.Options.IntroSkipper == "" {
+		return errors.New("Für Intro Skipper bitte das vollständige Mutti-Paket verwenden.")
 	}
 	for _, library := range s.Libraries {
 		for _, location := range library.Locations {
@@ -346,13 +343,20 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if e != nil {
 		return e
 	}
+	var intro introSnapshot
+	if hasIntro {
+		intro, e = m.Options.sourceIntro(ctx, s, archive, filepath.Join(instance, "intro-source"))
+		if e != nil {
+			return e
+		}
+	}
 	m.setPhase("importing", "Bibliotheken, Benutzer und Wiedergabestand werden übernommen …")
 	port, e := freePort()
 	if e != nil {
 		return e
 	}
 	prepared := filepath.Join(instance, "prepared.zip")
-	audit, e := TransformArchive(archive, prepared, instance, port, s.Info, input.Mappings)
+	audit, e := TransformArchive(archive, prepared, instance, port, s.Info, input.Mappings, m.Options.FFmpeg)
 	if e != nil {
 		return e
 	}
@@ -383,6 +387,13 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if e != nil {
 		return e
 	}
+	var expectedIntro map[string]string
+	if hasIntro {
+		expectedIntro, e = restoreIntro(intro, instance, input.Mappings)
+		if e != nil {
+			return e
+		}
+	}
 	p, e := validationOptions.startServer(instance, port, fmt.Sprintf("127.0.0.1:%d", port), prepared, true)
 	if e != nil {
 		return e
@@ -402,6 +413,11 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 		return errors.New("Der bestehende Benutzerzugang funktioniert in der importierten Instanz nicht. Es wurde nicht umgeschaltet.")
 	}
 	defer staged.logout()
+	if m.Options.IntroSkipper != "" {
+		if e = verifyIntroLoaded(ctx, staged); e != nil {
+			return e
+		}
+	}
 	var libraries []Library
 	if e = staged.call(ctx, "GET", "/Library/VirtualFolders", nil, &libraries); e != nil {
 		return e
@@ -428,6 +444,15 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	}
 	staged.logout()
 	p.stop()
+	if hasIntro {
+		restored, err := m.Options.snapshotIntro(ctx, filepath.Join(instance, "data"), filepath.Join(instance, "intro-verified"))
+		if err != nil {
+			return err
+		}
+		if e = compareIntro(expectedIntro, restored.Hashes, false); e != nil {
+			return e
+		}
+	}
 	// Refuse activation if the source changed while the snapshot was checked.
 	// This catches new playback, favorites, settings and library changes.
 	m.setPhase("verifying", "Jellyfin wird abschließend auf Änderungen geprüft …")
@@ -441,8 +466,17 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if e != nil {
 		return e
 	}
+	if hasIntro {
+		latestIntro, err := m.Options.sourceIntro(ctx, s, finalArchive, filepath.Join(instance, "intro-final"))
+		if err != nil {
+			return err
+		}
+		if e = compareIntro(intro.Hashes, latestIntro.Hashes, true); e != nil {
+			return e
+		}
+	}
 	finalPrepared := filepath.Join(instance, "source-final.zip")
-	latest, e := TransformArchive(finalArchive, finalPrepared, instance, port, s.Info, input.Mappings)
+	latest, e := TransformArchive(finalArchive, finalPrepared, instance, port, s.Info, input.Mappings, m.Options.FFmpeg)
 	if e != nil {
 		return e
 	}
@@ -467,6 +501,13 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 		}
 	}
 	report := Report{Source: s.Info.ServerName, Users: audit.Counts["Users"], Libraries: len(libraries), Items: audit.Counts["BaseItems"], UserData: audit.Counts["UserData"], Instance: id, Verified: true, Finished: time.Now(), Notes: []string{"Benutzerzugänge, Rechte, Bibliotheken und Wiedergabestand wurden verglichen.", "Alte Gerätesitzungen und API-Schlüssel werden nicht übernommen; Geräte neu koppeln.", "Netzwerkzugang und Transcoding sind auf Mutti angepasst. Hardwarebeschleunigung bei Bedarf erneut wählen.", "Jellyfin bleibt erhalten. Ab jetzt bitte Mutti verwenden; spätere Änderungen auf Jellyfin werden nicht synchronisiert."}}
+	if m.Options.IntroSkipper != "" {
+		note := "Intro Skipper ist enthalten und erkennt künftig Intros und Abspann."
+		if hasIntro {
+			note = "Intro Skipper einschließlich Einstellungen und vorhandener Analysedaten wurde geprüft übernommen."
+		}
+		report.Notes = append(report.Notes, note)
+	}
 	b, _ := json.Marshal(report)
 	if e = privateWrite(filepath.Join(instance, "report.json"), b); e != nil {
 		return e

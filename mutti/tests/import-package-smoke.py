@@ -24,6 +24,7 @@ try:
         time.sleep(1)
     else:raise AssertionError('manager did not become ready')
     assert not state['setupComplete'] and not state['newSetup']
+    assert (config/'data/plugins/Intro Skipper_12.0.4.0/IntroSkipper.dll').is_file()
     with request(28594,'/') as response:assert b'Jellyfin' in response.read()
     with request(28597,'/System/Info/Public') as response:assert not json.load(response)['StartupWizardCompleted']
     for headers in ({'Host':'attacker.example'},{'Origin':'https://attacker.example'}):

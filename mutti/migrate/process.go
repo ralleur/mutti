@@ -20,6 +20,7 @@ import (
 type Options struct {
 	Root, Server, Web, FFmpeg, Connect, Listen, Origin, Backend, TargetOrigin, ConnectListen, ConnectOrigin, Bind string
 	Container                                                                                                     bool
+	IntroSkipper                                                                                                  string
 	NativeOwnerToken                                                                                              string `json:"-"` // Private parent pipe, never an HTTP configuration option.
 }
 type process struct {
@@ -139,7 +140,26 @@ func cleanServerEnvironment(origin string, container bool) []string {
 	return append(out, "DOTNET_CLI_TELEMETRY_OPTOUT=1", "MUTTI_LOCAL_ONLY="+localOnly, "MUTTI_PREVIEW_ORIGIN="+origin)
 }
 func (o Options) startServer(root string, port int, host, archive string, validation bool) (*process, error) {
+	if e := o.installIntro(root); e != nil {
+		return nil, e
+	}
 	if e := configInstance(root, port, o.Bind); e != nil {
+		return nil, e
+	}
+	// Intro Skipper reads the configured path during construction, before the
+	// server applies its command-line FFmpeg override. Keep both on our binary.
+	encodingPath := filepath.Join(root, "config", "encoding.xml")
+	encoding, e := os.ReadFile(encodingPath)
+	if os.IsNotExist(e) {
+		encoding = []byte("<EncodingOptions></EncodingOptions>")
+	} else if e != nil {
+		return nil, e
+	}
+	encoding, e = rewriteXML(encoding, nil, map[string]string{"EncoderAppPath": o.FFmpeg, "EncoderAppPathDisplay": o.FFmpeg})
+	if e != nil {
+		return nil, e
+	}
+	if e = privateWrite(encodingPath, encoding); e != nil {
 		return nil, e
 	}
 	args := []string{"--datadir", filepath.Join(root, "data"), "--configdir", filepath.Join(root, "config"), "--cachedir", filepath.Join(root, "cache"), "--logdir", filepath.Join(root, "logs"), "--webdir", o.Web, "--ffmpeg", o.FFmpeg, "--package-name", "mutti-preview"}

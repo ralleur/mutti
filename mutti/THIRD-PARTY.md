@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | Jellyfin Server | v12.1, `ee91c75e777da41a9c4f4855e70adc604fbf2ef8` | Retained GPL and file-specific notices; root LICENSE and original contributors retained. |
 | Jellyfin Web | v12.1, `fae41f33eb7cd636a9ef68984adb82bb247a6e1b` plus pinned Mutti commit | GPL-2.0-or-later, LICENSE and UPSTREAM.md retained. |
+| Intro Skipper | 12.0.4.0, `6e0cb179007ac4c16cd9f358e9a617e791e9bf06`, official DLL | GPL-3.0-only. Unmodified plugin; license and matching source archive included in `intro-skipper/`. Hashes in components.lock.json. |
 | .NET | SDK 10.0.401; self-contained runtime | MIT and third-party notices supplied with runtime; inspect publish output. |
 | Jellyfin FFmpeg | v8.1.3-1 on Mac; pinned upstream image on Docker | GPL build. Full matching source, build configuration and external-library sources required before redistributing a release. |
 | Sora | Copied from approved kurtz font assets | SIL Open Font License 1.1, bundled next to fonts. |
@@ -24,3 +25,12 @@ Sora is served locally, with its OFL in `mutti/connect/Sora-OFL.txt`.
 Pion's transitive TURN package is compiled as part of ICE; no TURN server is
 configured or instantiated, and relay candidates are rejected. A complete
 redistributable license/source bundle remains a release gate.
+
+## Curated Intro Skipper
+
+[Upstream](https://github.com/intro-skipper/intro-skipper/tree/6e0cb179007ac4c16cd9f358e9a617e791e9bf06)
+remains unmodified. The reproducible fetch script verifies release ZIP, DLL and
+matching source archive independently. The GPL-3.0-only plugin keeps its own
+copyright/license; Mutti's bridge/snapshot utility remains GPL-2.0-or-later.
+The official plugin uses the server's existing Jellyfin/.NET/SQLite runtime;
+its embedded UI and source notices travel with the original DLL/source archive.

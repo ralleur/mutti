@@ -25,6 +25,9 @@ ARG TARGETARCH
 WORKDIR /migrate
 COPY mutti/migrate/ .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath -o /out/mutti-migrate ./cmd/mutti-migrate
+COPY mutti/packaging/fetch-intro-skipper.go /fetch-intro-skipper.go
+COPY mutti/components.lock.json /components.lock.json
+RUN go run /fetch-intro-skipper.go /components.lock.json /out/intro-skipper
 
 FROM jellyfin/jellyfin:12.1@sha256:78d3ea1207d1322471fcac39a614f004f2ccf7e878f95ab2977d752f07e4dd7e
 LABEL org.opencontainers.image.title="Mutti development preview" \
@@ -34,6 +37,7 @@ COPY --from=server-build /out /jellyfin/
 COPY --from=web-build /web/dist /jellyfin/jellyfin-web/
 COPY --from=connect-build /out/mutti-connect /mutti/connect
 COPY --from=migrate-build /out/mutti-migrate /mutti/migrate
+COPY --from=migrate-build /out/intro-skipper /mutti/intro-skipper
 COPY mutti/packaging/docker/entrypoint.sh /mutti-entrypoint.sh
 COPY mutti/components.lock.json mutti/THIRD-PARTY.md /mutti/
 USER 1000:1000

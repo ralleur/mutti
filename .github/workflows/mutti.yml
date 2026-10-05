@@ -14,7 +14,7 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
           dotnet-version: 10.0.401
-      - run: dotnet test tests/Jellyfin.Server.Tests/Jellyfin.Server.Tests.csproj --filter FullyQualifiedName~PreviewBoundary -c Release
+      - run: dotnet test tests/Jellyfin.Server.Tests/Jellyfin.Server.Tests.csproj --filter FullyQualifiedName~Mutti -c Release
   mac-shell:
     runs-on: macos-latest
     steps:

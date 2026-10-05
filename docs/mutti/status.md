@@ -123,3 +123,22 @@ der native Wechsel-Dialog und sein Abbruch wurden geprüft. Danach bleibt der
 Manager im Zustand `idle` auf dem bisherigen Datenordner. Die echte Bibliothek
 wurde nicht importiert. Das neu gebaute Docker-Paket besteht den Entrypoint-Test
 inklusive verweigerter nativer Berechtigung für Browseranfragen.
+
+### Intro Skipper als Standard (MK-006)
+
+Intro Skipper 12.0.4.0 gehört zum Mac- und Docker-Paket und wird bei
+neuer Einrichtung sowie Import automatisch installiert. Vorhandene Daten dieser
+Version werden ohne Plugin-Rückfrage über konsistente SQLite-Snapshots übernommen:
+Konfiguration, Ausschlüsse, Segmente und Analysecache. Die Original-DLL wird aus
+dem offiziellen Release mit SHA-256-Prüfung paketiert, einschließlich passendem
+Quellarchiv und GPL-Lizenz. Der Exporthelfer 0.1.1.0 enthält dieselben Zusatzdaten.
+
+Mac- und Linux-Synthetik: vollständiger Umzug mit vorhandenen Einstellungen und
+Sprungmarken, erweiterter Export samt Einmaltickets sowie Neustart bestanden.
+Quelle ohne Plugin ebenfalls auf dem Mac geprüft. Die Prüfung fordert den
+FFmpeg-Funktionsstatus „okay“ des Plugins, nicht nur seinen Installationsstatus.
+14 .NET-Tests einschließlich konsistenter WAL-Sicherung, Quellen-Erhalt und
+Pfadgrenzen, drei Swift-Tests sowie Go-Race-Tests/statische Analyse bestanden.
+Der Restore setzt Hardwarebeschleunigung korrekt auf `none` und bewahrt den
+Paket-FFmpeg-Pfad beim internen Neustart. Andere aktive Plugins oder
+unqualifizierte Intro-Skipper-Versionen werden weiterhin erkannt.

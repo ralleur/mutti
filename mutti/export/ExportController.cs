@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using System.IO.Compression;
 using Jellyfin.Api.Extensions;
 using Jellyfin.Server.Implementations.SystemBackupService;
 using MediaBrowser.Common.Api;
@@ -46,11 +47,35 @@ public sealed class ExportController(IBackupService backups, IApplicationPaths p
         try
         {
             if (Jobs.Count >= 4) return Conflict("Finish the previous export first.");
+            // Upstream backup names have one-second resolution. Never reuse an
+            // archive that already contains a previous transfer's plugin payload.
+            var waitUntil = DateTime.UtcNow.AddSeconds(5);
+            while (System.IO.File.Exists(Path.Combine(paths.BackupPath, $"jellyfin-backup-{DateTime.Now:yyyyMMddHHmmss}.zip")))
+            {
+                if (DateTime.UtcNow >= waitUntil) return Conflict("Backup creation is busy. Please retry.");
+                await Task.Delay(100, HttpContext.RequestAborted);
+            }
             var manifest = await backups.CreateBackupAsync(new BackupOptionsDto { Database = true, Metadata = true, Subtitles = true, Trickplay = true });
             var archive = Path.GetFullPath(manifest.Path);
             var folder = Path.GetFullPath(paths.BackupPath) + Path.DirectorySeparatorChar;
             if (!archive.StartsWith(folder, StringComparison.Ordinal) || !System.IO.File.Exists(archive)) return StatusCode(500);
             if (!OperatingSystem.IsWindows()) System.IO.File.SetUnixFileMode(archive, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            // Plugin data is outside Jellyfin's standard backup. Snapshot its SQLite
+            // databases through the online backup API before appending a fixed payload.
+            var intro = Path.Combine(paths.BackupPath, ".mutti-intro-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                Mutti.IntroSkipper.IntroSnapshot.Create(paths.ProgramDataPath, intro);
+                await using var zip = await ZipFile.OpenAsync(archive, ZipArchiveMode.Update, HttpContext.RequestAborted);
+                var snapshot = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                    await System.IO.File.ReadAllTextAsync(Path.Combine(intro, "snapshot.json"), HttpContext.RequestAborted))!;
+                foreach (var name in snapshot.Keys.Append("snapshot.json"))
+                    await zip.CreateEntryFromFileAsync(Path.Combine(intro, name), "Mutti/IntroSkipper/" + name, HttpContext.RequestAborted);
+            }
+            finally
+            {
+                if (Directory.Exists(intro)) Directory.Delete(intro, recursive: true);
+            }
             if (HttpContext.RequestAborted.IsCancellationRequested) return StatusCode(499);
             var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(24));
             var secret = RandomNumberGenerator.GetBytes(32);

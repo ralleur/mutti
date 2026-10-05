@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <Compile Include="..\SharedVersion.cs" />
+    <Compile Include="../mutti/intro-skipper/IntroSnapshot.cs" Link="Mutti/IntroSnapshot.cs" />
   </ItemGroup>
 
   <ItemGroup>
