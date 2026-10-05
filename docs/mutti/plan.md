@@ -452,6 +452,14 @@ SVG-Quellen, exportierte Icons, Hell-/Dunkelvarianten, Schriftlizenzen und
 reproduzierbare Exportbefehle. Tastatur, VoiceOver, Vergrößerung, Kontraste und
 Statusdarstellung ohne alleinige Farbcodierung gehören zur UI-Prüfung.
 
+### 7.1 — UX3-Mutti: Serververwaltung nach Einrichtung (MK-008)
+
+Mit dem ausdrücklichen Folgeauftrag vom 05.10.2026 wird die eigene
+[Serververwaltung](management.md) jetzt umgesetzt: Navigation und Betriebsdaten,
+Bibliotheken und Geräte auf vorhandenen APIs; zukünftige Module als deutlich
+gekennzeichnete, nicht persistente Vorschauen. Die vollständige Modulanbindung
+bleibt im gemeinsamen Ausbauplan. Mac und Docker werden gemeinsam geprüft.
+
 ## 8. Installation, Betrieb und bestehende Server
 
 **Mac-App:** eine signierte und notarisierte App mit gebündelter

@@ -170,6 +170,15 @@ func (o Options) startServer(root string, port int, host, archive string, valida
 	env := cleanServerEnvironment("http://"+host, o.Container && !validation)
 	if validation {
 		env = append(env, "MUTTI_IMPORT_VALIDATION=1")
+	} else {
+		env = append(env, "MUTTI_MANAGEMENT_ORIGIN="+o.Origin)
+		if o.Connect != "" {
+			_, connectPort, err := net.SplitHostPort(o.ConnectListen)
+			if err != nil {
+				return nil, errors.New("Ungültiger lokaler Kopplungszugang.")
+			}
+			env = append(env, "MUTTI_CONNECT_ADMIN_ORIGIN="+o.ConnectOrigin, "MUTTI_CONNECT_ADMIN_PORT="+connectPort)
+		}
 	}
 	if validation && runtime.GOOS == "darwin" {
 		// The staged server can read the library but cannot write to source media,

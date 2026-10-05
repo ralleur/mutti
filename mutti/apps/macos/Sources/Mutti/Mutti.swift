@@ -49,6 +49,7 @@ final class ServerController: ObservableObject {
     @Published var error: String?
     @Published var starting = false
     let address = URL(string: "http://127.0.0.1:18596/web/")!
+    let managementAddress = URL(string: "http://127.0.0.1:18596/web/#/mutti")!
     let onboardingAddress = URL(string: "http://127.0.0.1:18594/")!
     let connectAddress = URL(string: "http://127.0.0.1:18595/")!
     private var child: Process?
@@ -183,10 +184,10 @@ final class ServerController: ObservableObject {
 
 struct ContentView: View {
     @ObservedObject var server: ServerController
-    @State private var devices = false
     @State private var settings = false
     var body: some View {
         VStack(spacing: 0) {
+            if server.showOnboarding || !server.setupCompleted {
             HStack(spacing: 12) {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 24, height: 24).accessibilityHidden(true)
                 if let url = Bundle.main.url(forResource: "wordmark-light", withExtension: "png"), let image = NSImage(contentsOf: url) {
@@ -194,19 +195,19 @@ struct ContentView: View {
                 } else { Text("Mutti").font(.headline) }
                 Spacer()
                 if server.ready && server.setupCompleted {
-                    Button(devices || server.showOnboarding ? "Bibliothek" : "Geräte koppeln") {
-                        if server.showOnboarding { server.showOnboarding = false; devices = false } else { devices.toggle() }
-                    }
-                    if !server.showOnboarding { Button("Jellyfin übernehmen") { devices = false; server.importEntry = true; server.showOnboarding = true } }
-                    Button("Fernzugriff") { settings = true }
+                    Button("Zur Übersicht") { server.showOnboarding = false }
                 }
                 Label(LocalizedStringKey(server.ready ? (server.setupCompleted ? "Auf diesem Mac bereit" : "Einrichtung läuft") : "Lokale Vorschau"), systemImage: server.ready && server.setupCompleted ? "checkmark.circle.fill" : "circle").font(.caption)
                 Button { if let root = server.dataDirectory { NSWorkspace.shared.open(root.appending(path: "logs")) } } label: { Image(systemName: "doc.text.magnifyingglass") }.help("Lokale Protokolle öffnen")
             }.padding().background(Color(red: 31/255, green: 31/255, blue: 31/255)).foregroundStyle(Color(red: 250/255, green: 248/255, blue: 241/255))
+            }
             if server.ready {
                 if let error = server.error { Text(error).padding().foregroundStyle(.orange) }
-                let destination = devices ? server.connectAddress : (server.showOnboarding ? (server.importEntry ? URL(string: "http://127.0.0.1:18594/#import")! : server.onboardingAddress) : server.address)
-                AdminView(address: destination, nativeImportClient: server.nativeImportClient).id(destination)
+                let destination = server.showOnboarding ? (server.importEntry ? URL(string: "http://127.0.0.1:18594/#import")! : server.onboardingAddress) : (server.setupCompleted ? server.managementAddress : server.address)
+                AdminView(address: destination, nativeImportClient: server.nativeImportClient, onNavigate: { action in
+                    if action == "import" { server.importEntry = true; server.showOnboarding = true }
+                    if action == "remote" { settings = true }
+                }).id(destination)
             }
             else {
                 VStack(spacing: 24) {
@@ -222,7 +223,7 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .sheet(isPresented: $settings) { ConnectSettingsView(server: server) }
         .onChange(of: server.setupCompleted) { _, completed in
-            if !completed { devices = false; settings = false }
+            if !completed { settings = false }
         }
     }
 }
@@ -230,11 +231,13 @@ struct ContentView: View {
 struct AdminView: NSViewRepresentable {
     let address: URL
     let nativeImportClient: NativeImportClient?
-    func makeCoordinator() -> Coordinator { Coordinator(address: address, nativeImportClient: nativeImportClient) }
+    var onNavigate: (String) -> Void = { _ in }
+    func makeCoordinator() -> Coordinator { Coordinator(address: address, nativeImportClient: nativeImportClient, onNavigate: onNavigate) }
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "muttiFolder")
         configuration.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "muttiImport")
+        configuration.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page, name: "muttiNavigate")
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator; view.load(URLRequest(url: address)); return view
     }
@@ -242,7 +245,10 @@ struct AdminView: NSViewRepresentable {
     @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandlerWithReply {
         let address: URL
         let nativeImportClient: NativeImportClient?
-        init(address: URL, nativeImportClient: NativeImportClient?) { self.address = address; self.nativeImportClient = nativeImportClient }
+        let onNavigate: (String) -> Void
+        init(address: URL, nativeImportClient: NativeImportClient?, onNavigate: @escaping (String) -> Void) {
+            self.address = address; self.nativeImportClient = nativeImportClient; self.onNavigate = onNavigate
+        }
         func isLocal(_ url: URL?) -> Bool {
             guard let url, url.scheme == "http", url.host == "127.0.0.1", url.user == nil else { return false }
             // Onboarding can enter the Jellyfin setup wizard; pairing stays in its own origin.
@@ -253,6 +259,16 @@ struct AdminView: NSViewRepresentable {
             else { decisionHandler(.cancel); if action.navigationType == .linkActivated, let url = action.request.url, url.scheme == "https" { NSWorkspace.shared.open(url) } }
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage, replyHandler: @escaping @MainActor @Sendable (Any?, String?) -> Void) {
+            if message.name == "muttiNavigate" {
+                guard message.frameInfo.isMainFrame, let frame = message.frameInfo.request.url,
+                      frame.scheme == "http", frame.host == "127.0.0.1", frame.port == 18596,
+                      frame.user == nil, ["/web/", "/web/index.html"].contains(frame.path),
+                      let visible = message.webView?.url, visible.scheme == "http", visible.host == "127.0.0.1", visible.port == 18596,
+                      visible.fragment?.hasPrefix("/mutti") == true,
+                      let body = message.body as? [String: String], let action = body["action"], ["import", "remote"].contains(action)
+                else { replyHandler(nil, "Navigation is unavailable for this page."); return }
+                onNavigate(action); replyHandler(true, nil); return
+            }
             if message.name == "muttiImport" {
                 guard NativeImportClient.accepts(message.frameInfo.request.url, isMainFrame: message.frameInfo.isMainFrame),
                       NativeImportClient.accepts(message.webView?.url, isMainFrame: true),

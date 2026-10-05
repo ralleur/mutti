@@ -10,7 +10,7 @@
   },
   "web": {
     "repository": "https://github.com/ralleur/mutti-web.git",
-    "commit": "6a67f6eef73abd44b661bdf6cceb877b1ed39381"
+    "commit": "d551baf420002fc1b0f79ed6116d3b6f8457c587"
   },
   "tools": {
     "dotnetSDK": "10.0.401",
