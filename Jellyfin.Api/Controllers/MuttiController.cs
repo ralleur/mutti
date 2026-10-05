@@ -38,15 +38,15 @@ public class MuttiController : BaseJellyfinApiController
     }
 
     /// <summary>Forwards an allowlisted owner action to this package's local Connect service.</summary>
-    /// <param name="action">An explicitly supported Connect action.</param>
+    /// <param name="operation">An explicitly supported Connect action.</param>
     /// <param name="body">The action's JSON payload.</param>
     /// <param name="cancellationToken">Request cancellation.</param>
     /// <returns>The local Connect result, without creating another identity or credential.</returns>
-    [HttpPost("Connect/{action}")]
+    [HttpPost("Connect/{operation}")]
     [RequestSizeLimit(16384)]
-    public async Task<ActionResult> Connect(string action, [FromBody] JsonElement body, CancellationToken cancellationToken)
+    public async Task<ActionResult> Connect(string operation, [FromBody] JsonElement body, CancellationToken cancellationToken)
     {
-        if (action is not ("state" or "invite" or "qr" or "approve" or "revoke" or "profile"))
+        if (operation is not ("state" or "invite" or "qr" or "approve" or "revoke" or "profile"))
         {
             return NotFound();
         }
@@ -64,7 +64,7 @@ public class MuttiController : BaseJellyfinApiController
         }
 
         // The browser can never supply a target address or a route outside this list.
-        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(target, action));
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(target, operation));
         request.Headers.Host = new Uri(Environment.GetEnvironmentVariable("MUTTI_CONNECT_ADMIN_ORIGIN")!).Authority;
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Content = new StringContent(body.GetRawText(), Encoding.UTF8, "application/json");
@@ -81,7 +81,7 @@ public class MuttiController : BaseJellyfinApiController
                 return NoContent();
             }
 
-            var type = action == "qr" && response.IsSuccessStatusCode ? "image/png" : response.Content.Headers.ContentType?.MediaType == "application/json" ? "application/json" : "text/plain; charset=utf-8";
+            var type = operation == "qr" && response.IsSuccessStatusCode ? "image/png" : response.Content.Headers.ContentType?.MediaType == "application/json" ? "application/json" : "text/plain; charset=utf-8";
             return File(bytes, type);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)

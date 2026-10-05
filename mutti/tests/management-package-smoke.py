@@ -89,8 +89,8 @@ try:
     credentials = work / 'browser-fixture.json'
     credentials.write_text(json.dumps({'username': 'Testbesitzer', 'password': password, 'url': 'http://127.0.0.1:29597/web/#/mutti'}))
     credentials.chmod(0o600)
-    check('Anonymous management and pairing are denied',
-          request('/Mutti/Management')[0] == 401 and request('/Mutti/Connect/state', {})[0] == 401)
+    anonymous = (request('/Mutti/Management')[0], request('/Mutti/Connect/state', {})[0])
+    check(f'Anonymous management and pairing are denied ({anonymous})', anonymous == (401, 401))
     management = api('/Mutti/Management', token=token)
     check('Package provides its exact onboarding origin and Connect capability',
           management == {'onboardingUrl': 'http://127.0.0.1:29594/#import', 'connectAvailable': True})
