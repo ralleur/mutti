@@ -197,4 +197,13 @@ und Neustartpersistenz. Go-Race-Tests/statische Analyse prüfen Administrator- u
 Dateigrenzen, Konfigurationserhalt, fremde Identität, Wiederaufnahme und fehlenden
 Neustartnachweis. Drei Swift-Tests bestanden. Die Erkennung des vorhandenen
 Owner-Dienstes wurde ausschließlich lesend geprüft; keine echte Quellkonfiguration
-geändert und kein echter Import gestartet. Paketabnahme folgt unten.
+geändert und kein echter Import gestartet.
+
+Paketabnahme: Docker arm64 aus `27a1563a82` besteht den vollständigen synthetischen
+Import mit automatischer API-Umstellung und Neustart sowie den Entrypoint-/Host-/
+Origin-/Setup-Test. Mac arm64 aus `8c08c7c4d7` enthält denselben Importkern und die
+zusätzliche Korrektur einer falschen Portbelegt-Meldung beim schnellen Wiederöffnen
+(`TIME_WAIT`). Vollständiger Build aus sauberen Quellen, Ad-hoc-Signatur und drei
+Swift-Tests bestanden; aktualisierte App unter `build/connect-preview/Mutti.app`
+bereitgestellt. Der ursprüngliche Quelldienst wurde durch den Agenten nicht neu
+gestartet; die tatsächliche Migration startet der Owner über den Importdialog.
