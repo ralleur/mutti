@@ -100,8 +100,8 @@ Finale Paketprüfung: Docker-Entrypoint mit ausschließlich localhost-veröffent
 Verwaltungsports, Browser-Einstieg, Host-/Origin-Abweisung und gesperrter Kopplung
 vor Setup bestanden. Profilbild, Anzeigeeinstellungen und Neustartpersistenz
 bestehen auf Mac und Linux. Bestehende .NET-Grenztests: 12/12 bestanden.
-Der native Testbuild aus sauberem Quellstand `755b85c5d0` ist lokal signiert und
-unter `build/connect-preview/Mutti.app` für den Owner geöffnet.
+Der erste native Testbuild aus sauberem Quellstand `755b85c5d0` wurde lokal
+signiert und für den Owner geöffnet; der nachfolgende korrigierte Stand steht unten.
 
 ### Korrektur nach dem ersten Owner-Test
 
@@ -115,3 +115,11 @@ Zielbibliothek. Quellserver und bisherige Zieldaten bleiben erhalten.
 Der vollständige synthetische Mac-Import mit bereits eingerichteter Zielinstanz
 und ohne Kenntnis ihres Passworts besteht einschließlich Datenprüfung und
 Neustart. Go-Race-Tests, Autorisierungsgrenzen und drei Swift-Tests bestehen.
+
+Aktuelles Testpaket: sauberer Quellstand `5347f116c7`, vollständiger Mac-Neubau
+mit verifizierter lokaler Signatur. `build/connect-preview/Mutti.app` ist wieder
+geöffnet. Im WKWebView erscheinen ausschließlich die Jellyfin-Zugangsfelder;
+der native Wechsel-Dialog und sein Abbruch wurden geprüft. Danach bleibt der
+Manager im Zustand `idle` auf dem bisherigen Datenordner. Die echte Bibliothek
+wurde nicht importiert. Das neu gebaute Docker-Paket besteht den Entrypoint-Test
+inklusive verweigerter nativer Berechtigung für Browseranfragen.
