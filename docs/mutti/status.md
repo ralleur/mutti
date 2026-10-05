@@ -223,3 +223,12 @@ Mit der Korrektur besteht der vollständige Mac-Import samt Sammlung/Zuordnung,
 Intro Skipper, Benutzerrechten, Wiedergabestand und Neustartpersistenz. Go-Race-
 Tests und statische Prüfung bestanden. Die echte Quelle und der fehlgeschlagene
 Importordner wurden für die Diagnose nicht verändert.
+
+Paketabnahme aus sauberem Commit `cf343d5353`: Mac vollständig gebaut und lokal
+signiert, Docker arm64 neu gebaut. Vollständiger synthetischer Linux-Import mit
+Sammlung, Intro Skipper, erhaltenen Daten und Neustart bestanden; Docker-Entrypoint
+und Zugriffsgrenzen ebenfalls. Die aktualisierte App unter
+`build/connect-preview/Mutti.app` ist geöffnet, der Importdialog erkennt die lokale
+Quelle. Der Manager steht auf `idle` mit dem bisherigen aktiven Datenordner.
+Der nächste echte Import bleibt beim Owner; keine echte Bibliothek wurde durch
+den Agenten importiert oder aktiviert.
