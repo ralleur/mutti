@@ -4,6 +4,7 @@
 """
 import argparse
 import json
+import http.client
 import os
 from pathlib import Path
 import secrets
@@ -25,6 +26,7 @@ config.mkdir(mode=0o700)
 ports = (29594, 29595, 29597)
 for port in ports:
     with socket.socket() as probe:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         probe.bind(('127.0.0.1', port))
 name = work.name
 command = ['docker', 'run', '-d', '--name', name, '--user', f'{os.getuid()}:{os.getgid()}',
@@ -113,7 +115,17 @@ try:
     check('Bridge preserves failure status and disallows arbitrary actions',
           request('/Mutti/Connect/qr', {'url': 'invalid'}, token)[0] == 400 and
           request('/Mutti/Connect/login', {}, token)[0] == 404)
-    check('Bridge bounds JSON request size', request('/Mutti/Connect/qr', {'url': 'x' * 17000}, token)[0] == 413)
+    oversized = request('/Mutti/Connect/qr', {'url': invite['url'], 'padding': 'x' * 17000}, token)[0]
+    check(f'Bridge rejects oversized otherwise-valid QR payload (HTTP {oversized})', oversized == 413)
+    chunked = http.client.HTTPConnection('127.0.0.1', 29597, timeout=15)
+    chunked.request('POST', '/Mutti/Connect/qr',
+                    body=iter([json.dumps({'url': invite['url'], 'padding': 'x' * 17000}).encode()]),
+                    headers={'Authorization': f'MediaBrowser Client="Mutti Management Test", Device="Synthetic", DeviceId="management-test", Version="0.1", Token="{token}"', 'Content-Type': 'application/json'},
+                    encode_chunked=True)
+    response = chunked.getresponse()
+    check('Chunked oversized JSON is also rejected', response.status == 413)
+    response.read()
+    chunked.close()
     for header in ({'Origin': 'https://attacker.example'}, {'Host': 'attacker.example'}):
         check('Foreign browser origin/host rejected', request('/Mutti/Management', token=token, headers=header)[0] == 403)
     viewer_password = secrets.token_urlsafe(24)

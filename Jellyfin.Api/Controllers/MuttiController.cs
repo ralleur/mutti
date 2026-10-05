@@ -39,12 +39,12 @@ public class MuttiController : BaseJellyfinApiController
 
     /// <summary>Forwards an allowlisted owner action to this package's local Connect service.</summary>
     /// <param name="operation">An explicitly supported Connect action.</param>
-    /// <param name="body">The action's JSON payload.</param>
     /// <param name="cancellationToken">Request cancellation.</param>
     /// <returns>The local Connect result, without creating another identity or credential.</returns>
     [HttpPost("Connect/{operation}")]
+    [Consumes("application/json")]
     [RequestSizeLimit(16384)]
-    public async Task<ActionResult> Connect(string operation, [FromBody] JsonElement body, CancellationToken cancellationToken)
+    public async Task<ActionResult> Connect(string operation, CancellationToken cancellationToken)
     {
         if (operation is not ("state" or "invite" or "qr" or "approve" or "revoke" or "profile"))
         {
@@ -63,13 +63,38 @@ public class MuttiController : BaseJellyfinApiController
             return Unauthorized();
         }
 
-        // The browser can never supply a target address or a route outside this list.
-        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(target, operation));
-        request.Headers.Host = new Uri(Environment.GetEnvironmentVariable("MUTTI_CONNECT_ADMIN_ORIGIN")!).Authority;
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Content = new StringContent(body.GetRawText(), Encoding.UTF8, "application/json");
+        if (Request.ContentLength > 16384)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge);
+        }
+
         try
         {
+            // Bound chunked bodies too, before parsing JSON or contacting Connect.
+            var buffer = new byte[16385];
+            var length = 0;
+            while (length < buffer.Length)
+            {
+                var read = await Request.Body.ReadAsync(buffer.AsMemory(length), cancellationToken).ConfigureAwait(false);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                length += read;
+            }
+
+            if (length > 16384)
+            {
+                return StatusCode(StatusCodes.Status413PayloadTooLarge);
+            }
+
+            using var body = JsonDocument.Parse(buffer.AsMemory(0, length));
+            // The browser can never supply a target address or a route outside this list.
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(target, operation));
+            request.Headers.Host = new Uri(Environment.GetEnvironmentVariable("MUTTI_CONNECT_ADMIN_ORIGIN")!).Authority;
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            request.Content = new StringContent(body.RootElement.GetRawText(), Encoding.UTF8, "application/json");
             using var response = await ConnectClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             // Small JSON state or a QR PNG only. Do not turn this into an arbitrary proxy.
             await response.Content.LoadIntoBufferAsync(2 * 1024 * 1024, cancellationToken).ConfigureAwait(false);
@@ -83,6 +108,14 @@ public class MuttiController : BaseJellyfinApiController
 
             var type = operation == "qr" && response.IsSuccessStatusCode ? "image/png" : response.Content.Headers.ContentType?.MediaType == "application/json" ? "application/json" : "text/plain; charset=utf-8";
             return File(bytes, type);
+        }
+        catch (BadHttpRequestException ex) when (ex.StatusCode == StatusCodes.Status413PayloadTooLarge)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge);
+        }
+        catch (JsonException)
+        {
+            return BadRequest("Ungültige Anfrage.");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
