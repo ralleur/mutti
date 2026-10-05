@@ -167,5 +167,13 @@ lesend geprüft; keine Konfiguration geändert und kein Neustart ausgelöst.
 Der bisherige Mutti-Datenstand blieb aktiv. Details: [import.md](import.md).
 
 Synthetischer vollständiger Mac-Import, Go-Race-Tests und statische Analyse sowie
-Sichtprüfung für Wartehinweis und unterbrochene Verbindung bestanden. Gemeinsame
-Paketprüfung dieses Standes wird im nächsten Eintrag festgehalten.
+Sichtprüfung für Wartehinweis und unterbrochene Verbindung bestanden.
+
+Pakete aus sauberem Commit `2124e7f499`: vollständiger Mac-Build mit verifizierter
+Ad-hoc-Signatur sowie Docker-Neubau bestanden. Vollständiger synthetischer
+Linux-Import mit Fortschrittsdaten, Intro Skipper, Datenprüfung und Neustart
+bestanden; Docker-Entrypoint-/Host-/Origin-/Setup-Grenzen ebenfalls. Die neue
+Mac-App unter `build/connect-preview/Mutti.app` wurde erst nach dem Zeitlimit
+des alten Imports ausgetauscht und gestartet. Ihre API liefert die neuen
+Fortschrittsdaten; der bisherige aktive Datenordner bleibt erhalten. Der
+Quellserver benötigt weiterhin die bewusste Sperrmodus-Korrektur und einen Neustart.
