@@ -56,7 +56,7 @@ func (f *updateFixture) populate() {
 	f.write("data/transcodes/segment.ts", "temporary")
 	f.write("cache/images/x", "cache")
 	f.write("logs/log.txt", "log")
-	f.write("connect/state.json", `{"devices":{}}`)
+	f.write("connect/connect.json", `{"devices":{}}`)
 	f.write("hub/hub.json", `{"version":1}`)
 	f.write("hub/ai/models/blobs/sha256-x", "model")
 }
@@ -94,7 +94,7 @@ func TestUpdateGuardSnapshotsBeforeNewBuildAndVerifies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"instance/config/system.xml", "instance/data/jellyfin.db", "instance/data/metadata/poster.jpg", "instance/connect/state.json", "hub/hub.json"} {
+	for _, want := range []string{"instance/config/system.xml", "instance/data/jellyfin.db", "instance/data/metadata/poster.jpg", "instance/connect/connect.json", "hub/hub.json"} {
 		if s.Hashes[want] == "" {
 			t.Errorf("missing %s", want)
 		}
@@ -320,5 +320,66 @@ func TestInterruptedSnapshotIsDiscardedOnNextStart(t *testing.T) {
 	}
 	if _, _, err := f.m.readSnapshot(f.m.State().Update.Snapshot); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Access withdrawn while the new version ran stays withdrawn after rolling
+// back; devices paired after the snapshot must pair again.
+func TestRollbackKeepsLaterRevocations(t *testing.T) {
+	f := newUpdateFixture(t)
+	f.populate()
+	f.write("connect/connect.json", `{"owner":"o","devices":{"A":{"name":"iPad"},"B":{"name":"iPhone"}}}`)
+	f.write("hub/hub.json", `{"version":1,"modules":{"documents":{"enabled":true,"grants":{"u1":true,"u2":true},"links":{"u1":{"account":"a"},"u2":{"account":"b"}}},
+		"photos":{"enabled":true,"grants":{"u1":true}}}}`)
+	_ = f.m.prepareStart()
+	f.m.verifyUpdate("12.1.0", true)
+	f.packageBuild("12.2", "commit-new")
+	if err := f.m.prepareStart(); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := f.m.State().Update.Snapshot
+	// While the new version runs: B is revoked, C paired, u2 loses documents
+	// and its link, photos is switched off.
+	f.write("connect/connect.json", `{"owner":"o","devices":{"A":{"name":"iPad"},"C":{"name":"Mac"}}}`)
+	f.write("hub/hub.json", `{"version":1,"modules":{"documents":{"enabled":true,"grants":{"u1":true,"u2":false},"links":{"u1":{"account":"a"}}},
+		"photos":{"enabled":false,"grants":{"u1":true}}}}`)
+	f.packageBuild("12.1", "commit-a")
+	if err := f.m.prepareStart(); !errors.Is(err, errUpdateBlocked) {
+		t.Fatal(err)
+	}
+	if err := f.m.rollbackUpdate(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	var connect struct {
+		Owner   string
+		Devices map[string]any
+	}
+	_ = json.Unmarshal([]byte(f.read("connect/connect.json")), &connect)
+	if connect.Owner != "o" || len(connect.Devices) != 1 || connect.Devices["A"] == nil {
+		t.Fatalf("devices after rollback %v", connect.Devices)
+	}
+	var hub struct {
+		Modules map[string]struct {
+			Enabled bool
+			Grants  map[string]bool
+			Links   map[string]any
+		}
+	}
+	_ = json.Unmarshal([]byte(f.read("hub/hub.json")), &hub)
+	docs, photos := hub.Modules["documents"], hub.Modules["photos"]
+	if !docs.Enabled || !docs.Grants["u1"] || docs.Grants["u2"] || docs.Links["u2"] != nil || docs.Links["u1"] == nil || photos.Enabled {
+		t.Fatalf("hub after rollback %+v", hub.Modules)
+	}
+	if u := f.m.State().Update; !strings.Contains(u.Message, "4 nach der Sicherung entzogene") {
+		t.Fatalf("message %q", u.Message)
+	}
+}
+
+func TestUnreadableDeviceStateFailsVerification(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, "connect"), 0700)
+	_ = os.WriteFile(filepath.Join(dir, "connect", "connect.json"), []byte("{broken"), 0600)
+	if err := checkModuleState(t.TempDir(), dir); err == nil {
+		t.Fatal("broken device state accepted")
 	}
 }

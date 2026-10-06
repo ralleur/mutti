@@ -289,7 +289,7 @@ func (m *Manager) failUpdate(u *UpdateState, reason string) {
 
 // checkModuleState makes sure module and device state still parse.
 func checkModuleState(hubDir, active string) error {
-	for _, path := range []string{filepath.Join(hubDir, "hub.json"), filepath.Join(active, "connect", "state.json")} {
+	for _, path := range []string{filepath.Join(hubDir, "hub.json"), filepath.Join(active, "connect", "connect.json")} {
 		b, err := os.ReadFile(path)
 		if os.IsNotExist(err) {
 			continue
@@ -613,6 +613,12 @@ func (m *Manager) rollbackUpdate(id string) error {
 			return errors.New("Die Wiederherstellung ist unvollständig; der vorherige Stand liegt in " + keep + ".")
 		}
 	}
+	// Access withdrawn after the snapshot stays withdrawn.
+	revoked, err := keepRevocations(filepath.Join(keep, "instance", "connect", "connect.json"), filepath.Join(active, "connect", "connect.json"),
+		filepath.Join(keep, "hub", "hub.json"), filepath.Join(m.hubDirectory(), "hub.json"))
+	if err != nil {
+		return errors.New("Entzogene Zugriffe konnten nicht übernommen werden; der vorherige Stand liegt in " + keep + ".")
+	}
 	// Downloaded models are not part of a snapshot; keep the installed ones.
 	if models := filepath.Join(keep, "hub", "ai", "models"); dirExists(models) {
 		_ = os.MkdirAll(filepath.Join(m.hubDirectory(), "ai"), 0700)
@@ -622,13 +628,111 @@ func (m *Manager) rollbackUpdate(id string) error {
 		return err
 	}
 	now := time.Now().UTC()
-	update := &UpdateState{State: "rolled_back", From: s.Version, To: current, Snapshot: id, Started: s.Created, Finished: &now,
-		Message: "Datenstand vor dem Update wiederhergestellt. Der zuvor verwendete Stand liegt in " + filepath.Base(keep) + "."}
+	message := "Datenstand vor dem Update wiederhergestellt. Der zuvor verwendete Stand liegt in " + filepath.Base(keep) + "."
+	if revoked > 0 {
+		message += fmt.Sprintf(" %d nach der Sicherung entzogene Geräte oder Freigaben bleiben entzogen; danach gekoppelte Geräte bitte neu koppeln.", revoked)
+	}
+	update := &UpdateState{State: "rolled_back", From: s.Version, To: current, Snapshot: id, Started: s.Created, Finished: &now, Message: message}
 	if err = m.writeUpdate(update); err != nil {
 		return err
 	}
 	m.setUpdate(update)
 	return nil
+}
+
+// keepRevocations applies withdrawals made after the snapshot to the
+// restored state: a paired device, a module grant, an enabled module or a
+// profile link survives a rollback only if it also exists in the state being
+// replaced. A missing or unreadable replaced state counts as withdrawn (fail
+// closed). Jellyfin's own users and sessions return to the snapshot; remote
+// access only works through a paired device. Returns the number withdrawn.
+func keepRevocations(previousConnect, restoredConnect, previousHub, restoredHub string) (int, error) {
+	n := 0
+	err := editJSON(restoredConnect, func(restored map[string]any) {
+		current := map[string]any{}
+		_ = readJSONMap(previousConnect, &current)
+		now, _ := current["devices"].(map[string]any)
+		devices, _ := restored["devices"].(map[string]any)
+		for pin := range devices {
+			if _, ok := now[pin]; !ok {
+				delete(devices, pin)
+				n++
+			}
+		}
+	})
+	if err != nil {
+		return n, err
+	}
+	err = editJSON(restoredHub, func(restored map[string]any) {
+		current := map[string]any{}
+		_ = readJSONMap(previousHub, &current)
+		nowModules, _ := current["modules"].(map[string]any)
+		modules, _ := restored["modules"].(map[string]any)
+		for name, raw := range modules {
+			module, _ := raw.(map[string]any)
+			now, _ := nowModules[name].(map[string]any)
+			if module == nil {
+				continue
+			}
+			if module["enabled"] == true && now["enabled"] != true {
+				module["enabled"] = false
+				n++
+			}
+			nowGrants, _ := now["grants"].(map[string]any)
+			grants, _ := module["grants"].(map[string]any)
+			for user, allowed := range grants {
+				if allowed == true && nowGrants[user] != true {
+					grants[user] = false
+					n++
+				}
+			}
+			nowLinks, _ := now["links"].(map[string]any)
+			links, _ := module["links"].(map[string]any)
+			for profile := range links {
+				if _, ok := nowLinks[profile]; !ok {
+					delete(links, profile)
+					n++
+				}
+			}
+		}
+	})
+	return n, err
+}
+
+func readJSONMap(path string, out *map[string]any) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, out)
+}
+
+// editJSON rewrites a private JSON file only if edit changed it. A missing
+// file has nothing to restrict.
+func editJSON(path string, edit func(map[string]any)) error {
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	v := map[string]any{}
+	if err = json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	before, _ := json.Marshal(v)
+	edit(v)
+	after, _ := json.Marshal(v)
+	if string(before) == string(after) {
+		return nil
+	}
+	out, _ := json.MarshalIndent(v, "", "  ")
+	tmp := path + ".tmp"
+	if err = os.WriteFile(tmp, out, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func dirExists(path string) bool {
