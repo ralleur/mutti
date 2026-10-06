@@ -9,18 +9,32 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 
 ## Aktuelle Übergabe und nächste Schritte
 
-Stand 06.10.2026: P0 ist als sichere Ausgangsbasis implementiert und geprüft;
-der integrierte P0–P4-Plan liegt vor. Die Änderungen liegen noch uncommittet auf
-`codex/mutti-foundation` (Basis-HEAD `f98bab2be48f326741cec1a8dbef9959ec306bdf`).
-Kein neues Paket ausgeliefert, kein Modell produktiv qualifiziert.
+Stand 06.10.2026 (abends): P0 ist committet (`750f9158a2` auf
+`codex/mutti-foundation`). Die parallele Harness-v4/v5-Arbeit liegt dort weiter
+uncommittet im Arbeitsbaum der anderen Session. Kein neues Paket ausgeliefert,
+kein Modell produktiv qualifiziert.
 
-Nächster Umsetzungsschritt bei einem entsprechenden Fortsetzungsauftrag:
-**P1 — gemeinsamer Inhaltsweg**. Zuerst bestehende Adapter-DTOs gegen ContentRef-,
-Rechte- und Quellenvertrag abgleichen und das kleinste additive Such-/Referenz-
-Inkrement festlegen; anschließend mit zwei synthetischen Profilen prüfen.
-Manuelle Suche bleibt unabhängig von KI. Positive KI-E2E benötigt zusätzlich
-P2-Qualifikation; Runtime-Attestation und vertrauenswürdige Evidenzübernahme
-bleiben offen. Vollständige Paket-, native Geräte-, NAS- und WAN-Abnahmen fehlen.
+**P1 — gemeinsamer Inhaltsweg: Hub implementiert und geprüft, Client gebaut,
+native Laufzeitabnahme offen.** Branch `codex/mutti-p1-content` (Worktree
+`/Users/ai/workspace/mutti-p1`). Der Hub umfasst ContentRef mit persistiertem
+ID-Index, föderierte Suche `content/search` mit gebundenen Cursorn und
+ehrlichem `partial`, Öffnen mit Revisionsstatus und Objekt-Nachprüfung im
+Medienstrom, `content/jobs`, Quellen-Provenienz, Rücknahme widerrufener
+Quellen aus der Modellhistorie sowie ein dauerhaftes Aktionsjournal. In kurtz
+gibt es die Ansicht „Alles“ mit gemeinsamer Suche und Aufträgen; Fotos- und
+Dokumentsuche laufen über denselben Weg (Änderungen uncommittet in
+`vela-swiftfin`, Branch `codex/rebrand-kurtz`). Owner-Entscheidungen dazu sind in
+[plan.md](plan.md#offene-entscheidungen-vor-jeweiliger-umsetzung) festgehalten,
+Prüfungen und Grenzen im [P1-Nachweis](evidence/p1-2026-10-06.md); den
+Vertragsnachtrag enthält [contracts.md](contracts.md).
+
+Nächste Schritte P1: Mac-Paket mit neuem Hub bauen; `module-package-smoke.py`
+um einen P1-Durchgang ohne positive KI ergänzen (KI-Sperre erwartet); mit
+`--keep` kurtz im Simulator koppeln und „Alles“, Filter, Öffnen, Teilausfall und
+Rechteentzug bedienen; anschließend dasselbe auf Docker/NAS. Danach P1-Branch
+reviewen und in `codex/mutti-foundation` zusammenführen (Konfliktstellen mit
+der Harness-Arbeit: `tools.go`, `hub_test.go`). Positive KI-E2E bleibt an P2
+gebunden.
 
 **Modellfreigabe v4, 06.10.2026 (P2-Vorarbeit, abgeschlossen als Messung):**
 Nutzerauftrag „Werkzeuge/Harness verbessern, dann mit neuem ungesehenem Satz

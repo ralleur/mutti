@@ -75,6 +75,20 @@ retain their source dependencies; every factual amount must have evidence.
 Current Q markers are a useful starting point but lack full revision/locator
 semantics. Existing response DTOs remain compatible until an additive migration.
 
+**P1 implementation (2026-10-06):** `content-ids.json` maps random 32-hex
+content IDs to (area, backend instance, object). `muttiId`, `mediaInstance` and
+a per-module `instance` live in `hub.json`; re-pointing a module to another
+service rotates its instance, so earlier IDs and sources stop resolving.
+Revisions are hashes of Jellyfin `Etag`, Immich `updatedAt` and Paperless
+`modified`; `null` when absent. Sources touched by a run carry `content`,
+`retrieved` and `locator` (`scope: object` — no page/time accuracy yet).
+`GET ai/sources/{conversation}/{ref}` re-authorizes and adds `status`
+(current, changed, unknown) plus the current item. Answers whose touched or
+cited sources are no longer authorized (or not verifiable) are replaced by a
+neutral placeholder in model history. The media area keeps the Jellyfin item ID
+as `media.itemId` so the native player opens it (initial mapping as allowed
+above); photo/document items carry the existing profile-visible DTOs.
+
 ## Federated search
 
 `SearchRequest`: query, content-kind/date filters, bounded page size and opaque
@@ -86,6 +100,25 @@ Do not compare unrelated relevance scores directly; start with deterministic
 per-kind groups/date ordering and explicit coverage. Deduplicate only with
 proven identity. Initial implementation is federation, not a new shared index.
 Manual search remains usable independently of model qualification.
+
+**P1 implementation:** `GET /mutti/hub/v1/content/search?q=&kinds=&from=&to=&size=&cursor=`
+(kinds: movie, series, photo, video, document; dates are inclusive
+`YYYY-MM-DD` on premiere/taken/created date). Areas `media`, `photos`,
+`documents` are grouped in that order; inside a group the backend's order.
+Area states: `searched`, `unavailable` (makes the page `partial`) and
+`not_available` (module not granted/configured; does not reduce completeness).
+Cursors are HMAC-signed with a per-process key, expire after 30 minutes and
+bind query, profile and rights revision (hash of Jellyfin policy, device,
+module state, grant, link and instance); mismatch is HTTP 409
+`cursor_invalid`. No counts are returned. `GET content/items/{id}` re-
+authorizes with the caller's backend account (`?revision=` adds
+`revisionStatus`); `GET content/items/{id}/{thumbnail|preview|original|video}`
+streams photos/documents and re-checks the object every four seconds, ending
+the transfer when the backend revokes it. `GET content/jobs` lists the
+profile's AI runs, document imports and journaled actions. Capabilities expose
+a `content` module (search, open, jobs) independent of AI qualification.
+Sharing in P1 is exactly what each backend shows the profile's own account; no
+Mutti-level household or collection model (open decision 3 unchanged).
 
 ## Action and operation
 
@@ -103,9 +136,17 @@ across independent services are not promised without backend idempotency.
 An old proposal without qualification provenance cannot acquire a new grant.
 Manual user operations are outside the model gate but retain normal rights.
 
-This is the target action protocol. Current favorite execution has a per-
-conversation lock and readback but lacks a durable executing journal and object
-revision precondition. Those remain P1 work, not a P0 completion claim.
+**P1 implementation:** `actions.json` journals each confirmation (proposal ID
+as idempotency key, profile, device, task, target key/content ID, observed
+revision, arguments, qualification) as `executing` before the write; a restart
+turns open entries into `outcome_unknown`, and a later confirmation reports the
+recorded outcome without repeating it. Operations on one target are serialized
+across conversations. The target is re-authorized before the effect and read
+back after it. Proposals carry `target` (ContentRef). Favorite set/unset is an
+absolute per-user state, so a changed item revision is recorded but does not
+block it; content-modifying actions still require a revision strategy first.
+Exactly-once across a crash between write and journal update is not claimed:
+that case is reported as `outcome_unknown`.
 
 ## Qualification contract and P0 enforcement
 

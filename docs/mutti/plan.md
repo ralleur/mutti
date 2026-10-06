@@ -772,3 +772,11 @@ Mac-Laufzeit für Linux-Dienste; allgemeine Dateien; Haushalts-/Sammlungsrechte;
 Identitätswiederherstellung; Betreiber der Vermittlung; messbare Hardwareklassen
 und Budget für parallele Wiedergabe/OCR/KI. Details und Zustandsverträge:
 [contracts.md](contracts.md). P0 löst diese Fragen nicht durch stille Annahmen.
+
+**Owner-Entscheidungen zu P1, 06.10.2026:** P1 wird auf eigenem Branch
+`codex/mutti-p1-content` (Worktree) umgesetzt, nachdem P0 separat committet
+wurde; die parallele Harness-Arbeit bleibt davon getrennt. Umfang ausdrücklich
+Hub **und** kurtz-Client einschließlich Umstellung vorhandener Suchwege.
+Für P1 gilt als geteilt nur, was das jeweilige Backend dem eigenen Konto des
+Profils zeigt; ein Mutti-eigenes Haushalts-/Sammlungsmodell bleibt offene
+Entscheidung 3 und wird nicht still eingeführt.
