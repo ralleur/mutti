@@ -884,7 +884,7 @@ func (h *Hub) contentJobs(w http.ResponseWriter, r *http.Request, id Identity) e
 	}
 	for _, e := range h.journal.list(id.UserID, 20) {
 		updated := e.Updated
-		job := ContentJob{ID: e.ID, Type: "action." + strings.TrimPrefix(e.Task, "media."), State: e.State, Title: e.Title, Message: e.Result, Updated: &updated}
+		job := ContentJob{ID: e.ID, Type: "action." + strings.TrimPrefix(e.Task, "media."), State: e.State, Title: e.Title, Message: lang.say(e.Result), Updated: &updated}
 		if e.ContentID != "" {
 			job.Content = &ContentRef{MuttiID: h.store.Read().MuttiID, ContentID: e.ContentID}
 		}

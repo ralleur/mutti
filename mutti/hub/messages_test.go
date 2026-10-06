@@ -14,7 +14,7 @@ import (
 // Every message created with apiErr (and the shared health texts) must have
 // an English rendering, so English users never see German.
 func TestEveryUserMessageHasAnEnglishText(t *testing.T) {
-	literal := regexp.MustCompile(`apiErr\(\d+, "[a-z_]+", "([^"]+)"\)`)
+	literal := regexp.MustCompile(`(?:apiErr\(\d+, "[a-z_]+", |\.say\()"([^"]+)"\)`)
 	files, _ := filepath.Glob("*.go")
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {

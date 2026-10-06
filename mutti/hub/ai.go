@@ -193,7 +193,7 @@ func (a *AI) markInterrupted() error {
 				if r.State == "queued" || r.State == "running" {
 					r.State, r.Finished, changed = "interrupted", time.Now().UTC(), true
 					if m := findMessage(c, r.Assistant); m != nil {
-						m.Status, m.Error = "interrupted", "Die Antwort wurde durch einen Neustart unterbrochen."
+						m.Status, m.Error = "interrupted", messageLanguage(findMessage(c, r.User)).say("Die Antwort wurde durch einen Neustart unterbrochen.")
 					}
 				}
 			}
@@ -355,7 +355,7 @@ func (a *AI) createConversation(w http.ResponseWriter, r *http.Request, id Ident
 	c := &Conversation{ID: randomID(), Owner: id.UserID, Title: truncateRunes(strings.TrimSpace(req.Title), 80), Created: now, Updated: now,
 		Sources: sourceBook{Items: map[string]*Source{}}, Proposals: map[string]*Proposal{}}
 	if c.Title == "" {
-		c.Title = "Neues Gespräch"
+		c.Title = responseLanguage(r).say(defaultTitle)
 	}
 	if err := a.save(c, map[string]string{}); err != nil {
 		return err
@@ -506,7 +506,7 @@ func (a *AI) postMessage(w http.ResponseWriter, r *http.Request, id Identity) er
 	if err != nil {
 		return err
 	}
-	if c.Title == "Neues Gespräch" {
+	if c.Title == defaultTitle || c.Title == languagePacks["en"].say(defaultTitle) {
 		c.Title = truncateRunes(req.Text, 60)
 		_ = a.save(c, keys)
 	}
@@ -896,6 +896,13 @@ func (a *AI) runLanguage(l *liveRun) *languagePack {
 	return nil
 }
 
+// defaultTitle names a conversation until its first message.
+const defaultTitle = "Neues Gespräch"
+
+func proposalLanguage(p *Proposal) *languagePack {
+	return messageLanguage(&Message{Language: p.Language})
+}
+
 // messageLanguage falls back to the default for messages from before v6.
 func messageLanguage(m *Message) *languagePack {
 	if m != nil {
@@ -991,6 +998,10 @@ func (a *AI) finish(l *liveRun, state, code string, result HarnessResult, tools 
 		}
 	}
 	if message != nil {
+		lang := messageLanguage(nil)
+		if run := findRun(c, l.id); run != nil {
+			lang = messageLanguage(findMessage(c, run.User))
+		}
 		text := result.Text
 		if tools != nil {
 			// Merge the run's registered sources and proposals.
@@ -1015,24 +1026,24 @@ func (a *AI) finish(l *liveRun, state, code string, result HarnessResult, tools 
 			message.Tools = result.Tools
 			message.Memo = sourceMemo(c, message.Sources)
 			if invalid > 0 {
-				message.Tools = append(message.Tools, ToolTrace{Name: "citations", Status: "corrected", Summary: fmt.Sprintf("%d ungültige Quellenmarke(n) entfernt", invalid)})
+				message.Tools = append(message.Tools, ToolTrace{Name: "citations", Status: "corrected", Summary: fmt.Sprintf(lang.say("%d ungültige Quellenmarke(n) entfernt"), invalid)})
 			}
 		}
 		message.Text = strings.TrimSpace(text)
 		message.Status = state
 		if result.Truncated && state == "completed" {
-			message.Error = "Die Antwort wurde wegen der Längenbegrenzung gekürzt."
+			message.Error = lang.say("Die Antwort wurde wegen der Längenbegrenzung gekürzt.")
 		}
 		if cause != nil {
 			var api *APIError
 			if errors.As(cause, &api) {
-				message.Error = api.Message
+				message.Error = lang.say(api.Message)
 			} else {
-				message.Error = "Die Antwort konnte nicht erstellt werden."
+				message.Error = lang.say("Die Antwort konnte nicht erstellt werden.")
 			}
 		}
 		if state == "cancelled" && message.Text != "" {
-			message.Error = "Abgebrochen."
+			message.Error = lang.say("Abgebrochen.")
 		}
 		_ = a.save(c, keys)
 	}
@@ -1236,7 +1247,7 @@ func (a *AI) decideProposal(w http.ResponseWriter, r *http.Request, id Identity)
 	defer release()
 	if prior, ok := a.hub.journal.get(p.ID); ok {
 		// Recorded earlier, possibly before a crash: report, never repeat.
-		p.State, p.Result = prior.State, prior.Result
+		p.State, p.Result = prior.State, proposalLanguage(p).say(prior.Result)
 		if p.State == "executing" {
 			p.State = "outcome_unknown"
 		}
@@ -1257,7 +1268,7 @@ func (a *AI) decideProposal(w http.ResponseWriter, r *http.Request, id Identity)
 		if !errors.Is(err, errNotFound) {
 			return apiErr(502, "unavailable", areaUnavailable(AreaMedia))
 		}
-		p.State, p.Result = "failed", "Der Film ist für dieses Profil nicht mehr verfügbar."
+		p.State, p.Result = "failed", proposalLanguage(p).say("Der Film ist für dieses Profil nicht mehr verfügbar.")
 		if err = a.save(c, keys); err != nil {
 			return err
 		}
@@ -1286,9 +1297,9 @@ func (a *AI) decideProposal(w http.ResponseWriter, r *http.Request, id Identity)
 	case readErr == nil && item.UserData.IsFavorite == p.Favorite:
 		p.State, p.Result = "confirmed", "applied"
 	case callErr != nil && readErr == nil:
-		p.State, p.Result = "failed", "Die Änderung wurde nicht übernommen."
+		p.State, p.Result = "failed", proposalLanguage(p).say("Die Änderung wurde nicht übernommen.")
 	default:
-		p.State, p.Result = "outcome_unknown", "Ergebnis unklar. Bitte den Film in der Bibliothek prüfen."
+		p.State, p.Result = "outcome_unknown", proposalLanguage(p).say("Ergebnis unklar. Bitte den Film in der Bibliothek prüfen.")
 	}
 	journalErr := a.hub.journal.finish(p.ID, p.State, p.Result)
 	if err = a.save(c, keys); err != nil {
