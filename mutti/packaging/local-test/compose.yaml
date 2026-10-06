@@ -1,7 +1,7 @@
 name: mutti-foundation-local-test
 services:
   mutti:
-    image: mutti:autonomy-20261005
+    image: mutti:autonomy-20261006
     platform: linux/arm64
     user: "${MUTTI_TEST_UID:?Start with Start-Docker-Test.command}:${MUTTI_TEST_GID:?Start with Start-Docker-Test.command}"
     ports:
