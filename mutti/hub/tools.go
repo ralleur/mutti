@@ -51,6 +51,42 @@ type profileTools struct {
 	proposals []*Proposal
 	defs      []toolDef
 	media     mediaBackend
+	docs      documentBackend
+	photos    photoBackend
+}
+
+type documentBackend interface {
+	Search(ctx context.Context, query string) ([]Document, error)
+	Read(ctx context.Context, id int) (Document, error)
+}
+
+type photoBackend interface {
+	Find(ctx context.Context, query, from, to string) ([]PhotoAsset, error)
+}
+
+// hubDocuments and hubPhotos bind the adapters to one profile.
+type hubDocuments struct {
+	d  *Documents
+	id Identity
+}
+
+func (h hubDocuments) Search(ctx context.Context, query string) ([]Document, error) {
+	page, err := h.d.search(ctx, h.id, query, 1, 5)
+	return page.Items, err
+}
+
+func (h hubDocuments) Read(ctx context.Context, id int) (Document, error) {
+	return h.d.fetch(ctx, h.id, id, true)
+}
+
+type hubPhotos struct {
+	p  *Photos
+	id Identity
+}
+
+func (h hubPhotos) Find(ctx context.Context, query, from, to string) ([]PhotoAsset, error) {
+	items, _, err := h.p.find(ctx, h.id, query, from, to, 12)
+	return items, err
 }
 
 // mediaBackend isolates Jellyfin access so the casting fixture can exercise
@@ -221,12 +257,12 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		if json.Unmarshal(raw, &a) != nil || strings.TrimSpace(a.Query) == "" || len(a.Query) > 200 {
 			return toolError(name, "Bitte einen Suchbegriff angeben.")
 		}
-		page, err := t.hub.docs.search(ctx, t.id, a.Query, 1, 5)
+		items, err := t.docs.Search(ctx, a.Query)
 		if err != nil {
 			return toolError(name, "Das Dokumentenarchiv ist gerade nicht verfügbar.")
 		}
 		out := []map[string]any{}
-		for _, d := range page.Items {
+		for _, d := range items {
 			s := t.sources.add(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created})
 			out = append(out, map[string]any{"quelle": s.Ref, "titel": d.Title, "datum": d.Created, "auszug_daten": d.Snippet})
 		}
@@ -242,7 +278,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			return toolError(name, "Unbekannte Quellenmarke.")
 		}
 		n, _ := strconv.Atoi(s.ObjectID)
-		d, err := t.hub.docs.fetch(ctx, t.id, n, true)
+		d, err := t.docs.Read(ctx, n)
 		if err != nil {
 			return toolError(name, "Das Dokument ist nicht verfügbar.")
 		}
@@ -261,7 +297,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		if json.Unmarshal(raw, &a) != nil || len(a.Query) > 200 || (a.From != "" && !dateParam.MatchString(a.From)) || (a.To != "" && !dateParam.MatchString(a.To)) {
 			return toolError(name, "Ungültige Argumente.")
 		}
-		items, _, err := t.hub.photos.find(ctx, t.id, a.Query, a.From, a.To, 12)
+		items, err := t.photos.Find(ctx, a.Query, a.From, a.To)
 		if err != nil {
 			return toolError(name, "Die Fotobibliothek ist gerade nicht verfügbar.")
 		}

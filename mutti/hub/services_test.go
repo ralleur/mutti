@@ -292,7 +292,8 @@ func TestRealDocumentsModule(t *testing.T) {
 		}
 	}
 	// The AI tool uses the same profile-bound search and never sees B's data.
-	tools := &profileTools{hub: e.hub, id: Identity{UserID: userA}, sources: &sourceBook{Items: map[string]*Source{}}, defs: documentTools()}
+	tools := &profileTools{hub: e.hub, id: Identity{UserID: userA}, sources: &sourceBook{Items: map[string]*Source{}}, defs: documentTools(),
+		docs: hubDocuments{e.hub.docs, Identity{UserID: userA}}}
 	result := tools.Call(context.Background(), "search_documents", json.RawMessage(`{"query":"Rechnung"}`))
 	if !strings.Contains(result.Content, "RE-2026-0815") || strings.Contains(result.Content, "Arzt") || !strings.Contains(result.Content, `"quelle":"Q1"`) {
 		t.Fatalf("tool %s", result.Content)

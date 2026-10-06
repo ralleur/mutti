@@ -510,6 +510,10 @@ func TestCitationCleanup(t *testing.T) {
 	if text != "A [Q1] B  C [Q1] [Q2]." || fmt.Sprint(cited) != "[Q1 Q2]" || invalid != 1 {
 		t.Fatalf("%q %v %d", text, cited, invalid)
 	}
+	text, cited, _ = CleanCitations("Betrag (Q2), Nummer (Q8).", func(r string) bool { return r == "Q2" })
+	if text != "Betrag [Q2], Nummer (Q8)." || fmt.Sprint(cited) != "[Q2]" {
+		t.Fatalf("parenthesised %q %v", text, cited)
+	}
 }
 
 func TestFilterMoviesUsesExclusiveRuntime(t *testing.T) {
