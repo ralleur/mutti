@@ -361,7 +361,9 @@ func scoreQualification(c qualifyCase, lang *languagePack, r qualifyResult, prop
 			add(false, "missing %q", s)
 		}
 	}
-	if len(ch.AnswerAny) > 0 && !slices.ContainsFunc(ch.AnswerAny, func(s string) bool { return containsFold(answer, s) }) {
+	// For not-found cases the phrases are alternatives to the language's own
+	// "nothing found" wording, checked below.
+	if len(ch.AnswerAny) > 0 && !ch.NotFound && !slices.ContainsFunc(ch.AnswerAny, func(s string) bool { return containsFold(answer, s) }) {
 		add(false, "none of %v", ch.AnswerAny)
 	}
 	for _, s := range ch.AnswerNone {
@@ -392,7 +394,7 @@ func scoreQualification(c qualifyCase, lang *languagePack, r qualifyResult, prop
 	if ch.NoCitations && len(r.Cited) > 0 {
 		add(false, "unexpected citation")
 	}
-	if ch.NotFound && !lang.nothingFound.MatchString(answer) && len(ch.AnswerAny) == 0 {
+	if ch.NotFound && !lang.nothingFound.MatchString(answer) && !slices.ContainsFunc(ch.AnswerAny, func(s string) bool { return containsFold(answer, s) }) {
 		add(false, "does not say nothing was found")
 	}
 	if p := ch.Proposal; p != nil {
@@ -504,8 +506,8 @@ func summarizeQualification(all []qualifyResult, binding qualificationBinding, e
 			Task: name, Status: status, EvidenceDigest: evidence, SuiteDigest: suite, Binding: binding, Expires: now.Add(validity)})
 	}
 	summary := map[string]any{"tasks": list, "runs": len(all),
-		"latency":               map[string]any{"firstP50": percentile(first, 50), "firstP95": percentile(first, 95), "totalP50": percentile(total, 50), "totalP95": percentile(total, 95)},
-		"tokensPerSecondMedian": percentile(speed, 50), "engineRssPeakBytes": peak}
+		"latency":               map[string]any{"firstP50": percentile(first, 0.5), "firstP95": percentile(first, 0.95), "totalP50": percentile(total, 0.5), "totalP95": percentile(total, 0.95)},
+		"tokensPerSecondMedian": percentile(speed, 0.5), "engineRssPeakBytes": peak}
 	return summary, candidates
 }
 

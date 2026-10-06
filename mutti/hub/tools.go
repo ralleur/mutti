@@ -321,12 +321,25 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		if err != nil {
 			return toolError(name, "The document archive is currently unavailable.")
 		}
+		// Full-text search requires every term. If that finds nothing, look for
+		// any of them, so one spelling variant does not hide the document.
+		partial := false
+		if words := strings.Fields(a.Query); len(items) == 0 && len(words) > 1 && !strings.Contains(a.Query, " OR ") {
+			if items, err = t.docs.Search(ctx, strings.Join(words, " OR ")); err != nil {
+				return toolError(name, "The document archive is currently unavailable.")
+			}
+			partial = len(items) > 0
+		}
 		out := []map[string]any{}
 		for _, d := range items {
 			s := t.sources.add(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created, Revision: d.revision})
 			out = append(out, map[string]any{"source": s.Ref, "title": d.Title, "date": d.Created, "excerpt_data": d.Snippet})
 		}
-		return ToolResult{Content: toolJSON(map[string]any{"count": len(out), "hits": out}),
+		result := map[string]any{"count": len(out), "hits": out}
+		if partial {
+			result["note"] = "No document contains all terms; these hits contain some of them. Check that they answer the question."
+		}
+		return ToolResult{Content: toolJSON(result),
 			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["documents"], len(out))}}
 	case "read_document":
 		var a struct {

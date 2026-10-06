@@ -223,6 +223,8 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 	sourced := attachmentRef.MatchString(question)
 	called := map[string]bool{}
 	done := map[string]bool{}
+	// emptySearch: a search in this run returned no hits.
+	emptySearch := false
 	var text strings.Builder
 	execute := func(call toolCall) {
 		trace := ToolTrace{Name: call.Function.Name, Status: "running", Args: compactArgs(call.Function.Arguments)}
@@ -233,6 +235,9 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 		r.Trace.Args = trace.Args
 		result.Tools = append(result.Tools, r.Trace)
 		called[call.Function.Name] = true
+		if strings.HasPrefix(call.Function.Name, "search_") && strings.Contains(r.Content, `"count":0`) {
+			emptySearch = true
+		}
 		if call.Function.Name != "propose_favorite" && strings.Contains(r.Content, `"source":"Q`) {
 			sourced = true
 		}
@@ -290,6 +295,10 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 				messages = append(messages, chatMessage{Role: "assistant", ToolCalls: []toolCall{call}})
 				execute(call)
 				messages = append(messages, serverNote("The system searched the document archive with terms from the question. Answer only if these results really answer it, and cite the source marker; otherwise say honestly that nothing was found."))
+				continue
+			case canCall && emptySearch && !done["retry"] && lang.offerRetry.MatchString(content):
+				// The model proposes another search instead of doing it.
+				correct("retry", content, "Your search found nothing. Search once more yourself now with a shorter or more general term, for example a word stem or a single keyword, instead of asking the user. Then answer.")
 				continue
 			case canCall && !done["action"] && offers(offered, "propose_favorite") && !called["propose_favorite"] && lang.favoriteRequest.MatchString(question):
 				correct("action", content, "The user asked to change a favourite, but you have not created a proposal yet. Find the movie if needed, then call propose_favorite with its source marker. The user confirms it.")

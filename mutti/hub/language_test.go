@@ -111,3 +111,53 @@ func TestEnglishHarnessCorrectsClaimInEnglish(t *testing.T) {
 		t.Fatal("German answer language not requested")
 	}
 }
+
+func TestFindingsFromFirstProductRun(t *testing.T) {
+	de := languagePacks["de"]
+	if !de.favoriteRequest.MatchString("Mach Schon gesehen zu meinem Favoriten.") || !de.favoriteRequest.MatchString("Füg Nordlicht zum Favoriten hinzu") {
+		t.Fatal("German favourite request missed")
+	}
+	if !languagePacks["en"].favoriteRequest.MatchString("Make Schon gesehen my favourite.") {
+		t.Fatal("English favourite request missed")
+	}
+	if !de.unverifiedClaim.MatchString("Ich habe in deinen privaten Daten keinen Hinweis auf den Namen des Hundes gefunden.") {
+		t.Fatal("claim without tool missed")
+	}
+	if !de.nothingFound.MatchString("Ich habe keinen Hinweis auf den Namen des Hundes deiner Nachbarin gefunden.") {
+		t.Fatal("not found wording missed")
+	}
+	// A search without hits plus an offer to search again triggers one retry.
+	h, _ := scriptedModel(t, `call:search_photos:{"query":"Fahrradfahren"}`,
+		"Ich habe nach „Fahrradfahren“ gesucht, aber nichts gefunden. Möchtest du, dass ich mit anderen Suchbegriffen suche?",
+		`call:search_photos:{"query":"Fahrrad"}`, "Ja: Kurzes Fahrradvideo [Q1].")
+	tools := &stubTools{results: map[string]string{"search_photos": `{"count":0,"hits":[]}`}}
+	res, err := h.Run(context.Background(), []chatMessage{{Role: "user", Content: "Habe ich ein Video vom Fahrradfahren?"}}, tools, func(HarnessEvent) {})
+	if err != nil || fmt.Sprint(res.Interventions) != "[retry]" || len(res.Tools) != 2 {
+		t.Fatalf("%v %v %d", err, res.Interventions, len(res.Tools))
+	}
+}
+
+type orDocs struct{ queries []string }
+
+func (o *orDocs) Search(_ context.Context, query string) ([]Document, error) {
+	o.queries = append(o.queries, query)
+	if strings.Contains(query, " OR ") {
+		return []Document{{ID: 3, Title: "Mietvertrag"}}, nil
+	}
+	return nil, nil
+}
+func (o *orDocs) Read(context.Context, int) (Document, error) { return Document{}, nil }
+
+func TestDocumentSearchFallsBackToAnyTerm(t *testing.T) {
+	docs := &orDocs{}
+	tools := &profileTools{sources: &sourceBook{Items: map[string]*Source{}}, defs: documentTools(), docs: docs}
+	r := tools.Call(context.Background(), "search_documents", []byte(`{"query":"Mietvertrag Kündigungsfrist"}`))
+	if fmt.Sprint(docs.queries) != "[Mietvertrag Kündigungsfrist Mietvertrag OR Kündigungsfrist]" || !strings.Contains(r.Content, `"note"`) || !strings.Contains(r.Content, `"count":1`) {
+		t.Fatalf("%v %s", docs.queries, r.Content)
+	}
+	docs.queries = nil
+	_ = tools.Call(context.Background(), "search_documents", []byte(`{"query":"Mietvertrag"}`))
+	if len(docs.queries) != 1 {
+		t.Fatalf("single term retried: %v", docs.queries)
+	}
+}
