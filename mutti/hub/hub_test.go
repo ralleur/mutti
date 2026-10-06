@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -518,22 +519,42 @@ func TestCitationCleanup(t *testing.T) {
 	if text != "A [Q1] B  C [Q1] [Q2]." || fmt.Sprint(cited) != "[Q1 Q2]" || invalid != 1 {
 		t.Fatalf("%q %v %d", text, cited, invalid)
 	}
+	text, _, _ = CleanCitations("Nummer 4711 (Quelle Q2), sonst (Quellenmarke: Q9).", func(r string) bool { return r == "Q2" })
+	if text != "Nummer 4711 [Q2], sonst (Quellenmarke: Q9)." {
+		t.Fatalf("named %q", text)
+	}
 	text, cited, _ = CleanCitations("Betrag (Q2), Nummer (Q8).", func(r string) bool { return r == "Q2" })
 	if text != "Betrag [Q2], Nummer (Q8)." || fmt.Sprint(cited) != "[Q2]" {
 		t.Fatalf("parenthesised %q %v", text, cited)
 	}
 }
 
-func TestFilterMoviesUsesExclusiveRuntime(t *testing.T) {
-	yes := true
-	movies := []Movie{{ID: "1", Title: "A", Seconds: 99}, {ID: "2", Title: "B", Seconds: 100}, {ID: "3", Title: "C", Seconds: 50, Watched: true}}
-	got := filterMovies(movies, "", 100, nil, "", "runtime", 10)
-	if len(got) != 2 || got[0].ID != "3" {
-		t.Fatalf("%v", got)
+func TestFilterMoviesRuntimeYearAndWatched(t *testing.T) {
+	no, yes := false, true
+	movies := []Movie{{ID: "1", Title: "A", Seconds: 99, Year: 2023}, {ID: "2", Title: "B", Seconds: 100, Year: 2024},
+		{ID: "3", Title: "C", Seconds: 50, Watched: true, Year: 2023}}
+	ids := func(ms []Movie) string {
+		out := ""
+		for _, m := range ms {
+			out += m.ID
+		}
+		return out
 	}
-	got = filterMovies(movies, "", 100, &yes, "", "runtime", 10)
-	if len(got) != 1 || got[0].ID != "1" {
-		t.Fatalf("unwatched %v", got)
+	for _, c := range []struct {
+		f    movieFilter
+		want string
+	}{
+		{movieFilter{Below: 100, Sort: "runtime"}, "31"},      // exclusive
+		{movieFilter{Max: 100, Sort: "runtime"}, "312"},       // inclusive
+		{movieFilter{Max: 99, Sort: "runtime_desc"}, "13"},    // longest first
+		{movieFilter{Below: 100, Watched: &no}, "1"},          // unwatched only
+		{movieFilter{Watched: &yes}, "3"},                     // watched only
+		{movieFilter{Year: 2023, Sort: "runtime"}, "31"},      // year
+		{movieFilter{Year: 2023, Watched: &no, Max: 99}, "1"}, // combined
+	} {
+		if got := ids(filterMovies(movies, c.f)); got != c.want {
+			t.Fatalf("%+v: got %s want %s", c.f, got, c.want)
+		}
 	}
 }
 
@@ -588,5 +609,14 @@ func TestGuardWithdrawsClaimWithoutTool(t *testing.T) {
 	})
 	if err != nil || resets != 1 || tools.calls != 1 || strings.Contains(res.Text, "Bibliothek nichts") || !strings.Contains(res.Text, "keinen Film") {
 		t.Fatalf("err=%v resets=%d calls=%d text=%q", err, resets, tools.calls, res.Text)
+	}
+}
+
+func TestSandboxDeniesOutboundOnMac(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS sandbox only")
+	}
+	if !verifySandbox() {
+		t.Fatal("sandbox profile did not demonstrably deny outbound traffic")
 	}
 }

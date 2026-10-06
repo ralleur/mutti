@@ -60,6 +60,31 @@ Zitier-Korrektur bei „nichts gefunden“) und v5-Schritte:
 zwei Korrekturen und einem nicht vom Entwickler verfassten Holdout-Satz;
 außerdem prüfen, ob die gebündelte Mac-Engine MLX kann.
 
+**Harness v5 für Qwen3.8 27B MLX, 06.10.2026 (P2-Vorarbeit):** Nutzerentscheidung:
+Fokus 27B MLX, kein Decider-Modell (im Plan festgehalten). Neuer
+Entwickler-Holdout **vor** Code-Änderung eingefroren; v5 behebt die v4-Mängel
+(Archivsuche nur bei Fragen, keine Zitier-Korrektur bei „nichts gefunden“,
+Promptregel 4). Implementiert und synthetisch geprüft (uncommittet,
+`mutti/hub/harness.go`, `harness_test.go`, `cmd/mutti-cast`,
+`mutti/tests/casting-v5-*.py`, Fixtures v5), `go test ./...` grün.
+27B MLX: Entwicklung 177/180, Regression 129/132, **neuer Holdout 129/132**
+(Nichtwissen 12/12, keine ungültigen Marken). Automatische „limited“-Bedingungen
+auf dem Holdout erfüllt. Latenz nach Pausieren der störenden VM wiederholt:
+Holdout p95 Werkzeugantwort 6,0 s, Entwicklung 8,1 s, Qualität identisch —
+Latenzgrenzen erfüllt. **Abschluss, 20:47:** Netzsperre verifiziert (Prüfung
+nutzte `nc` ohne `-v`; Sperre selbst wirkte; korrigiert in `engine.go`, Test neu);
+gebündelte Engine liefert jetzt MLX-Kernel (`fetch-ollama.py`, `LICENSE-mlx.txt`),
+alle drei Sätze damit gemessen: Ergebnisse identisch, Latenz eingehalten trotz
+hoher Systemlast; Dialogbewertung durch den Agenten: 3,6 / 3,6 / 3,4. Damit auf
+dem Holdout alle „limited“-Bedingungen erfüllt. **Owner-Entscheidung
+06.10.2026:** `qwen3.8:27b-mlx` im Katalog „limited“ (`catalog.go`); unter P0
+ohne Runtime-Attestation weiterhin keine Produktnutzung. Ollama und MLX in
+`mutti/THIRD-PARTY.md`, MLX-Lizenz im App-Paket (`build-mac.sh`).
+[Nachweis](evidence/model-comparison-v5-2026-10-06.md),
+[Protokoll](evidence/casting-v5-rubric.md). Nächste Schritte: unabhängiger Holdout bzw.
+Owner-Dialogbewertung, Paket-Smoke der neu gebauten Mac-App, Bewerter-Artefakt (Markdown) als v6-Rubrik,
+P0-Runtime-Attestation.
+
 **Session-Vorgaben, 06.10.2026:** [AGENTS.md](../../AGENTS.md) definiert jetzt
 Plan-/Statussichtung am Anfang und nachvollziehbare Umsetzung/Übergabe.
 [CLAUDE.md](../../CLAUDE.md) importiert dieselbe Quelle für Claude Code; damit

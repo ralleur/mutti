@@ -9,6 +9,8 @@
 | Jellyfin FFmpeg | v8.1.3-1 on Mac; pinned upstream image on Docker | GPL build. Full matching source, build configuration and external-library sources required before redistributing a release. |
 | Kurt artwork | Hauser private Kurt lab, `kurt-a-refined-11`; source hashes in `mutti/migrate/web/kurt/provenance.json` | Reused for the local Mutti preview at the owner's explicit request (2026-10-05). Original drawings repacked losslessly. No new public artwork license is inferred from this integration. |
 | Sora | Copied from approved kurtz font assets | SIL Open Font License 1.1, bundled next to fonts. |
+| Ollama | v0.32.13 official `ollama-darwin.tgz`, SHA-256 in components.lock.json | MIT (`Ollama-MIT.txt`). Mac package only; bundles llama.cpp/ggml libraries whose notices must be inventoried before a release. |
+| MLX (via Ollama archive) | `mlx_metal_v3`/`mlx_metal_v4` from the same pinned Ollama archive, MLX 0.32.0-190-g3abd0fd | MIT, Apple Inc. (`MLX-MIT.txt`). arm64 Mac package only; transitive notices of the MLX build remain a release gate. |
 | Tailscale | v1.102.5 in isolated directlab | Experiment only. Not linked into the Mac app or container. Preserve upstream BSD/file-specific notices if adopted. |
 
 Owned Mutti code is GPL-2.0-or-later. This inventory does not relicense upstream

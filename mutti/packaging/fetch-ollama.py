@@ -31,9 +31,9 @@ with tarfile.open(archive) as tar:
             raise SystemExit('Unsafe engine archive member')
         if arch == 'arm64' and name.name.startswith('libggml-cpu-'):
             continue
-        # The catalog contains GGUF models served by the llama.cpp runner only;
-        # the MLX runner kernels are not shipped until an MLX model is qualified.
-        if name.name == 'llama-quantize' or name.parts[0].startswith('mlx_metal'):
+        # MLX models are the Apple-silicon target (plan §1), so the arm64 package
+        # ships the MLX runner kernels (mlx_metal_v3/v4); Intel Macs cannot use them.
+        if name.name == 'llama-quantize' or arch != 'arm64' and name.parts[0].startswith('mlx_metal'):
             continue
         tar.extract(member, target, filter='data') if sys.version_info >= (3, 12) else tar.extract(member, target)
 for path in target.rglob('*'):
@@ -42,4 +42,6 @@ for path in target.rglob('*'):
         if 'universal binary' in info:
             subprocess.run(['lipo', str(path), '-thin', arch, '-output', str(path)], check=True)
 shutil.copy(root / 'mutti/packaging/licenses/Ollama-MIT.txt', target / 'LICENSE-ollama.txt')
+if arch == 'arm64':
+    shutil.copy(root / 'mutti/packaging/licenses/MLX-MIT.txt', target / 'LICENSE-mlx.txt')
 print(target)

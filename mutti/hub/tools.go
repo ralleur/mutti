@@ -128,14 +128,18 @@ type Movie struct {
 
 func movieTools() []toolDef {
 	return []toolDef{
-		newTool("search_movies", "Durchsucht die für dieses Profil freigegebene Filmbibliothek. Liefert Treffer mit Quellenmarke im Feld quelle.", map[string]any{
-			"query":                 map[string]any{"type": "string", "description": "Optionaler Titel oder Stichwort. Weglassen, um alle Filme zu filtern."},
-			"runtime_below_seconds": map[string]any{"type": "integer", "description": "Nur Filme, die kürzer sind als so viele SEKUNDEN (exklusive Grenze). \"unter 100 Sekunden\" ergibt 100, \"höchstens 88 Sekunden\" ergibt 89."},
-			"runtime_below_minutes": map[string]any{"type": "integer", "description": "Nur Filme, die kürzer sind als so viele MINUTEN (exklusive Grenze). \"unter 90 Minuten\" ergibt 90, \"unter zwei Stunden\" ergibt 120. Nicht zusammen mit runtime_below_seconds verwenden."},
-			"unwatched":             map[string]any{"type": "boolean", "description": "true = nur noch nicht gesehene Filme. Weglassen, wenn egal."},
-			"genre":                 map[string]any{"type": "string", "description": "Optionales Genre, z. B. Komödie."},
-			"sort":                  map[string]any{"type": "string", "enum": []string{"runtime", "title", "year", "added"}, "description": "Sortierung; Laufzeit aufsteigend bei runtime."},
-			"limit":                 map[string]any{"type": "integer", "description": "Maximale Trefferzahl, 1 bis 10."},
+		newTool("search_movies", "Durchsucht die für dieses Profil freigegebene Filmbibliothek. Liefert Titel, Jahr, Laufzeit, Genres und Quellenmarke im Feld quelle, aber keine Inhaltsbeschreibung; dafür danach get_movie aufrufen. Alle Filter sind optional und werden kombiniert.", map[string]any{
+			"query":                   map[string]any{"type": "string", "description": "Titel oder Stichwort aus Titel oder Beschreibung. Weglassen, um alle Filme zu filtern. Jahreszahlen, Laufzeiten und Genres gehören in die eigenen Filter."},
+			"genre":                   map[string]any{"type": "string", "description": "Genre, z. B. Komödie."},
+			"year":                    map[string]any{"type": "integer", "description": "Nur Filme aus diesem Erscheinungsjahr, z. B. 2021."},
+			"unwatched":               map[string]any{"type": "boolean", "description": "true = nur noch nicht gesehene Filme. Weglassen, wenn egal."},
+			"watched":                 map[string]any{"type": "boolean", "description": "true = nur schon gesehene Filme. Weglassen, wenn egal."},
+			"runtime_under_minutes":   map[string]any{"type": "integer", "description": "Für „unter N Minuten“ oder „kürzer als N Minuten“: nur Filme, die kürzer als N Minuten sind. Zwei Stunden = 120."},
+			"runtime_under_seconds":   map[string]any{"type": "integer", "description": "Wie runtime_under_minutes, aber für Angaben in Sekunden."},
+			"runtime_at_most_minutes": map[string]any{"type": "integer", "description": "Nur für „höchstens/maximal/bis zu N Minuten“ oder „N Minuten oder weniger“: Filme bis einschließlich N Minuten."},
+			"runtime_at_most_seconds": map[string]any{"type": "integer", "description": "Wie runtime_at_most_minutes, aber für Angaben in Sekunden."},
+			"sort":                    map[string]any{"type": "string", "enum": []string{"runtime", "runtime_desc", "title", "year", "added"}, "description": "runtime = kürzeste zuerst, runtime_desc = längste zuerst, title = alphabetisch, year = neueste Erscheinung zuerst, added = zuletzt hinzugefügt zuerst."},
+			"limit":                   map[string]any{"type": "integer", "description": "Maximale Trefferzahl, 1 bis 10."},
 		}),
 		newTool("get_movie", "Liest Details (Beschreibung, Jahr, Laufzeit, Genres) eines Films aus einem früheren Ergebnis.", map[string]any{
 			"quelle": map[string]any{"type": "string", "description": "Quellenmarke wie Q1 aus einem Ergebnis."},
@@ -149,7 +153,7 @@ func movieTools() []toolDef {
 
 func documentTools() []toolDef {
 	return []toolDef{
-		newTool("search_documents", "Volltextsuche im Dokumentenarchiv dieses Profils. Liefert Titel, Datum, Textauszug und Quellenmarke.", map[string]any{
+		newTool("search_documents", "Volltextsuche im Dokumentenarchiv dieses Profils. Liefert Titel, Datum, einen gekürzten Textauszug und Quellenmarke. Steht die Antwort nicht im Auszug, lies das Dokument mit read_document.", map[string]any{
 			"query": map[string]any{"type": "string", "description": "Suchbegriffe, z. B. Stadtwerke Rechnung."},
 		}, "query"),
 		newTool("read_document", "Liest den erkannten Text eines Dokuments aus einem früheren Suchergebnis.", map[string]any{
@@ -221,12 +225,21 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 	case "search_movies":
 		var a struct {
 			Query   string  `json:"query"`
-			Below   float64 `json:"runtime_below_seconds"`
-			Minutes float64 `json:"runtime_below_minutes"`
-			Unwatch *bool   `json:"unwatched"`
 			Genre   string  `json:"genre"`
-			Sort    string  `json:"sort"`
-			Limit   float64 `json:"limit"`
+			Year    float64 `json:"year"`
+			Watched *bool   `json:"watched"`
+			Unwatch *bool   `json:"unwatched"`
+			// v4 names; the v3/v4-draft spellings stay accepted.
+			Under        float64 `json:"runtime_under_seconds"`
+			UnderMinutes float64 `json:"runtime_under_minutes"`
+			Most         float64 `json:"runtime_at_most_seconds"`
+			MostMinutes  float64 `json:"runtime_at_most_minutes"`
+			Below        float64 `json:"runtime_below_seconds"`
+			Minutes      float64 `json:"runtime_below_minutes"`
+			MaxSeconds   float64 `json:"runtime_max_seconds"`
+			MaxMinutes   float64 `json:"runtime_max_minutes"`
+			Sort         string  `json:"sort"`
+			Limit        float64 `json:"limit"`
 		}
 		if json.Unmarshal(raw, &a) != nil {
 			return toolError(name, "Ungültige Argumente.")
@@ -235,11 +248,15 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		if err != nil {
 			return toolError(name, "Die Filmbibliothek ist gerade nicht verfügbar.")
 		}
-		below := int(a.Below)
-		if below == 0 && a.Minutes > 0 {
-			below = int(a.Minutes * 60)
+		f := movieFilter{Query: a.Query, Genre: a.Genre, Year: int(a.Year), Watched: a.Watched, Sort: a.Sort, Limit: int(a.Limit)}
+		// An explicit false means the opposite filter, as in the v3 contract.
+		if f.Watched == nil && a.Unwatch != nil {
+			seen := !*a.Unwatch
+			f.Watched = &seen
 		}
-		hits := filterMovies(movies, a.Query, below, a.Unwatch, a.Genre, a.Sort, int(a.Limit))
+		f.Below = firstSeconds(a.Under, a.UnderMinutes, a.Below, a.Minutes)
+		f.Max = firstSeconds(a.Most, a.MostMinutes, a.MaxSeconds, a.MaxMinutes)
+		hits := filterMovies(movies, f)
 		out := []map[string]any{}
 		for _, m := range hits {
 			s := t.sources.add(Source{Service: "media", Kind: "movie", ObjectID: m.ID, Title: m.Title, Subtitle: movieSubtitle(m),
@@ -350,6 +367,19 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 	return toolError(name, "Unbekanntes Werkzeug.")
 }
 
+// firstSeconds picks the first given bound from (seconds, minutes) pairs.
+func firstSeconds(pairs ...float64) int {
+	for i := 0; i+1 < len(pairs); i += 2 {
+		if pairs[i] > 0 {
+			return int(pairs[i])
+		}
+		if pairs[i+1] > 0 {
+			return int(pairs[i+1] * 60)
+		}
+	}
+	return 0
+}
+
 func dateOnly(s string) string {
 	if len(s) >= 10 {
 		return s[:10]
@@ -368,9 +398,19 @@ func movieSubtitle(m Movie) string {
 	return strings.Join(parts, " · ")
 }
 
-func filterMovies(movies []Movie, query string, below int, unwatched *bool, genre, order string, limit int) []Movie {
-	q := strings.ToLower(strings.TrimSpace(query))
-	g := strings.ToLower(strings.TrimSpace(genre))
+// movieFilter combines all search_movies filters. Below is exclusive, Max is
+// inclusive; both are seconds.
+type movieFilter struct {
+	Query, Genre, Sort string
+	Year, Below, Max   int
+	Watched            *bool
+	Limit              int
+}
+
+func filterMovies(movies []Movie, f movieFilter) []Movie {
+	q := strings.ToLower(strings.TrimSpace(f.Query))
+	g := strings.ToLower(strings.TrimSpace(f.Genre))
+	below, limit, order := f.Below, f.Limit, f.Sort
 	out := []Movie{}
 	for _, m := range movies {
 		if q != "" && !strings.Contains(strings.ToLower(m.Title), q) && !strings.Contains(strings.ToLower(m.Overview), q) {
@@ -379,7 +419,13 @@ func filterMovies(movies []Movie, query string, below int, unwatched *bool, genr
 		if below > 0 && (m.Seconds <= 0 || m.Seconds >= below) {
 			continue
 		}
-		if unwatched != nil && *unwatched == m.Watched {
+		if f.Max > 0 && (m.Seconds <= 0 || m.Seconds > f.Max) {
+			continue
+		}
+		if f.Year > 0 && m.Year != f.Year {
+			continue
+		}
+		if f.Watched != nil && *f.Watched != m.Watched {
 			continue
 		}
 		if g != "" {
@@ -399,6 +445,8 @@ func filterMovies(movies []Movie, query string, below int, unwatched *bool, genr
 		switch order {
 		case "runtime":
 			return out[i].Seconds < out[j].Seconds
+		case "runtime_desc":
+			return out[i].Seconds > out[j].Seconds
 		case "year":
 			return out[i].Year > out[j].Year
 		case "added":

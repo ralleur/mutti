@@ -45,6 +45,7 @@ cp "$ROOT/LICENSE" "$APP/Contents/Resources/licenses/Jellyfin.txt"
 cp "$WEB/LICENSE" "$APP/Contents/Resources/licenses/Jellyfin-Web.txt"
 cp "$ROOT/mutti/design/assets/Sora-OFL.txt" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/packaging/licenses/Ollama-MIT.txt" "$APP/Contents/Resources/licenses/"
+if [ "$ARCH" = arm64 ]; then cp "$ROOT/mutti/packaging/licenses/MLX-MIT.txt" "$APP/Contents/Resources/licenses/"; fi
 cp "$ROOT/mutti/THIRD-PARTY.md" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/components.lock.json" "$APP/Contents/Resources/"
 python3 "$ROOT/mutti/packaging/provenance.py" "$WEB" "$APP/Contents/Resources/build-provenance.json"

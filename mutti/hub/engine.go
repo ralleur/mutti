@@ -173,9 +173,11 @@ func (e *engine) startLocked(confined bool) error {
 }
 
 // verifySandbox proves the profile denies a non-loopback connection at the OS
-// level, independent of the engine's own configuration.
+// level, independent of the engine's own configuration. nc only reports the
+// kernel's EPERM ("Operation not permitted") in verbose mode; an unconfined
+// attempt to the TEST-NET address times out instead.
 func verifySandbox() bool {
-	out, err := exec.Command("/usr/bin/sandbox-exec", "-p", sandboxProfile, "/usr/bin/nc", "-z", "-G", "1", "192.0.2.1", "80").CombinedOutput()
+	out, err := exec.Command("/usr/bin/sandbox-exec", "-p", sandboxProfile, "/usr/bin/nc", "-v", "-z", "-G", "1", "192.0.2.1", "80").CombinedOutput()
 	return err != nil && strings.Contains(strings.ToLower(string(out)), "not permitted")
 }
 
