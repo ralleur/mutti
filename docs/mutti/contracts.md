@@ -37,7 +37,7 @@ attachments, sources and model context are covered, not just original downloads.
 No index or cached capability is an authorization authority. Recheck before
 execution and source opening; revocation invalidates future history reuse too.
 The target cancellation budget for in-flight work is at most five seconds;
-measure it on both packages. Previously delivered bytes cannot be recalled.
+measure it on the Mac package (Day 1 is Mac only; Docker/NAS is a roadmap item). Previously delivered bytes cannot be recalled.
 
 Pairing binds one expiring invitation, server key, proven device key and owner-
 approved profile. Persist keys, not network addresses, as identity. QR codes do

@@ -9,15 +9,23 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 
 ## Aktuelle Übergabe und nächste Schritte
 
-Stand 06.10.2026 (abends): P0 ist committet (`750f9158a2` auf
-`codex/mutti-foundation`). Die parallele Harness-v4/v5-Arbeit liegt dort weiter
-uncommittet im Arbeitsbaum der anderen Session. Kein neues Paket ausgeliefert,
-kein Modell produktiv qualifiziert.
+Stand 06.10.2026 (abends): P0 (`750f9158a2`) und Harness v5 (`c74373310c`) sind
+auf `codex/mutti-foundation` committet; der P1-Branch hat beide eingemischt
+(`eaa5c45f3c`, Tests grün). Kein Paket ausgeliefert. `qwen3.8:27b-mlx` ist per
+Owner-Entscheidung im Katalog „limited“, unter P0 aber ohne Runtime-Attestation
+und vertrauenswürdigen Nachweis weiterhin **nicht** produktiv freigeschaltet.
 
-**P1 — gemeinsamer Inhaltsweg: implementiert; Mac-Paket und nativer Simulator
-geprüft; Docker/NAS offen.** Branch `codex/mutti-p1-content` (Worktree
-`/Users/ai/workspace/mutti-p1`). Hub: ContentRef mit persistiertem ID-Index,
-föderierte Suche `content/search` mit gebundenen Cursorn und ehrlichem
+**Plattformentscheidung (Owner, 06.10.2026):** Day 1 ist **Mac only, Apple
+Silicon, MLX**. Docker/NAS ist aus dem Entwicklungsplan genommen und steht auf
+der [Roadmap](plan.md#17-roadmap-docker-nas-nach-day-1); vorhandener Docker-Code
+bleibt unangetastet, wird aber weder gebaut, getestet noch als bereit
+bezeichnet. Nachgezogen in `plan.md` (§1, §8, §11/12-Hinweis, §16, §17),
+`AGENTS.md` und `contracts.md`; historische Belege bleiben unverändert.
+
+**P1 — gemeinsamer Inhaltsweg: für den Day-1-Umfang umgesetzt und auf dem
+Mac-Paket sowie nativ im Simulator geprüft.** Branch `codex/mutti-p1-content`
+(Worktree `/Users/ai/workspace/mutti-p1`). Hub: ContentRef mit persistiertem
+ID-Index, föderierte Suche `content/search` mit gebundenen Cursorn und ehrlichem
 `partial`, Öffnen mit Revisionsstatus und Objekt-Nachprüfung im Medienstrom,
 `content/jobs`, Quellen-Provenienz, Rücknahme widerrufener Quellen aus der
 Modellhistorie, dauerhaftes Aktionsjournal; Sicherung/Restore umfassen jetzt
@@ -33,11 +41,13 @@ Paketlauf deckte fehlende Sicherung von `content-ids.json`/`actions.json` auf
 Vertrag: [contracts.md](contracts.md); Owner-Entscheidungen:
 [plan.md](plan.md#offene-entscheidungen-vor-jeweiliger-umsetzung).
 
-Nächste Schritte P1: Docker/NAS-Lauf mit demselben Smoke-Umfang; kurtz-Änderungen
-reviewen und committen (Ralf entscheidet über den kurtz-Commit); P1-Branch in
-`codex/mutti-foundation` zusammenführen, sobald die Harness-Arbeit dort
-committet ist (Konfliktstellen: `tools.go`, `hub_test.go`). Nach P2-Qualifikation
-P1-E2E mit echtem Modell wiederholen (`--expect-qualified`).
+Nächste Schritte: kurtz-Änderungen reviewen und committen (Ralf entscheidet über
+den kurtz-Commit); P1-Branch in `codex/mutti-foundation` zusammenführen. Kritischer
+Pfad zur nutzbaren KI ist P0-Freigabe für genau die Mac/MLX-Konfiguration
+(P2-Anteil): echte Runtime-Attestation (Engine-/Runner-Digest inkl. MLX, Hardware,
+OS-Build, Adapter, Inferenzparameter) und vertrauenswürdiges Laden der
+Freigabeeinträge mit Widerruf; danach Messung mit Prompt `mutti-assistant-v5`
+pro Aufgabe gegen die Freigabekriterien und P1-E2E mit `--expect-qualified`.
 
 **Modellfreigabe v4, 06.10.2026 (P2-Vorarbeit, abgeschlossen als Messung):**
 Nutzerauftrag „Werkzeuge/Harness verbessern, dann mit neuem ungesehenem Satz
