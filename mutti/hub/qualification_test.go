@@ -20,7 +20,13 @@ func syntheticQualificationPolicy() qualificationPolicy {
 		b.Language, b.ContractDigest = code, assistantContractDigest(languagePacks[code])
 		return b
 	}
-	p := qualificationPolicy{runtime: func() qualificationBinding { return bound("en") }}
+	p := qualificationPolicy{externalEngine: true, runtime: func(m CatalogModel) qualificationBinding {
+		b := bound("en")
+		if m.Digest != catalog[0].Digest {
+			b.ModelDigest = "" // only the synthetic model is "verified"
+		}
+		return b
+	}}
 	for _, code := range []string{"en", "de"} {
 		for _, task := range []string{assistantTask, "media.search", "media.read", "media.favorite", "documents.read", "photos.search"} {
 			p.records = append(p.records, qualificationRecord{ID: "synthetic-" + code + "-" + task, Task: task, Status: "passed",
@@ -32,7 +38,7 @@ func syntheticQualificationPolicy() qualificationPolicy {
 
 func TestQualificationRequiresExactEvidence(t *testing.T) {
 	p := syntheticQualificationPolicy()
-	b := p.runtime()
+	b := p.runtime(catalog[0])
 	if _, err := p.evaluate(assistantTask, b, time.Now()); err != nil {
 		t.Fatal(err)
 	}

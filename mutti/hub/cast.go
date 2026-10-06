@@ -314,7 +314,9 @@ func RunCasting(o CastOptions) error {
 		off := false
 		h := &Harness{Client: e.stream, Base: base, Model: model.ID, Rounds: 4, Lang: lang,
 			Options: map[string]any{"num_ctx": 8192, "temperature": 0, "seed": 42, "num_predict": 1024}}
-		h.Think = (&AI{engine: e, show: map[string]bool{}}).thinkFlag(ctx, base, model.ID, &off)
+		if h.Think, err = (&AI{engine: e, show: map[string]bool{}}).thinkFlag(ctx, base, model.ID, &off); err != nil {
+			return err
+		}
 		for rep := 1; rep <= o.Repetitions; rep++ {
 			for _, c := range f.Cases {
 				r := castOne(ctx, h, &f, c, model)

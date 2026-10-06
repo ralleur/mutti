@@ -53,6 +53,17 @@ func (e *engine) managedBinary() (bool, string) {
 	return e.mode == "managed", e.binary
 }
 
+// managedBase returns the managed engine's address, or false if the hub
+// uses an external engine or the managed one is not ready.
+func (e *engine) managedBase() (string, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.mode != "managed" || e.state != "ready" {
+		return "", false
+	}
+	return fmt.Sprintf("http://127.0.0.1:%d", e.port), true
+}
+
 func (e *engine) startCount() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -494,7 +505,13 @@ func (e *engine) copyVerified(source string, digests []string, m CatalogModel) e
 		}
 		target := filepath.Join(dir, name)
 		if _, err := os.Stat(target); err == nil {
-			continue
+			// An existing blob is only kept if its content matches its name.
+			if sum, err := fileDigest(target); err == nil && "sha256-"+sum == name {
+				continue
+			}
+			if err := os.Remove(target); err != nil {
+				return err
+			}
 		}
 		in, err := os.Open(filepath.Join(source, "blobs", name))
 		if err != nil {

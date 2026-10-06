@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -44,16 +45,25 @@ type attestation struct {
 	osBuild   string
 	adapter   string
 	computing bool
+	// models maps a catalog model ID to the file signature (paths, sizes,
+	// modification times, inodes) at which its files were last verified.
+	models    map[string]string
+	verifying map[string]bool
+	// hashing serializes file hashing, so concurrent requests wait for one
+	// measurement and then use its result instead of hashing again.
+	hashing sync.Mutex
 }
 
 func newAttestation(e *engine) *attestation {
-	a := &attestation{engine: e}
+	a := &attestation{engine: e, models: map[string]string{}, verifying: map[string]bool{}}
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" || e.binary == "" {
 		return a // Day 1 qualifies Apple Silicon Macs only.
 	}
 	a.dir = filepath.Dir(e.binary)
 	a.computing = true
 	go func() {
+		// Engine starts during this measurement are not covered by it.
+		starts := e.startCount()
 		hw, osb := hardwareProfile(), osBuild()
 		adapter, _ := executableDigest()
 		sandbox := e.sandbox && verifySandbox()
@@ -63,23 +73,163 @@ func newAttestation(e *engine) *attestation {
 		if err == nil {
 			a.digest = digest
 		}
-		a.starts = e.startCount()
+		a.starts = starts
 		a.computing = false
 		a.mu.Unlock()
 	}()
 	return a
 }
 
-// binding returns the measured deployment. Missing parts stay empty and
-// therefore never match a record.
-func (a *attestation) binding() qualificationBinding {
+// bindingFor returns the measured deployment for one model. Missing parts
+// stay empty and therefore never match a record: an engine started since the
+// last measurement, or model files not verified at their current state.
+func (a *attestation) bindingFor(model CatalogModel) qualificationBinding {
+	signature, _ := a.modelSignature(model)
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	b := qualificationBinding{HardwareProfile: a.hardware, OSBuild: a.osBuild, AdapterDigest: a.adapter}
-	if managed, binary := a.engine.managedBinary(); managed && binary != "" && filepath.Dir(binary) == a.dir && a.sandbox {
+	stale := !a.computing && a.dir != "" && a.starts != a.engine.startCount()
+	if managed, binary := a.engine.managedBinary(); managed && binary != "" && filepath.Dir(binary) == a.dir && a.sandbox && !stale && !a.computing {
 		b.EngineDigest = a.digest
 	}
+	if signature != "" && a.models[model.ID] == signature {
+		b.ModelDigest = model.Digest
+	}
+	a.mu.Unlock()
+	if stale {
+		go a.recheck()
+	}
 	return b
+}
+
+// modelSignature describes the current state of a model's files without
+// reading them: manifest and blob paths, sizes, modification times, inodes.
+func (a *attestation) modelSignature(model CatalogModel) (string, []string) {
+	if a == nil || a.engine == nil || model.ID == "" {
+		return "", nil
+	}
+	files, err := modelFiles(a.engine.modelsDir(), model)
+	if err != nil {
+		return "", nil
+	}
+	var b strings.Builder
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if err != nil || !info.Mode().IsRegular() {
+			return "", nil
+		}
+		ino := uint64(0)
+		if st, ok := info.Sys().(*syscall.Stat_t); ok {
+			ino = uint64(st.Ino)
+		}
+		fmt.Fprintf(&b, "%s|%d|%d|%d\n", f, info.Size(), info.ModTime().UnixNano(), ino)
+	}
+	return b.String(), files
+}
+
+// verifyModel hashes the manifest (must equal the catalog digest) and every
+// blob (must equal its content address). It blocks; results are cached by
+// the file signature, so a swapped or changed file is hashed again.
+func (a *attestation) verifyModel(model CatalogModel) error {
+	signature, files := a.modelSignature(model)
+	if signature == "" {
+		return errors.New("model files missing")
+	}
+	cached := func() bool {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.models[model.ID] == signature
+	}
+	if cached() {
+		return nil
+	}
+	a.hashing.Lock()
+	defer a.hashing.Unlock()
+	if cached() {
+		return nil
+	}
+	if err := verifyModelFiles(files, model); err != nil {
+		a.mu.Lock()
+		delete(a.models, model.ID)
+		a.mu.Unlock()
+		return err
+	}
+	a.mu.Lock()
+	a.models[model.ID] = signature
+	a.mu.Unlock()
+	return nil
+}
+
+// prepareModel verifies a model in the background (after start, selection
+// or download) so the first request does not wait for hashing.
+func (a *attestation) prepareModel(model CatalogModel) {
+	if a == nil || model.ID == "" {
+		return
+	}
+	a.mu.Lock()
+	if a.verifying[model.ID] {
+		a.mu.Unlock()
+		return
+	}
+	a.verifying[model.ID] = true
+	a.mu.Unlock()
+	go func() {
+		_ = a.verifyModel(model)
+		a.mu.Lock()
+		delete(a.verifying, model.ID)
+		a.mu.Unlock()
+	}()
+}
+
+// modelFiles returns the manifest followed by its config and layer blobs.
+func modelFiles(modelsDir string, model CatalogModel) ([]string, error) {
+	name, tag, _ := strings.Cut(model.ID, ":")
+	manifest := filepath.Join(modelsDir, "manifests", "registry.ollama.ai", "library", name, tag)
+	raw, err := os.ReadFile(manifest)
+	if err != nil {
+		return nil, err
+	}
+	var m struct {
+		Config struct {
+			Digest string `json:"digest"`
+		} `json:"config"`
+		Layers []struct {
+			Digest string `json:"digest"`
+		} `json:"layers"`
+	}
+	if json.Unmarshal(raw, &m) != nil || m.Config.Digest == "" {
+		return nil, errors.New("invalid manifest")
+	}
+	files := []string{manifest}
+	for _, d := range append([]string{m.Config.Digest}, func() []string {
+		out := []string{}
+		for _, l := range m.Layers {
+			out = append(out, l.Digest)
+		}
+		return out
+	}()...) {
+		blob := strings.Replace(d, ":", "-", 1)
+		if !strings.HasPrefix(blob, "sha256-") || strings.ContainsAny(blob, "/\\") {
+			return nil, errors.New("invalid layer digest")
+		}
+		files = append(files, filepath.Join(modelsDir, "blobs", blob))
+	}
+	return files, nil
+}
+
+func verifyModelFiles(files []string, model CatalogModel) error {
+	if len(files) == 0 {
+		return errors.New("no model files")
+	}
+	if sum, err := fileDigest(files[0]); err != nil || sum != model.Digest {
+		return errors.New("model manifest does not match the catalog digest")
+	}
+	for _, f := range files[1:] {
+		sum, err := fileDigest(f)
+		if err != nil || "sha256-"+sum != filepath.Base(f) {
+			return errors.New("model file does not match its digest")
+		}
+	}
+	return nil
 }
 
 // recheck re-measures the engine directory after the engine was started,
@@ -88,6 +238,8 @@ func (a *attestation) recheck() {
 	if a == nil || a.dir == "" {
 		return
 	}
+	a.hashing.Lock()
+	defer a.hashing.Unlock()
 	starts := a.engine.startCount()
 	a.mu.Lock()
 	current := a.starts == starts && !a.computing
@@ -108,7 +260,13 @@ func (a *attestation) recheck() {
 func directoryDigest(dir string) (string, error) {
 	type entry struct{ rel, kind, sum string }
 	var entries []entry
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	// Measure the real directory even if it is reached through a link.
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", errors.New("engine directory not measurable")
+	}
+	dir = root
+	err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -118,6 +276,12 @@ func directoryDigest(dir string) (string, error) {
 			target, err := os.Readlink(path)
 			if err != nil {
 				return err
+			}
+			// A link may only point inside the measured directory, whose
+			// files are hashed anyway; anything outside is not measured.
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil || (resolved != dir && !strings.HasPrefix(resolved, dir+string(filepath.Separator))) {
+				return fmt.Errorf("link %s leaves the engine directory", rel)
 			}
 			entries = append(entries, entry{rel, "link", target})
 		case d.Type().IsRegular():
@@ -288,7 +452,7 @@ func qualificationFile(opts Options) string {
 // productionPolicy combines attestation with the shipped, signed records.
 func productionPolicy(opts Options, e *engine) (qualificationPolicy, *attestation, error) {
 	att := newAttestation(e)
-	p := qualificationPolicy{runtime: att.binding}
+	p := qualificationPolicy{runtime: att.bindingFor}
 	path := qualificationFile(opts)
 	if path == "" {
 		return p, att, errors.New("no qualification file location")

@@ -96,9 +96,10 @@ func (f *fakeJellyfin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // fakeEngine scripts the tool loop of a model so harness, rights and source
 // handling are tested deterministically. Real models run in the casting.
 type fakeEngine struct {
-	delay  time.Duration
-	chats  atomic.Int32
-	aborts atomic.Int32
+	delay     time.Duration
+	chats     atomic.Int32
+	aborts    atomic.Int32
+	showFails atomic.Bool
 }
 
 func (e *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +109,10 @@ func (e *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/tags":
 		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{{"name": "qwen3.5:4b", "digest": catalog[0].Digest, "size": catalog[0].Bytes}}})
 	case "/api/show":
+		if e.showFails.Load() {
+			http.Error(w, "busy", 500)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"capabilities": []string{"completion", "tools", "thinking"}})
 	case "/api/chat":
 		e.chats.Add(1)

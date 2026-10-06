@@ -4,10 +4,13 @@ package hub
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -101,16 +104,16 @@ func TestAttestationDeniesExternalOrUnconfinedEngine(t *testing.T) {
 	e := newEngine(t.TempDir(), binary, true)
 	digest, _ := directoryDigest(dir)
 	a := &attestation{engine: e, dir: dir, digest: digest, sandbox: true, hardware: "hw", osBuild: "os", adapter: "hub"}
-	if a.binding().EngineDigest != digest {
+	if a.bindingFor(CatalogModel{}).EngineDigest != digest {
 		t.Fatal("managed confined engine not attested")
 	}
 	a.sandbox = false
-	if a.binding().EngineDigest != "" {
+	if a.bindingFor(CatalogModel{}).EngineDigest != "" {
 		t.Fatal("unconfined engine attested")
 	}
 	a.sandbox = true
 	e.configure(&Engine{Mode: "external", URL: "http://127.0.0.1:11434"})
-	if a.binding().EngineDigest != "" {
+	if a.bindingFor(CatalogModel{}).EngineDigest != "" {
 		t.Fatal("external engine attested")
 	}
 	e.configure(&Engine{Mode: "managed"})
@@ -120,7 +123,7 @@ func TestAttestationDeniesExternalOrUnconfinedEngine(t *testing.T) {
 	e.mu.Unlock()
 	_ = os.WriteFile(binary, []byte("swapped"), 0700)
 	a.recheck()
-	if got := a.binding().EngineDigest; got == digest || got == "" {
+	if got := a.bindingFor(CatalogModel{}).EngineDigest; got == digest || got == "" {
 		t.Fatalf("recheck %q", got)
 	}
 }
@@ -158,7 +161,9 @@ func TestSignedEvidenceGrantsOnlyTheMeasuredDeployment(t *testing.T) {
 	}
 	e := newTestEnvWithQualification(t, "", false)
 	e.configureAI()
-	e.hub.ai.qualification = qualificationPolicy{runtime: func() qualificationBinding { return measured }, records: records}
+	withModel := measured
+	withModel.ModelDigest = catalog[0].Digest
+	e.hub.ai.qualification = qualificationPolicy{runtime: func(CatalogModel) qualificationBinding { return withModel }, records: records}
 	if _, err := e.hub.ai.qualify(assistantTask, languagePacks["de"]); err != nil {
 		t.Fatalf("measured deployment denied: %v", err)
 	}
@@ -168,10 +173,139 @@ func TestSignedEvidenceGrantsOnlyTheMeasuredDeployment(t *testing.T) {
 	if _, err := e.hub.ai.qualify("documents.read", languagePacks["de"]); err == nil {
 		t.Fatal("unmeasured task granted")
 	}
-	changed := measured
+	changed := withModel
 	changed.OSBuild = "macOS update"
-	e.hub.ai.qualification.runtime = func() qualificationBinding { return changed }
+	e.hub.ai.qualification.runtime = func(CatalogModel) qualificationBinding { return changed }
 	if _, err := e.hub.ai.qualify(assistantTask, languagePacks["de"]); err == nil {
 		t.Fatal("changed OS still granted")
+	}
+}
+
+func writeTestModel(t *testing.T, models string, blobs map[string][]byte) CatalogModel {
+	t.Helper()
+	layers := []map[string]string{}
+	config := ""
+	for name, content := range blobs {
+		sum := sha256.Sum256(content)
+		digest := "sha256:" + hex.EncodeToString(sum[:])
+		_ = os.MkdirAll(filepath.Join(models, "blobs"), 0700)
+		_ = os.WriteFile(filepath.Join(models, "blobs", "sha256-"+hex.EncodeToString(sum[:])), content, 0600)
+		if name == "config" {
+			config = digest
+		} else {
+			layers = append(layers, map[string]string{"digest": digest})
+		}
+	}
+	manifest, _ := json.Marshal(map[string]any{"config": map[string]string{"digest": config}, "layers": layers})
+	path := filepath.Join(models, "manifests", "registry.ollama.ai", "library", "test", "model")
+	_ = os.MkdirAll(filepath.Dir(path), 0700)
+	_ = os.WriteFile(path, manifest, 0600)
+	sum := sha256.Sum256(manifest)
+	return CatalogModel{ID: "test:model", Digest: hex.EncodeToString(sum[:])}
+}
+
+func TestModelFilesAreVerifiedNotTakenFromTheEngine(t *testing.T) {
+	dir := t.TempDir()
+	e := newEngine(dir, "", true)
+	model := writeTestModel(t, e.modelsDir(), map[string][]byte{"config": []byte("{}"), "weights": []byte("weights-v1")})
+	a := &attestation{engine: e, models: map[string]string{}, verifying: map[string]bool{}}
+	if a.bindingFor(model).ModelDigest != "" {
+		t.Fatal("unverified model attested")
+	}
+	if err := a.verifyModel(model); err != nil {
+		t.Fatal(err)
+	}
+	if a.bindingFor(model).ModelDigest != model.Digest {
+		t.Fatal("verified model not attested")
+	}
+	// Replacing a blob's content (same name) changes its signature and fails
+	// the next verification.
+	files, _ := modelFiles(e.modelsDir(), model)
+	time.Sleep(10 * time.Millisecond)
+	_ = os.WriteFile(files[2], []byte("tampered!!"), 0600)
+	if a.bindingFor(model).ModelDigest != "" {
+		t.Fatal("changed blob still attested")
+	}
+	if err := a.verifyModel(model); err == nil {
+		t.Fatal("tampered blob verified")
+	}
+	// A manifest that is not the catalog's is refused.
+	other := model
+	other.Digest = strings.Repeat("0", 64)
+	if err := a.verifyModel(other); err == nil {
+		t.Fatal("foreign manifest verified")
+	}
+}
+
+func TestEngineDigestIsStaleAfterAnEngineStart(t *testing.T) {
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "ollama")
+	_ = os.WriteFile(binary, []byte("engine"), 0700)
+	e := newEngine(t.TempDir(), binary, true)
+	digest, _ := directoryDigest(dir)
+	a := &attestation{engine: e, dir: dir, digest: digest, sandbox: true, models: map[string]string{}, verifying: map[string]bool{}}
+	e.mu.Lock()
+	e.starts++
+	e.mu.Unlock()
+	if a.bindingFor(CatalogModel{}).EngineDigest != "" {
+		t.Fatal("digest from before the start still used")
+	}
+	a.recheck()
+	if a.bindingFor(CatalogModel{}).EngineDigest != digest {
+		t.Fatal("recheck did not restore the digest")
+	}
+}
+
+func TestEngineDirectoryLinksMustStayInside(t *testing.T) {
+	dir := t.TempDir()
+	outside := t.TempDir()
+	_ = os.WriteFile(filepath.Join(outside, "lib.dylib"), []byte("x"), 0600)
+	_ = os.WriteFile(filepath.Join(dir, "ollama"), []byte("engine"), 0700)
+	_ = os.Symlink(filepath.Join(outside, "lib.dylib"), filepath.Join(dir, "lib.dylib"))
+	if _, err := directoryDigest(dir); err == nil {
+		t.Fatal("link to an unmeasured file accepted")
+	}
+	// The directory itself may be reached through a link.
+	_ = os.Remove(filepath.Join(dir, "lib.dylib"))
+	link := filepath.Join(t.TempDir(), "engine")
+	_ = os.Symlink(dir, link)
+	direct, _ := directoryDigest(dir)
+	via, err := directoryDigest(link)
+	if err != nil || via != direct {
+		t.Fatalf("linked directory: %v", err)
+	}
+}
+
+// A run needs the managed engine the evidence was measured on and an
+// explicit thinking setting; otherwise it fails before the model is asked.
+func TestRunsFailClosedOnExternalEngineOrUnknownThinking(t *testing.T) {
+	e := newTestEnv(t, "")
+	e.configureAI()
+	var conv map[string]any
+	e.do("POST", "/ai/conversations", "token-a", map[string]string{}, &conv)
+	cid := conv["id"].(string)
+	finished := func(key string) map[string]any {
+		out, code := e.ask("token-a", cid, "Hallo", key)
+		if code != 202 {
+			t.Fatalf("ask %d %v", code, out)
+		}
+		events, _ := e.events(runID(out), cid, "token-a", func(ev sseEvent) bool { return ev.Type == "done" })
+		return events[len(events)-1].Data
+	}
+	e.hub.ai.qualification.externalEngine = false
+	if done := finished("x1"); done["state"] != "failed" || done["code"] != "qualification_required" {
+		t.Fatalf("external engine %v", done)
+	}
+	e.hub.ai.qualification.externalEngine = true
+	e.engine.showFails.Store(true)
+	if done := finished("x2"); done["state"] != "failed" || done["code"] != "engine" {
+		t.Fatalf("unknown thinking %v", done)
+	}
+	if n := e.engine.chats.Load(); n != 0 {
+		t.Fatalf("model asked %d times", n)
+	}
+	e.engine.showFails.Store(false)
+	if done := finished("x3"); done["state"] != "completed" {
+		t.Fatalf("recovered %v", done)
 	}
 }

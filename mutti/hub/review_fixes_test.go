@@ -111,6 +111,7 @@ func TestNoAttachmentWhileAnAnswerRuns(t *testing.T) {
 		t.Fatalf("attachment during run: %d", res.StatusCode)
 	}
 	e.do("POST", "/ai/runs/"+runID(started)+"/cancel", "token-a", map[string]string{}, nil)
+	e.events(runID(started), cid, "token-a", func(ev sseEvent) bool { return ev.Type == "done" })
 }
 
 func TestUnavailableAreaIsRetriedOnLaterPages(t *testing.T) {

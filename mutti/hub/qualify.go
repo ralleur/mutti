@@ -175,7 +175,10 @@ func RunQualification(o QualifyOptions) error {
 		time.Sleep(200 * time.Millisecond)
 	}
 	h.ai.attest.recheck()
-	binding := h.ai.attest.binding()
+	if err := h.ai.attest.verifyModel(model); err != nil {
+		return fmt.Errorf("model files of %s not verified: %w", model.ID, err)
+	}
+	binding := h.ai.attest.bindingFor(model)
 	binding.ModelDigest, binding.ContextTokens, binding.Temperature, binding.Thinking = model.Digest, model.ContextTokens, model.Temperature, "off"
 	binding.ContractDigest, binding.Language = assistantContractDigest(lang), lang.Code
 	if !binding.complete() {
@@ -195,7 +198,11 @@ func RunQualification(o QualifyOptions) error {
 		identities[name] = id
 	}
 	think := false
-	harness := &Harness{Client: e.stream, Base: base, Model: model.ID, Think: h.ai.thinkFlag(ctx, base, model.ID, &think), Lang: lang,
+	thinkFlag, err := h.ai.thinkFlag(ctx, base, model.ID, &think)
+	if err != nil {
+		return err
+	}
+	harness := &Harness{Client: e.stream, Base: base, Model: model.ID, Think: thinkFlag, Lang: lang,
 		Options: map[string]any{"num_ctx": model.ContextTokens, "temperature": model.Temperature, "seed": 42, "num_predict": 1024}}
 	suiteSum := sha256.Sum256(raw)
 	env := map[string]any{"started": time.Now().UTC(), "suite": suite.Version, "suiteSha256": hex.EncodeToString(suiteSum[:]), "prompt": PromptVersion,
@@ -502,13 +509,20 @@ func summarizeQualification(all []qualifyResult, binding qualificationBinding, e
 		if len(short) > 8 {
 			short = short[:8]
 		}
-		candidates.Records = append(candidates.Records, qualificationRecord{ID: "q-" + now.Format("20060102") + "-" + binding.Language + "-" + name + "-" + short,
+		candidates.Records = append(candidates.Records, qualificationRecord{ID: "q-" + now.Format("20060102") + "-" + binding.Language + "-" + name + "-" + modelShort(binding.ModelDigest) + "-" + short,
 			Task: name, Status: status, EvidenceDigest: evidence, SuiteDigest: suite, Binding: binding, Expires: now.Add(validity)})
 	}
 	summary := map[string]any{"tasks": list, "runs": len(all),
 		"latency":               map[string]any{"firstP50": percentile(first, 0.5), "firstP95": percentile(first, 0.95), "totalP50": percentile(total, 0.5), "totalP95": percentile(total, 0.95)},
 		"tokensPerSecondMedian": percentile(speed, 0.5), "engineRssPeakBytes": peak}
 	return summary, candidates
+}
+
+func modelShort(digest string) string {
+	if len(digest) > 8 {
+		return digest[:8]
+	}
+	return digest
 }
 
 // residentBytes sums the resident memory of the engine's process group

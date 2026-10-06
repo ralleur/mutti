@@ -168,6 +168,9 @@ func newAI(h *Hub) (*AI, error) {
 	if err != nil {
 		a.qualificationLoad = err.Error()
 	}
+	if configured, ok := catalogModel(h.store.Read().Modules[ModuleAI].Model); ok {
+		att.prepareModel(configured)
+	}
 	if err := a.markInterrupted(); err != nil {
 		return nil, err
 	}
@@ -768,31 +771,45 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 		return
 	}
 	lang := a.runLanguage(l)
-	if _, err := a.qualify(assistantTask, lang); err != nil {
-		a.finish(l, "failed", "qualification_required", HarnessResult{}, nil, err)
+	model, ok := catalogModel(cfg.Model)
+	if !ok {
+		a.finish(l, "failed", "qualification_required", HarnessResult{}, nil, qualificationError())
 		return
 	}
 	a.setRunState(l, "running")
 	l.emit("state", map[string]any{"state": "starting"})
+	// Check before starting the engine. The model files are hashed once
+	// after a start or change (cached afterwards), so this may take a while.
+	_ = a.attest.verifyModel(model)
+	if _, err := a.qualifyModel(assistantTask, lang, model.ID); err != nil {
+		a.finish(l, "failed", "qualification_required", HarnessResult{}, nil, err)
+		return
+	}
 	if err := a.engine.ensure(ctx); err != nil {
 		a.finish(l, "failed", "engine", HarnessResult{}, nil, err)
 		return
 	}
-	// The engine files are measured again after a start; anything changed
-	// since attestation no longer matches the evidence.
-	a.attest.recheck()
-	if _, err := a.qualify(assistantTask, lang); err != nil {
-		a.finish(l, "failed", "qualification_required", HarnessResult{}, nil, err)
-		return
-	}
-	model, ok := catalogModel(cfg.Model)
-	if !ok || !a.engine.verified(ctx, model) {
+	if !a.engine.verified(ctx, model) {
 		a.finish(l, "failed", "model", HarnessResult{}, nil, apiErr(503, "model_missing", "Das gewählte Modell ist nicht installiert oder nicht die geprüfte Version."))
 		return
 	}
-	base, err := a.engine.base()
-	if err != nil {
-		a.finish(l, "failed", "engine", HarnessResult{}, nil, err)
+	// Take the managed engine's address first, then measure: the engine
+	// files after a start and the model files on disk. A later switch to an
+	// external engine stops this engine, so the run cannot reach another one.
+	base, managed := a.engine.managedBase()
+	if !managed && a.qualification.externalEngine {
+		var err error
+		base, err = a.engine.base()
+		managed = err == nil
+	}
+	if !managed {
+		a.finish(l, "failed", "qualification_required", HarnessResult{}, nil, qualificationError())
+		return
+	}
+	a.attest.recheck()
+	_ = a.attest.verifyModel(model)
+	if _, err := a.qualifyModel(assistantTask, lang, model.ID); err != nil {
+		a.finish(l, "failed", "qualification_required", HarnessResult{}, nil, err)
 		return
 	}
 	unlock := a.lock(l.conversation)
@@ -803,11 +820,17 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 		return
 	}
 	tools := a.toolsFor(l.identity, c, lang)
+	tools.model = model.ID
 	omit := a.revokedHistory(ctx, l.identity, c, l.id)
 	messages := a.buildMessages(c, l.id, model, tools, omit)
 	l.emit("state", map[string]any{"state": "running"})
 	think := false
-	h := &Harness{Client: a.engine.stream, Base: base, Model: model.ID, Think: a.thinkFlag(ctx, base, model.ID, &think), Lang: lang,
+	thinkFlag, err := a.thinkFlag(ctx, base, model.ID, &think)
+	if err != nil {
+		a.finish(l, "failed", "engine", HarnessResult{}, nil, err)
+		return
+	}
+	h := &Harness{Client: a.engine.stream, Base: base, Model: model.ID, Think: thinkFlag, Lang: lang,
 		Options: map[string]any{"num_ctx": model.ContextTokens, "temperature": model.Temperature, "seed": 42, "num_predict": 1024}}
 	result, err := h.Run(ctx, messages, tools, func(ev HarnessEvent) {
 		switch ev.Type {
@@ -837,7 +860,11 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 	}
 }
 
-func (a *AI) thinkFlag(ctx context.Context, base, model string, off *bool) *bool {
+// thinkFlag returns the explicit thinking setting for thinking-capable
+// models. If the capability cannot be determined the run must not start:
+// omitting the flag would leave the engine's default, which may differ from
+// the qualified "off".
+func (a *AI) thinkFlag(ctx context.Context, base, model string, off *bool) (*bool, error) {
 	a.mu.Lock()
 	known, ok := a.show[model]
 	a.mu.Unlock()
@@ -845,21 +872,22 @@ func (a *AI) thinkFlag(ctx context.Context, base, model string, off *bool) *bool
 		var info struct {
 			Capabilities []string `json:"capabilities"`
 		}
-		if serviceCall(ctx, a.engine.client, "POST", base+"/api/show", nil, map[string]string{"model": model}, &info) == nil {
-			for _, c := range info.Capabilities {
-				if c == "thinking" {
-					known = true
-				}
-			}
-			a.mu.Lock()
-			a.show[model] = known
-			a.mu.Unlock()
+		if err := serviceCall(ctx, a.engine.client, "POST", base+"/api/show", nil, map[string]string{"model": model}, &info); err != nil {
+			return nil, apiErr(503, "engine_not_ready", "Die lokale KI startet gerade oder ist nicht bereit.")
 		}
+		for _, c := range info.Capabilities {
+			if c == "thinking" {
+				known = true
+			}
+		}
+		a.mu.Lock()
+		a.show[model] = known
+		a.mu.Unlock()
 	}
 	if known {
-		return off
+		return off, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (a *AI) setRunState(l *liveRun, state string) {

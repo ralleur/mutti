@@ -75,6 +75,8 @@ type profileTools struct {
 	docs      documentBackend
 	photos    photoBackend
 	language  *languagePack
+	// model is the model of the run; tools are qualified for exactly it.
+	model string
 }
 
 func (t *profileTools) lang() *languagePack {
@@ -244,7 +246,11 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 	qualification := ""
 	if t.hub != nil {
 		var err error
-		qualification, err = t.hub.ai.qualify(toolTask(name), t.lang())
+		if t.model != "" {
+			qualification, err = t.hub.ai.qualifyModel(toolTask(name), t.lang(), t.model)
+		} else {
+			qualification, err = t.hub.ai.qualify(toolTask(name), t.lang())
+		}
 		if err != nil {
 			return toolError(name, "qualification_required")
 		}

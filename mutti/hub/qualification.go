@@ -42,8 +42,14 @@ type qualificationRecord struct {
 // gates. A trusted runtime attestor and reviewed evidence loading are required
 // before promoting the first deployment (see contracts.md).
 type qualificationPolicy struct {
-	runtime func() qualificationBinding
+	// runtime measures the deployment for one catalog model. ModelDigest is
+	// only set when that model's files were verified on disk.
+	runtime func(model CatalogModel) qualificationBinding
 	records []qualificationRecord
+	// externalEngine lets synthetic test policies run against a fake
+	// external engine. The production policy never sets it: evidence binds
+	// the measured, managed engine only.
+	externalEngine bool
 }
 
 func (b qualificationBinding) complete() bool {
@@ -81,15 +87,23 @@ func assistantContractDigest(lang *languagePack) string {
 }
 
 func (a *AI) qualify(task string, lang *languagePack) (string, error) {
+	return a.qualifyModel(task, lang, a.hub.store.Read().Modules[ModuleAI].Model)
+}
+
+// qualifyModel checks a task for exactly the model a run uses, so a model
+// switch during a run can never borrow another model's evidence.
+func (a *AI) qualifyModel(task string, lang *languagePack, modelID string) (string, error) {
 	if lang == nil {
 		return "", qualificationError()
 	}
-	model, ok := catalogModel(a.hub.store.Read().Modules[ModuleAI].Model)
+	model, ok := catalogModel(modelID)
 	if !ok || a.qualification.runtime == nil {
 		return "", qualificationError()
 	}
-	binding := a.qualification.runtime()
-	binding.ModelDigest = model.Digest
+	binding := a.qualification.runtime(model)
+	if binding.ModelDigest != model.Digest {
+		return "", qualificationError()
+	}
 	binding.ContextTokens = model.ContextTokens
 	binding.Temperature = model.Temperature
 	binding.Thinking = "off"

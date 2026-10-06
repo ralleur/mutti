@@ -52,7 +52,8 @@ var qualificationTasks = []string{assistantTask, "media.search", "media.read", "
 func (a *AI) qualificationSnapshot() map[string]any {
 	measured := qualificationBinding{}
 	if a.qualification.runtime != nil {
-		measured = a.qualification.runtime()
+		configured, _ := catalogModel(a.hub.store.Read().Modules[ModuleAI].Model)
+		measured = a.qualification.runtime(configured)
 	}
 	granted := map[string]map[string]bool{}
 	for code, lang := range languagePacks {
@@ -165,6 +166,7 @@ func (a *AI) adminModels(w http.ResponseWriter, r *http.Request, id Identity) er
 		}); err != nil {
 			return err
 		}
+		a.attest.prepareModel(model)
 	case "remove":
 		if err := a.engine.ensure(ctx); err != nil {
 			return err
