@@ -239,7 +239,7 @@ func TestHarnessCorrectsDeflectionAndClaims(t *testing.T) {
 		`call:propose_favorite:{"source":"Q1","favorite":true}`,
 		"Der Film wurde als Favorit markiert.",
 		"Ich habe den Vorschlag angelegt; bitte bestätige ihn.")
-	if fmt.Sprint(res.Interventions) != "[claim]" || languagePacks["de"].claimed.MatchString(res.Text) {
+	if fmt.Sprint(res.Interventions) != "[claim]" || languagePacks["de"].claimsChange(res.Text) {
 		t.Fatalf("claim: %v %q", res.Interventions, res.Text)
 	}
 	h, _ := scriptedModel(t, `call:propose_favorite:{"source":"Q1","favorite":true}`, "Der Film wurde als Favorit markiert.", "Er wurde als Favorit markiert.")

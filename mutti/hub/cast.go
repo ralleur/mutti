@@ -116,9 +116,9 @@ func (d castData) Movie(ctx context.Context, id string) (Movie, error) {
 
 var castWord = regexp.MustCompile(`[\p{L}\p{N}-]{3,}`)
 
-func (d castData) Search(_ context.Context, query string) ([]Document, error) {
+func (d castData) Search(_ context.Context, query string) ([]Document, int, error) {
 	if d.fail["search_documents"] {
-		return nil, errors.New("synthetic outage")
+		return nil, 0, errors.New("synthetic outage")
 	}
 	type hit struct {
 		score int
@@ -154,7 +154,7 @@ func (d castData) Search(_ context.Context, query string) ([]Document, error) {
 		}
 		out = append(out, h.doc)
 	}
-	return out, nil
+	return out, len(hits), nil
 }
 
 func (d castData) Read(_ context.Context, id int) (Document, error) {
@@ -167,7 +167,7 @@ func (d castData) Read(_ context.Context, id int) (Document, error) {
 	return Document{}, errNotFound
 }
 
-func (d castData) Find(_ context.Context, query, from, to string) ([]PhotoAsset, error) {
+func (d castData) Find(_ context.Context, query, from, to string) ([]PhotoAsset, bool, error) {
 	out := []PhotoAsset{}
 	q := strings.ToLower(query)
 	for _, p := range d.f.Data.Photos {
@@ -179,7 +179,10 @@ func (d castData) Find(_ context.Context, query, from, to string) ([]PhotoAsset,
 		}
 		out = append(out, PhotoAsset{ID: p.ID, Type: p.Type, Taken: p.Taken, Description: p.Description, City: p.City})
 	}
-	return out, nil
+	if len(out) > 12 {
+		return out[:12], true, nil
+	}
+	return out, false, nil
 }
 
 // objectRef maps fixture keys like "movie:nordlicht" to the server marker.
@@ -412,7 +415,7 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	if cjk.MatchString(r.Raw) {
 		add("foreign script")
 	}
-	if lang.claimed.MatchString(answer) {
+	if lang.claimsChange(answer) {
 		add("claims executed change")
 	}
 	for i, want := range ch.Calls {
@@ -516,7 +519,7 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	if ch.NoCitations && len(r.Cited) > 0 {
 		add("unexpected citation")
 	}
-	if (ch.German || ch.Language) && lang.wrongLanguage(answer) {
+	if (ch.German || ch.Language) && lang.wrongLanguage(answer, book.titles()...) {
 		add("answer not in %s", lang.Name)
 	}
 	if ch.Question && !strings.Contains(answer, "?") {

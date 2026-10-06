@@ -87,12 +87,14 @@ func (t *profileTools) lang() *languagePack {
 }
 
 type documentBackend interface {
-	Search(ctx context.Context, query string) ([]Document, error)
+	// Search returns the first hits and the total number of matches.
+	Search(ctx context.Context, query string) ([]Document, int, error)
 	Read(ctx context.Context, id int) (Document, error)
 }
 
 type photoBackend interface {
-	Find(ctx context.Context, query, from, to string) ([]PhotoAsset, error)
+	// Find returns the first hits and whether more match.
+	Find(ctx context.Context, query, from, to string) ([]PhotoAsset, bool, error)
 }
 
 // hubDocuments and hubPhotos bind the adapters to one profile.
@@ -101,9 +103,9 @@ type hubDocuments struct {
 	id Identity
 }
 
-func (h hubDocuments) Search(ctx context.Context, query string) ([]Document, error) {
+func (h hubDocuments) Search(ctx context.Context, query string) ([]Document, int, error) {
 	page, err := h.d.search(ctx, h.id, query, 1, 5)
-	return page.Items, err
+	return page.Items, max(page.Count, len(page.Items)), err
 }
 
 func (h hubDocuments) Read(ctx context.Context, id int) (Document, error) {
@@ -115,9 +117,9 @@ type hubPhotos struct {
 	id Identity
 }
 
-func (h hubPhotos) Find(ctx context.Context, query, from, to string) ([]PhotoAsset, error) {
-	items, _, err := h.p.find(ctx, h.id, query, from, to, 12)
-	return items, err
+func (h hubPhotos) Find(ctx context.Context, query, from, to string) ([]PhotoAsset, bool, error) {
+	items, more, _, err := h.p.findPage(ctx, h.id, photoQuery{Text: query, From: from, To: to}, 1, 12)
+	return items, more, err
 }
 
 // mediaBackend isolates Jellyfin access so the casting fixture can exercise
@@ -194,6 +196,21 @@ func (t *profileTools) Definitions() []toolDef { return t.defs }
 // Issued reports whether the server handed out this marker in the conversation.
 func (t *profileTools) Issued(ref string) bool { return t.sources.Items[ref] != nil }
 
+// Titles lists the titles of the sources issued in this conversation.
+func (t *profileTools) Titles() []string { return t.sources.titles() }
+
+func (b *sourceBook) titles() []string {
+	out := []string{}
+	for _, s := range b.Items {
+		if s.Title != "" {
+			out = append(out, s.Title)
+		}
+	}
+	// Longest first, so a title containing another one is removed whole.
+	sort.Slice(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
+	return out
+}
+
 func toolJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
@@ -261,26 +278,26 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 	switch name {
 	case "search_movies":
 		var a struct {
-			Query   string  `json:"query"`
-			Genre   string  `json:"genre"`
-			Year    float64 `json:"year"`
-			Watched *bool   `json:"watched"`
-			Unwatch *bool   `json:"unwatched"`
+			Query   string     `json:"query"`
+			Genre   string     `json:"genre"`
+			Year    flexNumber `json:"year"`
+			Watched *bool      `json:"watched"`
+			Unwatch *bool      `json:"unwatched"`
 			// v4 names; the v3/v4-draft spellings stay accepted.
-			Under        float64 `json:"runtime_under_seconds"`
-			UnderMinutes float64 `json:"runtime_under_minutes"`
-			Most         float64 `json:"runtime_at_most_seconds"`
-			Over         float64 `json:"runtime_over_seconds"`
-			OverMinutes  float64 `json:"runtime_over_minutes"`
-			Least        float64 `json:"runtime_at_least_seconds"`
-			LeastMinutes float64 `json:"runtime_at_least_minutes"`
-			MostMinutes  float64 `json:"runtime_at_most_minutes"`
-			Below        float64 `json:"runtime_below_seconds"`
-			Minutes      float64 `json:"runtime_below_minutes"`
-			MaxSeconds   float64 `json:"runtime_max_seconds"`
-			MaxMinutes   float64 `json:"runtime_max_minutes"`
-			Sort         string  `json:"sort"`
-			Limit        float64 `json:"limit"`
+			Under        flexNumber `json:"runtime_under_seconds"`
+			UnderMinutes flexNumber `json:"runtime_under_minutes"`
+			Most         flexNumber `json:"runtime_at_most_seconds"`
+			Over         flexNumber `json:"runtime_over_seconds"`
+			OverMinutes  flexNumber `json:"runtime_over_minutes"`
+			Least        flexNumber `json:"runtime_at_least_seconds"`
+			LeastMinutes flexNumber `json:"runtime_at_least_minutes"`
+			MostMinutes  flexNumber `json:"runtime_at_most_minutes"`
+			Below        flexNumber `json:"runtime_below_seconds"`
+			Minutes      flexNumber `json:"runtime_below_minutes"`
+			MaxSeconds   flexNumber `json:"runtime_max_seconds"`
+			MaxMinutes   flexNumber `json:"runtime_max_minutes"`
+			Sort         string     `json:"sort"`
+			Limit        flexNumber `json:"limit"`
 		}
 		if json.Unmarshal(raw, &a) != nil {
 			return toolError(name, "Invalid arguments.")
@@ -290,8 +307,15 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			return toolError(name, "The movie library is currently unavailable.")
 		}
 		f := movieFilter{Query: a.Query, Genre: a.Genre, Year: int(a.Year), Watched: a.Watched, Sort: a.Sort, Limit: int(a.Limit)}
-		// An explicit false means the opposite filter, as in the v3 contract.
-		if f.Watched == nil && a.Unwatch != nil {
+		switch {
+		case a.Watched != nil && a.Unwatch != nil:
+			// Both given: only a consistent pair filters. Defaults filled in
+			// for every argument (false/false) or a contradiction do not.
+			if *a.Watched == *a.Unwatch {
+				f.Watched = nil
+			}
+		case a.Unwatch != nil:
+			// An explicit false means the opposite filter, as in the v3 contract.
 			seen := !*a.Unwatch
 			f.Watched = &seen
 		}
@@ -299,7 +323,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		f.Max = firstSeconds(a.Most, a.MostMinutes, a.MaxSeconds, a.MaxMinutes)
 		f.Above = firstSeconds(a.Over, a.OverMinutes)
 		f.Min = firstSeconds(a.Least, a.LeastMinutes)
-		hits := filterMovies(movies, f)
+		hits, total := filterMovies(movies, f)
 		out := []map[string]any{}
 		for _, m := range hits {
 			s := t.addSource(Source{Service: "media", Kind: "movie", ObjectID: m.ID, Title: m.Title, Subtitle: movieSubtitle(m),
@@ -307,8 +331,8 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			out = append(out, map[string]any{"source": s.Ref, "title": m.Title, "year": m.Year, "runtime": formatRuntime(m.Seconds),
 				"runtime_seconds": m.Seconds, "watched": m.Watched, "genres": m.Genres})
 		}
-		return ToolResult{Content: toolJSON(map[string]any{"count": len(out), "hits": out}),
-			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["movies"], len(out))}}
+		return ToolResult{Content: toolJSON(withTotal(map[string]any{"count": len(out), "hits": out}, len(out), total, "movies")),
+			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["movies"], total)}}
 	case "get_movie":
 		var a struct {
 			Quelle string `json:"source"`
@@ -352,7 +376,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		if json.Unmarshal(raw, &a) != nil || strings.TrimSpace(a.Query) == "" || len(a.Query) > 200 {
 			return toolError(name, "Please provide a search term.")
 		}
-		items, err := t.docs.Search(ctx, a.Query)
+		items, total, err := t.docs.Search(ctx, a.Query)
 		if err != nil {
 			return toolError(name, "The document archive is currently unavailable.")
 		}
@@ -360,7 +384,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		// any of them, so one spelling variant does not hide the document.
 		partial := false
 		if words := strings.Fields(a.Query); len(items) == 0 && len(words) > 1 && !strings.Contains(a.Query, " OR ") {
-			if items, err = t.docs.Search(ctx, strings.Join(words, " OR ")); err != nil {
+			if items, total, err = t.docs.Search(ctx, strings.Join(words, " OR ")); err != nil {
 				return toolError(name, "The document archive is currently unavailable.")
 			}
 			partial = len(items) > 0
@@ -370,12 +394,12 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			s := t.addSource(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created, Revision: d.revision})
 			out = append(out, map[string]any{"source": s.Ref, "title": d.Title, "date": d.Created, "excerpt_data": d.Snippet})
 		}
-		result := map[string]any{"count": len(out), "hits": out}
+		result := withTotal(map[string]any{"count": len(out), "hits": out}, len(out), total, "documents")
 		if partial {
 			result["note"] = "No document contains all terms; these hits contain some of them. Check that they answer the question."
 		}
 		return ToolResult{Content: toolJSON(result),
-			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["documents"], len(out))}}
+			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["documents"], total)}}
 	case "read_document":
 		var a struct {
 			Quelle string `json:"source"`
@@ -405,7 +429,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		if json.Unmarshal(raw, &a) != nil || len(a.Query) > 200 || (a.From != "" && !dateParam.MatchString(a.From)) || (a.To != "" && !dateParam.MatchString(a.To)) {
 			return toolError(name, "Invalid arguments.")
 		}
-		items, err := t.photos.Find(ctx, a.Query, a.From, a.To)
+		items, more, err := t.photos.Find(ctx, a.Query, a.From, a.To)
 		if err != nil {
 			return toolError(name, "The photo library is currently unavailable.")
 		}
@@ -418,14 +442,55 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			s := t.addSource(Source{Service: "photos", Kind: p.Type, ObjectID: p.ID, Title: title, Subtitle: dateOnly(p.Taken), Revision: p.revision})
 			out = append(out, map[string]any{"source": s.Ref, "kind": p.Type, "taken": dateOnly(p.Taken), "description_data": p.Description, "place": p.City})
 		}
-		return ToolResult{Content: toolJSON(map[string]any{"count": len(out), "hits": out}),
+		result := map[string]any{"count": len(out), "hits": out}
+		if more {
+			result["more"] = true
+			result["note"] = fmt.Sprintf("More photos match; only the first %d are listed. Do not present them as all photos or as a total number.", len(out))
+		}
+		return ToolResult{Content: toolJSON(result),
 			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["photos"], len(out))}}
 	}
 	return toolError(name, "Unknown tool.")
 }
 
+// withTotal adds the number of all matches when only the first ones are
+// listed, so "how many …" is answered from the total, not the list length.
+func withTotal(result map[string]any, listed, total int, what string) map[string]any {
+	if total > listed {
+		result["total"] = total
+		result["note"] = fmt.Sprintf("%d %s match in total; only the first %d are listed. For a number use total; do not present the list as complete.", total, what, listed)
+	}
+	return result
+}
+
+// flexNumber accepts 5 and "5": some models quote numbers. An empty string
+// counts as not given.
+type flexNumber float64
+
+func (n *flexNumber) UnmarshalJSON(b []byte) error {
+	var f float64
+	if err := json.Unmarshal(b, &f); err == nil {
+		*n = flexNumber(f)
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	if s = strings.TrimSpace(s); s == "" {
+		*n = 0
+		return nil
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return err
+	}
+	*n = flexNumber(f)
+	return nil
+}
+
 // firstSeconds picks the first given bound from (seconds, minutes) pairs.
-func firstSeconds(pairs ...float64) int {
+func firstSeconds(pairs ...flexNumber) int {
 	for i := 0; i+1 < len(pairs); i += 2 {
 		if pairs[i] > 0 {
 			return int(pairs[i])
@@ -466,7 +531,7 @@ type movieFilter struct {
 	Limit      int
 }
 
-func filterMovies(movies []Movie, f movieFilter) []Movie {
+func filterMovies(movies []Movie, f movieFilter) ([]Movie, int) {
 	q := strings.ToLower(strings.TrimSpace(f.Query))
 	g := strings.ToLower(strings.TrimSpace(f.Genre))
 	below, limit, order := f.Below, f.Limit, f.Sort
@@ -509,7 +574,9 @@ func filterMovies(movies []Movie, f movieFilter) []Movie {
 	sort.SliceStable(out, func(i, j int) bool {
 		switch order {
 		case "runtime":
-			return out[i].Seconds < out[j].Seconds
+			// Unknown runtimes (0) are not the shortest; they come last.
+			a, b := out[i].Seconds, out[j].Seconds
+			return a > 0 && (b <= 0 || a < b)
 		case "runtime_desc":
 			return out[i].Seconds > out[j].Seconds
 		case "year":
@@ -523,10 +590,11 @@ func filterMovies(movies []Movie, f movieFilter) []Movie {
 	if limit <= 0 || limit > 10 {
 		limit = 10
 	}
+	total := len(out)
 	if len(out) > limit {
 		out = out[:limit]
 	}
-	return out
+	return out, total
 }
 
 // jellyfinMedia reads movies with the profile's own Jellyfin session, so

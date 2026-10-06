@@ -18,15 +18,15 @@ func TestLanguagePacksRecogniseRequestsAndDrafts(t *testing.T) {
 		want bool
 		name string
 	}{
-		{en, en.favoriteRequest.MatchString("Please mark Nordlicht as a favourite."), true, "en favourite request"},
-		{en, en.favoriteRequest.MatchString("Remove Lange Reise from my favorites"), true, "en remove favourite"},
-		{en, en.favoriteRequest.MatchString("Which movies are short?"), false, "en no request"},
-		{en, en.claimed.MatchString("Nordlicht has been marked as a favourite."), true, "en claim"},
-		{en, en.claimed.MatchString("I've prepared a suggestion. Please confirm it."), false, "en honest proposal"},
+		{en, en.requestsFavorite("Please mark Nordlicht as a favourite."), true, "en favourite request"},
+		{en, en.requestsFavorite("Remove Lange Reise from my favorites"), true, "en remove favourite"},
+		{en, en.requestsFavorite("Which movies are short?"), false, "en no request"},
+		{en, en.claimsChange("Nordlicht has been marked as a favourite."), true, "en claim"},
+		{en, en.claimsChange("I've prepared a suggestion. Please confirm it."), false, "en honest proposal"},
 		{en, en.nothingFound.MatchString("I couldn't find a movie with that name."), true, "en nothing found"},
 		{en, en.unverifiedClaim.MatchString("I have searched your documents but found nothing."), true, "en unverified"},
-		{de, de.favoriteRequest.MatchString("Markiere Nordlicht als Favorit."), true, "de favourite request"},
-		{de, de.claimed.MatchString("Der Film wurde als Favorit markiert."), true, "de claim"},
+		{de, de.requestsFavorite("Markiere Nordlicht als Favorit."), true, "de favourite request"},
+		{de, de.claimsChange("Der Film wurde als Favorit markiert."), true, "de claim"},
 		{en, en.wrongLanguage("Die Rechnung ist noch nicht bezahlt und der Betrag ist hoch."), true, "German answer for English user"},
 		{en, en.wrongLanguage("The invoice is not paid yet; the amount is 128,40 EUR."), false, "English answer"},
 		{de, de.wrongLanguage("The invoice is not paid yet and it is due in November."), true, "English answer for German user"},
@@ -114,10 +114,10 @@ func TestEnglishHarnessCorrectsClaimInEnglish(t *testing.T) {
 
 func TestFindingsFromFirstProductRun(t *testing.T) {
 	de := languagePacks["de"]
-	if !de.favoriteRequest.MatchString("Mach Schon gesehen zu meinem Favoriten.") || !de.favoriteRequest.MatchString("Füg Nordlicht zum Favoriten hinzu") {
+	if !de.requestsFavorite("Mach Schon gesehen zu meinem Favoriten.") || !de.requestsFavorite("Füg Nordlicht zum Favoriten hinzu") {
 		t.Fatal("German favourite request missed")
 	}
-	if !languagePacks["en"].favoriteRequest.MatchString("Make Schon gesehen my favourite.") {
+	if !languagePacks["en"].requestsFavorite("Make Schon gesehen my favourite.") {
 		t.Fatal("English favourite request missed")
 	}
 	if !de.unverifiedClaim.MatchString("Ich habe in deinen privaten Daten keinen Hinweis auf den Namen des Hundes gefunden.") {
@@ -139,12 +139,12 @@ func TestFindingsFromFirstProductRun(t *testing.T) {
 
 type orDocs struct{ queries []string }
 
-func (o *orDocs) Search(_ context.Context, query string) ([]Document, error) {
+func (o *orDocs) Search(_ context.Context, query string) ([]Document, int, error) {
 	o.queries = append(o.queries, query)
 	if strings.Contains(query, " OR ") {
-		return []Document{{ID: 3, Title: "Mietvertrag"}}, nil
+		return []Document{{ID: 3, Title: "Mietvertrag"}}, 1, nil
 	}
-	return nil, nil
+	return nil, 0, nil
 }
 func (o *orDocs) Read(context.Context, int) (Document, error) { return Document{}, nil }
 

@@ -563,8 +563,8 @@ func TestFilterMoviesRuntimeYearAndWatched(t *testing.T) {
 		{movieFilter{Year: 2023, Sort: "runtime"}, "31"},      // year
 		{movieFilter{Year: 2023, Watched: &no, Max: 99}, "1"}, // combined
 	} {
-		if got := ids(filterMovies(movies, c.f)); got != c.want {
-			t.Fatalf("%+v: got %s want %s", c.f, got, c.want)
+		if hits, _ := filterMovies(movies, c.f); ids(hits) != c.want {
+			t.Fatalf("%+v: got %s want %s", c.f, ids(hits), c.want)
 		}
 	}
 }
