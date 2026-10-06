@@ -56,6 +56,13 @@ func (a *AI) postAttachment(w http.ResponseWriter, r *http.Request, id Identity)
 	if err != nil {
 		return err
 	}
+	// A running answer works on a copy of the sources; a marker issued now
+	// would be lost or reused when that answer is stored.
+	for _, run := range c.Runs {
+		if run.State == "queued" || run.State == "running" {
+			return apiErr(409, "busy", "Bitte warte, bis die laufende Antwort fertig ist, oder brich sie ab.")
+		}
+	}
 	if len(c.Attachments) >= 20 {
 		return apiErr(409, "limit", "Dieses Gespräch hat bereits 20 Anhänge.")
 	}

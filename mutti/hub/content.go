@@ -379,6 +379,9 @@ func (h *Hub) contentSearch(w http.ResponseWriter, r *http.Request, id Identity)
 			if errors.Is(res.err, errUnauthorized) {
 				return res.err
 			}
+			// Not searched is not finished: later pages try this area again.
+			next.Next[area] = cursor.Next[area]
+			entry.More = true
 		} else {
 			pending = append(pending, res.items...)
 			if res.next > 0 {
@@ -616,6 +619,23 @@ func (h *Hub) probe(ctx context.Context, id Identity, key contentKey) (pendingIt
 	return pendingItem{}, errNotFound
 }
 
+// probeAccess only re-authorizes. For documents a single request suffices;
+// the full item with names costs one request per tag and correspondent.
+func (h *Hub) probeAccess(ctx context.Context, id Identity, key contentKey) error {
+	if key.Area == ModuleDocuments {
+		if _, err := strconv.Atoi(key.Object); err != nil {
+			return errNotFound
+		}
+		base, headers, err := h.docs.session(id)
+		if err != nil {
+			return err
+		}
+		return serviceCall(ctx, h.docs.client, "GET", base+"/api/documents/"+key.Object+"/", headers, nil, nil)
+	}
+	_, err := h.probe(ctx, id, key)
+	return err
+}
+
 // revoked reports errors that mean "this profile may not see it any more",
 // as opposed to a temporary outage.
 func revoked(err error) bool {
@@ -686,7 +706,7 @@ func (h *Hub) contentMedia(w http.ResponseWriter, r *http.Request, id Identity) 
 			case <-t.C:
 			}
 			check, stop := context.WithTimeout(ctx, 3*time.Second)
-			_, err := h.probe(check, id, key)
+			err := h.probeAccess(check, id, key)
 			stop()
 			if err != nil && revoked(err) {
 				cancel()
@@ -720,8 +740,12 @@ func (h *Hub) stampSources(book *sourceBook) {
 		if s == nil || !slices.Contains(areaOrder, s.Service) {
 			continue
 		}
+		instance := instanceOf(cfg, s.Service)
+		if s.Instance != "" && s.Instance != instance {
+			continue // from a replaced backend: never re-stamped
+		}
 		refs = append(refs, ref)
-		keys = append(keys, contentKey{Area: s.Service, Instance: instanceOf(cfg, s.Service), Object: s.ObjectID})
+		keys = append(keys, contentKey{Area: s.Service, Instance: instance, Object: s.ObjectID})
 	}
 	ids, err := h.content.assign(keys)
 	if err != nil {
@@ -740,7 +764,7 @@ func (h *Hub) stampSources(book *sourceBook) {
 // instance. A source of a replaced backend no longer maps.
 func (h *Hub) sourceKey(s *Source) (contentKey, bool) {
 	key := contentKey{Area: s.Service, Instance: instanceOf(h.store.Read(), s.Service), Object: s.ObjectID}
-	if !slices.Contains(areaOrder, s.Service) {
+	if !slices.Contains(areaOrder, s.Service) || (s.Instance != "" && s.Instance != key.Instance) {
 		return key, false
 	}
 	if s.Content != nil {
@@ -793,14 +817,16 @@ func (a *AI) revokedHistory(ctx context.Context, id Identity, c *Conversation, r
 				defer wg.Done()
 				limit <- struct{}{}
 				defer func() { <-limit }()
-				_, err := a.hub.probe(ctx, id, key)
+				err := a.hub.probeAccess(ctx, id, key)
 				mu.Lock()
 				allowed[ref] = err == nil
 				mu.Unlock()
 			}()
 			continue
 		}
+		mu.Lock()
 		allowed[ref] = ok
+		mu.Unlock()
 	}
 	wg.Wait()
 	omit := map[string]bool{}

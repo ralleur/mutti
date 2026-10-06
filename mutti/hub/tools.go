@@ -24,7 +24,10 @@ type Source struct {
 	Facts    map[string]any `json:"-"`
 	// SourceRef provenance (contracts.md): stable content reference with the
 	// revision seen when the source was retrieved, and what part was used.
-	Content   *ContentRef    `json:"content,omitempty"`
+	Content *ContentRef `json:"content,omitempty"`
+	// Instance is the backend instance the object belongs to; the same
+	// object number in a replaced backend is a different object.
+	Instance  string         `json:"instance,omitempty"`
 	Locator   *SourceLocator `json:"locator,omitempty"`
 	Retrieved *time.Time     `json:"retrieved,omitempty"`
 	Revision  string         `json:"-"` // backend revision while a run is active
@@ -48,7 +51,7 @@ func (b *sourceBook) touch(ref string) {
 
 func (b *sourceBook) add(s Source) *Source {
 	for _, existing := range b.Items {
-		if existing.Service == s.Service && existing.ObjectID == s.ObjectID {
+		if existing.Service == s.Service && existing.ObjectID == s.ObjectID && existing.Instance == s.Instance {
 			existing.Revision = s.Revision
 			b.touch(existing.Ref)
 			return existing
@@ -212,7 +215,20 @@ func formatRuntime(seconds int) string {
 }
 
 func (t *profileTools) source(ref string) *Source {
-	return t.sources.Items[strings.TrimSpace(strings.Trim(ref, "[]"))]
+	s := t.sources.Items[strings.TrimSpace(strings.Trim(ref, "[]"))]
+	if s != nil {
+		// Reading an earlier source in this run makes the answer depend on it.
+		t.sources.touch(s.Ref)
+	}
+	return s
+}
+
+// addSource registers a backend object with its current backend instance.
+func (t *profileTools) addSource(s Source) *Source {
+	if t.hub != nil {
+		s.Instance = instanceOf(t.hub.store.Read(), s.Service)
+	}
+	return t.sources.add(s)
 }
 
 func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessage) ToolResult {
@@ -280,7 +296,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		hits := filterMovies(movies, f)
 		out := []map[string]any{}
 		for _, m := range hits {
-			s := t.sources.add(Source{Service: "media", Kind: "movie", ObjectID: m.ID, Title: m.Title, Subtitle: movieSubtitle(m),
+			s := t.addSource(Source{Service: "media", Kind: "movie", ObjectID: m.ID, Title: m.Title, Subtitle: movieSubtitle(m),
 				Facts: map[string]any{"seconds": m.Seconds}, Revision: m.Revision})
 			out = append(out, map[string]any{"source": s.Ref, "title": m.Title, "year": m.Year, "runtime": formatRuntime(m.Seconds),
 				"runtime_seconds": m.Seconds, "watched": m.Watched, "genres": m.Genres})
@@ -345,7 +361,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		}
 		out := []map[string]any{}
 		for _, d := range items {
-			s := t.sources.add(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created, Revision: d.revision})
+			s := t.addSource(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created, Revision: d.revision})
 			out = append(out, map[string]any{"source": s.Ref, "title": d.Title, "date": d.Created, "excerpt_data": d.Snippet})
 		}
 		result := map[string]any{"count": len(out), "hits": out}
@@ -393,7 +409,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			if title == "" {
 				title = p.FileName
 			}
-			s := t.sources.add(Source{Service: "photos", Kind: p.Type, ObjectID: p.ID, Title: title, Subtitle: dateOnly(p.Taken), Revision: p.revision})
+			s := t.addSource(Source{Service: "photos", Kind: p.Type, ObjectID: p.ID, Title: title, Subtitle: dateOnly(p.Taken), Revision: p.revision})
 			out = append(out, map[string]any{"source": s.Ref, "kind": p.Type, "taken": dateOnly(p.Taken), "description_data": p.Description, "place": p.City})
 		}
 		return ToolResult{Content: toolJSON(map[string]any{"count": len(out), "hits": out}),

@@ -210,6 +210,11 @@ func (a *AI) convPath(owner, id string) string {
 }
 
 func (a *AI) lock(id string) func() {
+	// Only real conversation IDs get a lock; anything else fails to load
+	// anyway and must not grow the lock table.
+	if !validID(id) {
+		return func() {}
+	}
 	a.mu.Lock()
 	l := a.locks[id]
 	if l == nil {
@@ -1208,6 +1213,18 @@ func (a *AI) decideProposal(w http.ResponseWriter, r *http.Request, id Identity)
 	}
 	if p.State != "pending" {
 		// Idempotent: repeating a decision returns the recorded outcome.
+		return writeOK(w, p)
+	}
+	// A journaled action (e.g. before a crash) is reported as recorded; it
+	// can no longer be rejected or expire as if nothing had happened.
+	if prior, ok := a.hub.journal.get(p.ID); ok {
+		p.State, p.Result = prior.State, proposalLanguage(p).say(prior.Result)
+		if p.State == "executing" {
+			p.State = "outcome_unknown"
+		}
+		if err := a.save(c, keys); err != nil {
+			return err
+		}
 		return writeOK(w, p)
 	}
 	if time.Now().After(p.Expires) {
