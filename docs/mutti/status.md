@@ -14,27 +14,30 @@ Stand 06.10.2026 (abends): P0 ist committet (`750f9158a2` auf
 uncommittet im Arbeitsbaum der anderen Session. Kein neues Paket ausgeliefert,
 kein Modell produktiv qualifiziert.
 
-**P1 — gemeinsamer Inhaltsweg: Hub implementiert und geprüft, Client gebaut,
-native Laufzeitabnahme offen.** Branch `codex/mutti-p1-content` (Worktree
-`/Users/ai/workspace/mutti-p1`). Der Hub umfasst ContentRef mit persistiertem
-ID-Index, föderierte Suche `content/search` mit gebundenen Cursorn und
-ehrlichem `partial`, Öffnen mit Revisionsstatus und Objekt-Nachprüfung im
-Medienstrom, `content/jobs`, Quellen-Provenienz, Rücknahme widerrufener
-Quellen aus der Modellhistorie sowie ein dauerhaftes Aktionsjournal. In kurtz
-gibt es die Ansicht „Alles“ mit gemeinsamer Suche und Aufträgen; Fotos- und
-Dokumentsuche laufen über denselben Weg (Änderungen uncommittet in
-`vela-swiftfin`, Branch `codex/rebrand-kurtz`). Owner-Entscheidungen dazu sind in
-[plan.md](plan.md#offene-entscheidungen-vor-jeweiliger-umsetzung) festgehalten,
-Prüfungen und Grenzen im [P1-Nachweis](evidence/p1-2026-10-06.md); den
-Vertragsnachtrag enthält [contracts.md](contracts.md).
+**P1 — gemeinsamer Inhaltsweg: implementiert; Mac-Paket und nativer Simulator
+geprüft; Docker/NAS offen.** Branch `codex/mutti-p1-content` (Worktree
+`/Users/ai/workspace/mutti-p1`). Hub: ContentRef mit persistiertem ID-Index,
+föderierte Suche `content/search` mit gebundenen Cursorn und ehrlichem
+`partial`, Öffnen mit Revisionsstatus und Objekt-Nachprüfung im Medienstrom,
+`content/jobs`, Quellen-Provenienz, Rücknahme widerrufener Quellen aus der
+Modellhistorie, dauerhaftes Aktionsjournal; Sicherung/Restore umfassen jetzt
+ID-Index und Journal. kurtz (`vela-swiftfin`, `codex/rebrand-kurtz`,
+uncommittet): Bereich „Alles“ mit gemeinsamer Suche und Aufträgen, Fotos-/
+Dokumentsuche über denselben Weg, Kopplungslink-Korrektur.
 
-Nächste Schritte P1: Mac-Paket mit neuem Hub bauen; `module-package-smoke.py`
-um einen P1-Durchgang ohne positive KI ergänzen (KI-Sperre erwartet); mit
-`--keep` kurtz im Simulator koppeln und „Alles“, Filter, Öffnen, Teilausfall und
-Rechteentzug bedienen; anschließend dasselbe auf Docker/NAS. Danach P1-Branch
-reviewen und in `codex/mutti-foundation` zusammenführen (Konfliktstellen mit
-der Harness-Arbeit: `tools.go`, `hub_test.go`). Positive KI-E2E bleibt an P2
-gebunden.
+Belege: Go-Tests (`-race`) und echte Immich/Paperless-Tests grün; angepasster
+`module-package-smoke.py` mit 41 bestandenen Prüfungen über den echten Tunnel;
+native Bedienung im iPad-Simulator (Suche, Öffnen, Ausfall, Rechteentzug). Der
+Paketlauf deckte fehlende Sicherung von `content-ids.json`/`actions.json` auf
+(behoben). Einzelheiten und Grenzen: [P1-Nachweis](evidence/p1-2026-10-06.md);
+Vertrag: [contracts.md](contracts.md); Owner-Entscheidungen:
+[plan.md](plan.md#offene-entscheidungen-vor-jeweiliger-umsetzung).
+
+Nächste Schritte P1: Docker/NAS-Lauf mit demselben Smoke-Umfang; kurtz-Änderungen
+reviewen und committen (Ralf entscheidet über den kurtz-Commit); P1-Branch in
+`codex/mutti-foundation` zusammenführen, sobald die Harness-Arbeit dort
+committet ist (Konfliktstellen: `tools.go`, `hub_test.go`). Nach P2-Qualifikation
+P1-E2E mit echtem Modell wiederholen (`--expect-qualified`).
 
 **Modellfreigabe v4, 06.10.2026 (P2-Vorarbeit, abgeschlossen als Messung):**
 Nutzerauftrag „Werkzeuge/Harness verbessern, dann mit neuem ungesehenem Satz

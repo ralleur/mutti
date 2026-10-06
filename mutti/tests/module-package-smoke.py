@@ -224,10 +224,13 @@ try:
         query = urllib.parse.urlencode({'name': name, 'collectionType': 'movies', 'paths': str(path), 'refreshLibrary': 'true'})
         ok(jf('POST', f'/Library/VirtualFolders?{query}', options, owner), 'library')
     folders = {f['Name']: f['ItemId'] for f in ok(jf('GET', '/Library/VirtualFolders', None, owner), 'folders')}
-    for _ in range(120):
+    for attempt in range(120):
         items = ok(jf('GET', '/Items?IncludeItemTypes=Movie&Recursive=true&Fields=Path', None, owner), 'items')['Items']
         if len(items) == 5:
             break
+        if attempt % 15 == 14:
+            # Two libraries added back to back can coalesce into one scan.
+            ok(jf('POST', '/Library/Refresh', None, owner), 'refresh')
         time.sleep(2)
     else:
         raise AssertionError('library scan incomplete')
