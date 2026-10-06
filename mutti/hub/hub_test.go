@@ -141,6 +141,9 @@ func (e *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			call("search_movies", `{"runtime_below_seconds":100,"unwatched":true,"sort":"runtime"}`)
 		case last.Role == "user" && strings.Contains(last.Content, "Favorit"):
 			call("propose_favorite", `{"source":"Q1","favorite":true}`)
+		case last.Role == "user" && strings.HasPrefix(last.Content, serverNoteMarker):
+			// A stubborn model repeats its draft after a correction.
+			words("Gefunden: Nordlicht [Q1] und Sommer am See [Q2]. Erfunden [Q9].")
 		case last.Role == "tool" && last.ToolName == "search_movies":
 			words("Gefunden: Nordlicht [Q1] und Sommer am See [Q2]. Erfunden [Q9].")
 		case last.Role == "tool":
@@ -379,7 +382,8 @@ func TestChatToolsSourcesAndIsolation(t *testing.T) {
 	if len(snapshot) != 1 || snapshot[0].Data["snapshot"] != true {
 		t.Fatalf("snapshot %v", snapshot)
 	}
-	if e.engine.chats.Load() != 2 {
+	// Tool call, answer with an invented marker, one marker correction.
+	if e.engine.chats.Load() != 3 {
 		t.Fatalf("engine calls %d", e.engine.chats.Load())
 	}
 }
@@ -547,6 +551,8 @@ func TestFilterMoviesRuntimeYearAndWatched(t *testing.T) {
 		{movieFilter{Below: 100, Sort: "runtime"}, "31"},      // exclusive
 		{movieFilter{Max: 100, Sort: "runtime"}, "312"},       // inclusive
 		{movieFilter{Max: 99, Sort: "runtime_desc"}, "13"},    // longest first
+		{movieFilter{Above: 99, Sort: "runtime"}, "2"},        // longer than
+		{movieFilter{Min: 99, Sort: "runtime"}, "12"},         // at least
 		{movieFilter{Below: 100, Watched: &no}, "1"},          // unwatched only
 		{movieFilter{Watched: &yes}, "3"},                     // watched only
 		{movieFilter{Year: 2023, Sort: "runtime"}, "31"},      // year

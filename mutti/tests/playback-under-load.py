@@ -56,5 +56,6 @@ for item in items:
     duration = item.get('RunTimeTicks', 0) / 1e7
     speeds = [float(s) for s in re.findall(r'speed=\s*([\d.]+)x', proc.stdout)]
     results.append({'title': item['Name'], 'seconds': round(duration, 1), 'wallSeconds': round(wall, 1),
-                     'speed': speeds[-1] if speeds else None, 'realtimeFactor': round(duration / wall, 2) if wall else None, 'ok': proc.returncode == 0})
+                     'speed': speeds[-1] if speeds else None, 'realtimeFactor': round(duration / wall, 2) if wall else None, 'ok': proc.returncode == 0,
+                     'error': proc.stderr.strip().splitlines()[-1][:200] if proc.returncode and proc.stderr.strip() else None})
 print(json.dumps({'label': args.label, 'at': time.strftime('%Y-%m-%dT%H:%M:%S'), 'results': results}, ensure_ascii=False))

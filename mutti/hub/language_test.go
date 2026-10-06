@@ -161,3 +161,19 @@ func TestDocumentSearchFallsBackToAnyTerm(t *testing.T) {
 		t.Fatalf("single term retried: %v", docs.queries)
 	}
 }
+
+func TestHarnessRemovesInventedMarkers(t *testing.T) {
+	h, _ := scriptedModel(t, "Ich kann Dokumente durchsuchen, zum Beispiel eine Rechnung [Q1].", "Ich kann Dokumente durchsuchen und daraus antworten.")
+	tools := &profileTools{sources: &sourceBook{Items: map[string]*Source{}}, defs: documentTools(), language: languagePacks["de"]}
+	res, err := h.Run(context.Background(), []chatMessage{{Role: "user", Content: "Was darfst du mit meinen Dokumenten machen?"}}, tools, func(HarnessEvent) {})
+	if err != nil || fmt.Sprint(res.Interventions) != "[markers]" || strings.Contains(res.Text, "[Q1]") {
+		t.Fatalf("%v %v %q", err, res.Interventions, res.Text)
+	}
+	// Issued markers are left alone.
+	tools.sources.add(Source{Service: "documents", ObjectID: "1", Title: "Rechnung"})
+	h, _ = scriptedModel(t, "Die Rechnung [Q1] ist offen.")
+	res, _ = h.Run(context.Background(), []chatMessage{{Role: "user", Content: "Ist die Rechnung offen?"}}, tools, func(HarnessEvent) {})
+	if len(res.Interventions) != 0 {
+		t.Fatalf("issued marker corrected: %v", res.Interventions)
+	}
+}

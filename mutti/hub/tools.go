@@ -137,17 +137,21 @@ type Movie struct {
 func movieTools() []toolDef {
 	return []toolDef{
 		newTool("search_movies", "Searches the movie library this profile may use. Returns title, year, runtime, genres and the source marker in the field source, but no plot description; call get_movie for that. All filters are optional and combined.", map[string]any{
-			"query":                   map[string]any{"type": "string", "description": "Title or keyword from the title or description, in the user's language. Omit it to filter all movies. Years, runtimes and genres belong in their own filters."},
-			"genre":                   map[string]any{"type": "string", "description": "Genre as named in the library, e.g. Komödie or Comedy."},
-			"year":                    map[string]any{"type": "integer", "description": "Only movies released in this year, e.g. 2021."},
-			"unwatched":               map[string]any{"type": "boolean", "description": "true = only movies not watched yet. Omit if it does not matter."},
-			"watched":                 map[string]any{"type": "boolean", "description": "true = only movies already watched. Omit if it does not matter."},
-			"runtime_under_minutes":   map[string]any{"type": "integer", "description": "For \"under N minutes\" or \"shorter than N minutes\": only movies shorter than N minutes. Two hours = 120."},
-			"runtime_under_seconds":   map[string]any{"type": "integer", "description": "Like runtime_under_minutes, but for values in seconds."},
-			"runtime_at_most_minutes": map[string]any{"type": "integer", "description": "Only for \"at most/no more than/up to N minutes\" or \"N minutes or less\": movies up to and including N minutes."},
-			"runtime_at_most_seconds": map[string]any{"type": "integer", "description": "Like runtime_at_most_minutes, but for values in seconds."},
-			"sort":                    map[string]any{"type": "string", "enum": []string{"runtime", "runtime_desc", "title", "year", "added"}, "description": "runtime = shortest first, runtime_desc = longest first, title = alphabetical, year = newest release first, added = most recently added first."},
-			"limit":                   map[string]any{"type": "integer", "description": "Maximum number of hits, 1 to 10."},
+			"query":                    map[string]any{"type": "string", "description": "Title or keyword from the title or description, in the user's language. Omit it to filter all movies. Years, runtimes and genres belong in their own filters."},
+			"genre":                    map[string]any{"type": "string", "description": "Genre as named in the library, e.g. Komödie or Comedy."},
+			"year":                     map[string]any{"type": "integer", "description": "Only movies released in this year, e.g. 2021."},
+			"unwatched":                map[string]any{"type": "boolean", "description": "true = only movies not watched yet. Omit if it does not matter."},
+			"watched":                  map[string]any{"type": "boolean", "description": "true = only movies already watched. Omit if it does not matter."},
+			"runtime_under_minutes":    map[string]any{"type": "integer", "description": "For \"under N minutes\" or \"shorter than N minutes\": only movies shorter than N minutes. Two hours = 120."},
+			"runtime_under_seconds":    map[string]any{"type": "integer", "description": "Like runtime_under_minutes, but for values in seconds."},
+			"runtime_at_most_minutes":  map[string]any{"type": "integer", "description": "Only for \"at most/no more than/up to N minutes\" or \"N minutes or less\": movies up to and including N minutes."},
+			"runtime_at_most_seconds":  map[string]any{"type": "integer", "description": "Like runtime_at_most_minutes, but for values in seconds."},
+			"runtime_over_minutes":     map[string]any{"type": "integer", "description": "For \"longer than N minutes\" or \"over N minutes\": only movies longer than N minutes."},
+			"runtime_over_seconds":     map[string]any{"type": "integer", "description": "Like runtime_over_minutes, but for values in seconds."},
+			"runtime_at_least_minutes": map[string]any{"type": "integer", "description": "Only for \"at least N minutes\" or \"N minutes or more\": movies of N minutes or longer."},
+			"runtime_at_least_seconds": map[string]any{"type": "integer", "description": "Like runtime_at_least_minutes, but for values in seconds."},
+			"sort":                     map[string]any{"type": "string", "enum": []string{"runtime", "runtime_desc", "title", "year", "added"}, "description": "runtime = shortest first, runtime_desc = longest first, title = alphabetical, year = newest release first, added = most recently added first."},
+			"limit":                    map[string]any{"type": "integer", "description": "Maximum number of hits, 1 to 10."},
 		}),
 		newTool("get_movie", "Reads details (description, year, runtime, genres) of a movie from an earlier result.", map[string]any{
 			"source": map[string]any{"type": "string", "description": "Source marker such as Q1 from a result."},
@@ -181,6 +185,9 @@ func photoTools() []toolDef {
 }
 
 func (t *profileTools) Definitions() []toolDef { return t.defs }
+
+// Issued reports whether the server handed out this marker in the conversation.
+func (t *profileTools) Issued(ref string) bool { return t.sources.Items[ref] != nil }
 
 func toolJSON(v any) string {
 	b, _ := json.Marshal(v)
@@ -241,6 +248,10 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			Under        float64 `json:"runtime_under_seconds"`
 			UnderMinutes float64 `json:"runtime_under_minutes"`
 			Most         float64 `json:"runtime_at_most_seconds"`
+			Over         float64 `json:"runtime_over_seconds"`
+			OverMinutes  float64 `json:"runtime_over_minutes"`
+			Least        float64 `json:"runtime_at_least_seconds"`
+			LeastMinutes float64 `json:"runtime_at_least_minutes"`
 			MostMinutes  float64 `json:"runtime_at_most_minutes"`
 			Below        float64 `json:"runtime_below_seconds"`
 			Minutes      float64 `json:"runtime_below_minutes"`
@@ -264,6 +275,8 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		}
 		f.Below = firstSeconds(a.Under, a.UnderMinutes, a.Below, a.Minutes)
 		f.Max = firstSeconds(a.Most, a.MostMinutes, a.MaxSeconds, a.MaxMinutes)
+		f.Above = firstSeconds(a.Over, a.OverMinutes)
+		f.Min = firstSeconds(a.Least, a.LeastMinutes)
 		hits := filterMovies(movies, f)
 		out := []map[string]any{}
 		for _, m := range hits {
@@ -425,8 +438,10 @@ func movieSubtitle(m Movie) string {
 type movieFilter struct {
 	Query, Genre, Sort string
 	Year, Below, Max   int
-	Watched            *bool
-	Limit              int
+	// Above is exclusive ("longer than"), Min inclusive ("at least").
+	Above, Min int
+	Watched    *bool
+	Limit      int
 }
 
 func filterMovies(movies []Movie, f movieFilter) []Movie {
@@ -439,6 +454,12 @@ func filterMovies(movies []Movie, f movieFilter) []Movie {
 			continue
 		}
 		if below > 0 && (m.Seconds <= 0 || m.Seconds >= below) {
+			continue
+		}
+		if f.Above > 0 && m.Seconds <= f.Above {
+			continue
+		}
+		if f.Min > 0 && m.Seconds < f.Min {
 			continue
 		}
 		if f.Max > 0 && (m.Seconds <= 0 || m.Seconds > f.Max) {
