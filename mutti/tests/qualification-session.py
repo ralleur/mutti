@@ -43,6 +43,9 @@ def run(name, cmd, env=None):
 
 if not args.skip_build:
     env = dict(os.environ, MUTTI_WEB_DIR=os.environ.get('MUTTI_WEB_DIR', str(repo.parent / 'mutti-web')))
+    for dotnet in (Path.home() / '.dotnet/dotnet', Path('/private/tmp/mutti-tools/dotnet/dotnet')):
+        if 'MUTTI_DOTNET' not in env and dotnet.exists():
+            env['MUTTI_DOTNET'] = str(dotnet)
     if run('build-mac', ['bash', 'mutti/packaging/build-mac.sh'], env) != 0:
         sys.exit('build failed')
 for suite in args.suites.split(','):
