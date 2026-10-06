@@ -318,5 +318,12 @@ func (s *Server) Revoke(pin string) error {
 	for _, session := range closing {
 		_ = session.Close()
 	}
+	if exists && old.Token != "" {
+		// The device never held this token, but end its Jellyfin session too so
+		// no server-side component (for example a module service) can reuse it.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = s.jfDevice(ctx, "POST", "/Sessions/Logout", old.Token, pin, nil, nil)
+		cancel()
+	}
 	return nil
 }

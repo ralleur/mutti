@@ -22,7 +22,7 @@ func TestDirectPairProxyAndRevoke(t *testing.T) {
 	}
 }
 func testDirectPairProxyAndRevoke(t *testing.T, mode string) {
-	var disabled atomic.Bool
+	var disabled, loggedOut atomic.Bool
 	t.Setenv("MUTTI_ICE_INTERFACES", "lo0,lo")
 	payload := bytes.Repeat([]byte("mutti-synthetic-media\n"), 32000)
 	jf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +35,11 @@ func testDirectPairProxyAndRevoke(t *testing.T, mode string) {
 			jsonReply(w, 200, map[string]string{"Code": "123456", "Secret": "test-quick-secret"})
 		case "/QuickConnect/Authorize":
 			jsonReply(w, 200, true)
+		case "/Sessions/Logout":
+			if strings.Contains(r.Header.Get("Authorization"), `Token="private-upstream-token"`) {
+				loggedOut.Store(true)
+			}
+			w.WriteHeader(204)
 		case "/Users/AuthenticateWithQuickConnect":
 			jsonReply(w, 200, map[string]any{"AccessToken": "private-upstream-token", "User": map[string]string{"Id": "profile", "Name": "Family"}})
 		case "/Users/Me":
@@ -262,6 +267,9 @@ func testDirectPairProxyAndRevoke(t *testing.T, mode string) {
 	}
 	if res.StatusCode != expected {
 		t.Fatalf("reconnect after policy/revoke %d", res.StatusCode)
+	}
+	if revokedDevice := mode != "profile" && mode != "libraries"; loggedOut.Load() != revokedDevice {
+		t.Fatalf("upstream session logout %v for mode %s", loggedOut.Load(), mode)
 	}
 }
 func TestInvitationAndServerIdentity(t *testing.T) {
