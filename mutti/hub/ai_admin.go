@@ -40,7 +40,34 @@ func (a *AI) adminSnapshot(ctx context.Context) map[string]any {
 			adoptable = err == nil
 		}
 	}
-	return map[string]any{"engine": status, "catalog": entries, "memoryGB": memory, "promptVersion": PromptVersion, "adoptAvailable": adoptable}
+	return map[string]any{"engine": status, "catalog": entries, "memoryGB": memory, "promptVersion": PromptVersion, "adoptAvailable": adoptable,
+		"qualification": a.qualificationSnapshot()}
+}
+
+var qualificationTasks = []string{assistantTask, "media.search", "media.read", "media.favorite", "documents.read", "photos.search"}
+
+// qualificationSnapshot shows the owner what this deployment measured and
+// which tasks the shipped evidence grants per answer language. It cannot
+// change either.
+func (a *AI) qualificationSnapshot() map[string]any {
+	measured := qualificationBinding{}
+	if a.qualification.runtime != nil {
+		measured = a.qualification.runtime()
+	}
+	granted := map[string]map[string]bool{}
+	for code, lang := range languagePacks {
+		granted[code] = map[string]bool{}
+		for _, task := range qualificationTasks {
+			_, err := a.qualify(task, lang)
+			granted[code][task] = err == nil
+		}
+	}
+	records := []map[string]any{}
+	for _, r := range a.qualification.records {
+		records = append(records, map[string]any{"id": r.ID, "task": r.Task, "language": r.Binding.Language, "status": r.Status, "expires": r.Expires})
+	}
+	return map[string]any{"attestation": map[string]any{"engineDigest": measured.EngineDigest, "hardwareProfile": measured.HardwareProfile,
+		"osBuild": measured.OSBuild, "adapterDigest": measured.AdapterDigest}, "granted": granted, "records": records, "loadError": a.qualificationLoad}
 }
 
 func (a *AI) adminEngine(w http.ResponseWriter, r *http.Request, id Identity) error {

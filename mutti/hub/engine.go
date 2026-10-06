@@ -43,6 +43,20 @@ type engine struct {
 	download *downloadProgress
 	client   *http.Client
 	stream   *http.Client
+	starts   int // processes started, so attestation can re-measure
+}
+
+// managedBinary reports whether the hub runs its own bundled engine.
+func (e *engine) managedBinary() (bool, string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.mode == "managed", e.binary
+}
+
+func (e *engine) startCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.starts
 }
 
 type downloadProgress struct {
@@ -151,6 +165,7 @@ func (e *engine) startLocked(confined bool) error {
 	done := make(chan struct{})
 	go func() { _ = cmd.Wait(); log.Close(); close(done) }()
 	e.proc, e.done, e.state = cmd, done, "starting"
+	e.starts++
 	if confined {
 		e.lock = "unverified"
 		if e.sandbox {

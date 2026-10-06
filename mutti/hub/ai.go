@@ -139,16 +139,19 @@ func (r *liveRun) emit(kind string, data any) {
 
 type AI struct {
 	qualification qualificationPolicy
-	hub           *Hub
-	engine        *engine
-	dir           string
-	mu            sync.Mutex
-	locks         map[string]*sync.Mutex
-	live          map[string]*liveRun
-	queue         []*liveRun
-	wake          chan struct{}
-	show          map[string]bool
-	stopped       bool
+	attest        *attestation
+	// qualificationLoad explains why no evidence was loaded (owner view).
+	qualificationLoad string
+	hub               *Hub
+	engine            *engine
+	dir               string
+	mu                sync.Mutex
+	locks             map[string]*sync.Mutex
+	live              map[string]*liveRun
+	queue             []*liveRun
+	wake              chan struct{}
+	show              map[string]bool
+	stopped           bool
 }
 
 func newAI(h *Hub) (*AI, error) {
@@ -159,6 +162,12 @@ func newAI(h *Hub) (*AI, error) {
 	a := &AI{hub: h, dir: dir, engine: newEngine(dir, h.opts.Ollama, h.opts.Sandbox), locks: map[string]*sync.Mutex{}, live: map[string]*liveRun{},
 		wake: make(chan struct{}, 1), show: map[string]bool{}}
 	a.engine.configure(h.store.Read().Modules[ModuleAI].Engine)
+	// Deployment policy: measured runtime plus signed, reviewed evidence.
+	policy, att, err := productionPolicy(h.opts, a.engine)
+	a.qualification, a.attest = policy, att
+	if err != nil {
+		a.qualificationLoad = err.Error()
+	}
 	if err := a.markInterrupted(); err != nil {
 		return nil, err
 	}
@@ -762,6 +771,13 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 	l.emit("state", map[string]any{"state": "starting"})
 	if err := a.engine.ensure(ctx); err != nil {
 		a.finish(l, "failed", "engine", HarnessResult{}, nil, err)
+		return
+	}
+	// The engine files are measured again after a start; anything changed
+	// since attestation no longer matches the evidence.
+	a.attest.recheck()
+	if _, err := a.qualify(assistantTask, lang); err != nil {
+		a.finish(l, "failed", "qualification_required", HarnessResult{}, nil, err)
 		return
 	}
 	model, ok := catalogModel(cfg.Model)

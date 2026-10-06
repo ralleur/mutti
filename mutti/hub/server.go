@@ -22,6 +22,9 @@ type Options struct {
 	PeerSecret string // shared with the local Connect sidecar only
 	Ollama     string // optional engine executable for the managed mode
 	Sandbox    bool   // restrict the managed engine's network on macOS
+	// Qualification overrides the signed evidence file location (tests and
+	// measurement); by default it sits next to the hub executable.
+	Qualification string
 }
 
 type Hub struct {
