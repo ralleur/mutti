@@ -298,7 +298,7 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 				continue
 			case canCall && emptySearch && !done["retry"] && lang.offerRetry.MatchString(content):
 				// The model proposes another search instead of doing it.
-				correct("retry", content, "Your search found nothing. Search once more yourself now with a shorter or more general term, for example a word stem or a single keyword, instead of asking the user. Then answer.")
+				correct("retry", content, "Your search found nothing. Search once more yourself now with a shorter or more general term, for example a word stem or a single keyword, instead of asking the user. If that still does not answer the question, say so without a source marker and do not list other hits.")
 				continue
 			case canCall && !done["action"] && offers(offered, "propose_favorite") && !called["propose_favorite"] && lang.favoriteRequest.MatchString(question):
 				correct("action", content, "The user asked to change a favourite, but you have not created a proposal yet. Find the movie if needed, then call propose_favorite with its source marker. The user confirms it.")
