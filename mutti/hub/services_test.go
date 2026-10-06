@@ -304,13 +304,13 @@ func TestRealDocumentsModule(t *testing.T) {
 	if !strings.Contains(read.Content, "15.11.2026") {
 		t.Fatalf("read %s", read.Content)
 	}
-	if fake := tools.Call(context.Background(), "read_document", json.RawMessage(`{"source":"RE-2026-0815"}`)); !strings.Contains(fake.Content, "fehler") {
+	if fake := tools.Call(context.Background(), "read_document", json.RawMessage(`{"source":"RE-2026-0815"}`)); !strings.Contains(fake.Content, `"error"`) {
 		t.Fatal("invented source accepted")
 	}
 }
 
 func testPNG(seed byte) []byte {
-	// Minimal valid 1x1 PNG with a varying pixel so each run uploads new bytes.
+	// Minimal valid 1x1 PNG; the same call returns the same bytes only once.
 	png := []byte{0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a}
 	chunk := func(kind string, data []byte) {
 		var b bytes.Buffer
@@ -321,6 +321,9 @@ func testPNG(seed byte) []byte {
 		png = append(png, b.Bytes()...)
 	}
 	chunk("IHDR", []byte{0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0})
+	// The persistent test library keeps every upload; a timestamp text chunk
+	// keeps the bytes unique beyond the 256 pixel variants.
+	chunk("tEXt", []byte(fmt.Sprintf("Comment\x00mutti-test-%d", time.Now().UnixNano())))
 	chunk("IDAT", zlibBytes([]byte{0, seed, 0x80, 0x40}))
 	chunk("IEND", nil)
 	return png
