@@ -111,7 +111,8 @@ func movieTools() []toolDef {
 	return []toolDef{
 		newTool("search_movies", "Durchsucht die für dieses Profil freigegebene Filmbibliothek. Liefert Treffer mit Quellenmarke im Feld quelle.", map[string]any{
 			"query":                 map[string]any{"type": "string", "description": "Optionaler Titel oder Stichwort. Weglassen, um alle Filme zu filtern."},
-			"runtime_below_seconds": map[string]any{"type": "integer", "description": "Nur Filme, die kürzer sind als dieser Wert in Sekunden (exklusive Grenze). \"unter 100 Sekunden\" ergibt 100, \"unter 90 Minuten\" ergibt 5400, \"höchstens 90 Minuten\" ergibt 5401."},
+			"runtime_below_seconds": map[string]any{"type": "integer", "description": "Nur Filme, die kürzer sind als so viele SEKUNDEN (exklusive Grenze). \"unter 100 Sekunden\" ergibt 100, \"höchstens 88 Sekunden\" ergibt 89."},
+			"runtime_below_minutes": map[string]any{"type": "integer", "description": "Nur Filme, die kürzer sind als so viele MINUTEN (exklusive Grenze). \"unter 90 Minuten\" ergibt 90, \"unter zwei Stunden\" ergibt 120. Nicht zusammen mit runtime_below_seconds verwenden."},
 			"unwatched":             map[string]any{"type": "boolean", "description": "true = nur noch nicht gesehene Filme. Weglassen, wenn egal."},
 			"genre":                 map[string]any{"type": "string", "description": "Optionales Genre, z. B. Komödie."},
 			"sort":                  map[string]any{"type": "string", "enum": []string{"runtime", "title", "year", "added"}, "description": "Sortierung; Laufzeit aufsteigend bei runtime."},
@@ -193,6 +194,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		var a struct {
 			Query   string  `json:"query"`
 			Below   float64 `json:"runtime_below_seconds"`
+			Minutes float64 `json:"runtime_below_minutes"`
 			Unwatch *bool   `json:"unwatched"`
 			Genre   string  `json:"genre"`
 			Sort    string  `json:"sort"`
@@ -205,7 +207,11 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		if err != nil {
 			return toolError(name, "Die Filmbibliothek ist gerade nicht verfügbar.")
 		}
-		hits := filterMovies(movies, a.Query, int(a.Below), a.Unwatch, a.Genre, a.Sort, int(a.Limit))
+		below := int(a.Below)
+		if below == 0 && a.Minutes > 0 {
+			below = int(a.Minutes * 60)
+		}
+		hits := filterMovies(movies, a.Query, below, a.Unwatch, a.Genre, a.Sort, int(a.Limit))
 		out := []map[string]any{}
 		for _, m := range hits {
 			s := t.sources.add(Source{Service: "media", Kind: "movie", ObjectID: m.ID, Title: m.Title, Subtitle: movieSubtitle(m),

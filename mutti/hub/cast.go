@@ -62,9 +62,10 @@ type castCase struct {
 	FailTools  []string                     `json:"fail_tools"`
 	Checks     struct {
 		Calls []struct {
-			Name       string         `json:"name"`
-			Args       map[string]any `json:"args"`
-			AllowExtra []string       `json:"allow_extra"`
+			Name         string           `json:"name"`
+			Args         map[string]any   `json:"args"`
+			AllowExtra   []string         `json:"allow_extra"`
+			Alternatives []map[string]any `json:"alternatives"`
 		} `json:"calls"`
 		NoCalls          bool     `json:"no_calls"`
 		ForbidCalls      []string `json:"forbid_calls"`
@@ -221,6 +222,7 @@ type castResult struct {
 	Truncated    bool           `json:"truncated"`
 	Error        string         `json:"error,omitempty"`
 	Rounds       int            `json:"rounds"`
+	Guarded      bool           `json:"guarded"`
 	Sources      map[string]any `json:"sources"`
 }
 
@@ -362,7 +364,7 @@ func castOne(ctx context.Context, h *Harness, f *castFixture, c castCase, model 
 	start := time.Now()
 	res, err := h.Run(runCtx, msgs, tools, func(HarnessEvent) {})
 	r := castResult{Model: model.ID, Case: c.ID, Category: c.Category, Raw: res.Text, Calls: tools.calls, Seconds: time.Since(start).Seconds(),
-		FirstSeconds: res.FirstToken.Seconds(), EvalTokens: res.EvalTokens, Truncated: res.Truncated, Rounds: res.Rounds, Sources: map[string]any{}}
+		FirstSeconds: res.FirstToken.Seconds(), EvalTokens: res.EvalTokens, Truncated: res.Truncated, Rounds: res.Rounds, Guarded: res.Guarded, Sources: map[string]any{}}
 	if res.EvalNanos > 0 {
 		r.TokensPerSec = float64(res.EvalTokens) / (float64(res.EvalNanos) / 1e9)
 	}
@@ -417,43 +419,18 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 			add("call %d arguments invalid", i+1)
 			continue
 		}
-		for key, expected := range want.Args {
-			value, ok := args[key]
-			if !ok {
-				add("%s missing %s", want.Name, key)
-				continue
+		// The primary expectation or any documented equivalent must match.
+		var best []string
+		for k, expectation := range append([]map[string]any{want.Args}, want.Alternatives...) {
+			problems := checkArgs(want.Name, expectation, want.AllowExtra, args, data, book)
+			if k == 0 || len(problems) < len(best) {
+				best = problems
 			}
-			switch e := expected.(type) {
-			case string:
-				if key == "quelle" {
-					if ref := data.objectRef(book, e); ref == "" || strings.Trim(fmt.Sprint(value), "[]") != ref {
-						add("%s quelle %v, want %s", want.Name, value, ref)
-					}
-				} else if s, ok := value.(string); !ok || !containsFold(s, e) {
-					add("%s %s=%v", want.Name, key, value)
-				}
-			case float64:
-				if n, ok := value.(float64); !ok || math.Abs(n-e) > 0.001 {
-					add("%s %s=%v want %v", want.Name, key, value, e)
-				}
-			case bool:
-				if b, ok := value.(bool); !ok || b != e {
-					add("%s %s=%v want %v", want.Name, key, value, e)
-				}
+			if len(problems) == 0 {
+				break
 			}
 		}
-		for key, value := range args {
-			if _, expected := want.Args[key]; expected {
-				continue
-			}
-			allowed := false
-			for _, a := range want.AllowExtra {
-				allowed = allowed || a == key
-			}
-			if !allowed && value != nil && value != "" {
-				add("%s unexpected %s=%v", want.Name, key, value)
-			}
-		}
+		fails = append(fails, best...)
 	}
 	if ch.NoCalls && len(r.Calls) > 0 {
 		add("unexpected tool call %s", r.Calls[0].Name)
@@ -533,6 +510,49 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	}
 	if strings.TrimSpace(answer) == "" && len(fails) == 0 {
 		add("empty answer")
+	}
+	return fails
+}
+
+func checkArgs(name string, expectedArgs map[string]any, allowExtra []string, args map[string]any, data castData, book *sourceBook) []string {
+	var fails []string
+	add := func(format string, a ...any) { fails = append(fails, fmt.Sprintf(format, a...)) }
+	for key, expected := range expectedArgs {
+		value, ok := args[key]
+		if !ok {
+			add("%s missing %s", name, key)
+			continue
+		}
+		switch e := expected.(type) {
+		case string:
+			if key == "quelle" {
+				if ref := data.objectRef(book, e); ref == "" || strings.Trim(fmt.Sprint(value), "[]") != ref {
+					add("%s quelle %v, want %s", name, value, ref)
+				}
+			} else if s, ok := value.(string); !ok || !containsFold(s, e) {
+				add("%s %s=%v", name, key, value)
+			}
+		case float64:
+			if n, ok := value.(float64); !ok || math.Abs(n-e) > 0.001 {
+				add("%s %s=%v want %v", name, key, value, e)
+			}
+		case bool:
+			if b, ok := value.(bool); !ok || b != e {
+				add("%s %s=%v want %v", name, key, value, e)
+			}
+		}
+	}
+	for key, value := range args {
+		if _, expected := expectedArgs[key]; expected {
+			continue
+		}
+		allowed := false
+		for _, a := range allowExtra {
+			allowed = allowed || a == key
+		}
+		if !allowed && value != nil && value != "" {
+			add("%s unexpected %s=%v", name, key, value)
+		}
 	}
 	return fails
 }

@@ -747,6 +747,11 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 			l.emit("delta", map[string]string{"text": ev.Text})
 		case "tool":
 			l.emit("tool", ev.Tool)
+		case "reset":
+			l.mu.Lock()
+			l.text.Reset()
+			l.mu.Unlock()
+			l.emit("reset", map[string]string{})
 		}
 	})
 	switch {

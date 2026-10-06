@@ -536,3 +536,49 @@ func TestPDFTextExtraction(t *testing.T) {
 		t.Fatalf("%q", text)
 	}
 }
+
+func TestBareMarkersAndQuarters(t *testing.T) {
+	valid := func(r string) bool { return r == "Q1" }
+	text, cited, _ := CleanCitations("Die Quelle ist Q1. Umsatz im Q1 2026 stieg.", valid)
+	if text != "Die Quelle ist [Q1]. Umsatz im Q1 2026 stieg." || fmt.Sprint(cited) != "[Q1]" {
+		t.Fatalf("%q %v", text, cited)
+	}
+}
+
+type guardTools struct{ calls int }
+
+func (g *guardTools) Definitions() []toolDef { return movieTools() }
+func (g *guardTools) Call(context.Context, string, json.RawMessage) ToolResult {
+	g.calls++
+	return ToolResult{Content: `{"anzahl":0,"treffer":[]}`, Trace: ToolTrace{Name: "search_movies", Status: "done"}}
+}
+
+func TestGuardWithdrawsClaimWithoutTool(t *testing.T) {
+	step := 0
+	engine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		step++
+		var msg map[string]any
+		switch step {
+		case 1:
+			msg = map[string]any{"role": "assistant", "content": "Ich habe in deiner Bibliothek nichts gefunden."}
+		case 2:
+			msg = map[string]any{"role": "assistant", "content": "", "tool_calls": []map[string]any{{"function": map[string]any{"name": "search_movies", "arguments": map[string]any{"query": "Mondmann"}}}}}
+		default:
+			msg = map[string]any{"role": "assistant", "content": "Es gibt keinen Film namens Mondmann."}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"message": msg})
+		_ = json.NewEncoder(w).Encode(map[string]any{"done": true})
+	}))
+	defer engine.Close()
+	tools := &guardTools{}
+	resets := 0
+	h := &Harness{Client: http.DefaultClient, Base: engine.URL, Model: "m"}
+	res, err := h.Run(context.Background(), []chatMessage{{Role: "user", Content: "Gibt es den Mondmann?"}}, tools, func(ev HarnessEvent) {
+		if ev.Type == "reset" {
+			resets++
+		}
+	})
+	if err != nil || resets != 1 || tools.calls != 1 || strings.Contains(res.Text, "Bibliothek nichts") || !strings.Contains(res.Text, "keinen Film") {
+		t.Fatalf("err=%v resets=%d calls=%d text=%q", err, resets, tools.calls, res.Text)
+	}
+}

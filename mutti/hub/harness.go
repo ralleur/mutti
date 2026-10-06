@@ -87,6 +87,7 @@ type HarnessEvent struct {
 }
 
 type HarnessResult struct {
+	Guarded    bool
 	Text       string
 	Tools      []ToolTrace
 	FirstToken time.Duration
@@ -98,7 +99,7 @@ type HarnessResult struct {
 
 // SystemPrompt is the v2 product contract. Version it together with the
 // casting fixture; changes require a new qualification run.
-const PromptVersion = "mutti-assistant-v2"
+const PromptVersion = "mutti-assistant-v3"
 
 func SystemPrompt(model string, now time.Time, tools []toolDef) string {
 	names := []string{}
@@ -126,15 +127,27 @@ func SystemPrompt(model string, now time.Time, tools []toolDef) string {
 var (
 	markerPattern = regexp.MustCompile(`\[Q(\d{1,4})\]`)
 	parenMarker   = regexp.MustCompile(`\(Q(\d{1,4})\)`)
+	// A bare marker such as "ist Q1." but not a quarter like "Q1 2026".
+	bareMarker = regexp.MustCompile(`(^|[^\[\(\w])Q(\d{1,4})($|[^\]\)\w\s]|\s+[^\d\s])`)
+	// Statements that only a tool result could justify.
+	unverifiedClaim = regexp.MustCompile(`(?i)(nicht gefunden|nichts gefunden|keine (passenden |relevanten )?(informationen|dokumente|treffer|filme|fotos|einträge)|habe[^.]{0,60}(gesucht|nachgesehen|durchsucht)|keinen zugriff auf (deine|ihre|dein|ihr) (persönlichen|privaten|dokumente|daten|unterlagen|rechnungen|steuer))`)
 )
 
 // CleanCitations keeps only markers the server issued; invented ones are
 // removed so a user can never click a source that does not exist.
 func CleanCitations(text string, valid func(string) bool) (string, []string, int) {
-	// Models sometimes write (Q1); normalise only markers the server issued.
+	// Models sometimes write (Q1) or a bare Q1; normalise only markers the
+	// server issued.
 	text = parenMarker.ReplaceAllStringFunc(text, func(m string) string {
 		if valid(m[1 : len(m)-1]) {
 			return "[" + m[1:len(m)-1] + "]"
+		}
+		return m
+	})
+	text = bareMarker.ReplaceAllStringFunc(text, func(m string) string {
+		sub := bareMarker.FindStringSubmatch(m)
+		if valid("Q" + sub[2]) {
+			return sub[1] + "[Q" + sub[2] + "]" + sub[3]
 		}
 		return m
 	})
@@ -188,6 +201,17 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 			return result, err
 		}
 		if len(calls) == 0 {
+			// Contract guard: a claim about private data without any tool call is
+			// never accepted. The draft is withdrawn and the model is asked once
+			// to consult the tool first.
+			if len(result.Tools) == 0 && !result.Guarded && len(offered) > 0 && unverifiedClaim.MatchString(content) {
+				result.Guarded = true
+				text.Reset()
+				emit(HarnessEvent{Type: "reset"})
+				messages = append(messages, chatMessage{Role: "assistant", Content: content},
+					chatMessage{Role: "system", Content: "Hinweis des Systems: Du hast über private Daten geantwortet, ohne ein Werkzeug aufzurufen. Rufe jetzt zuerst das passende Werkzeug auf und antworte erst danach. Diese Antwort wurde dem Nutzer nicht gezeigt."})
+				continue
+			}
 			result.Text = text.String()
 			return result, nil
 		}
