@@ -1,6 +1,8 @@
 using System;
+using System.Buffers.Binary;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Model.System;
 using Microsoft.Extensions.Logging;
@@ -10,7 +12,7 @@ namespace Jellyfin.Server.Implementations.StorageHelpers;
 /// <summary>
 /// Contains methods to help with checking for storage and returning storage data for jellyfin folders.
 /// </summary>
-public static class StorageHelper
+public static partial class StorageHelper
 {
     private const long TwoGigabyte = 2_147_483_647L;
     private static readonly string[] _byteHumanizedSuffixes = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
@@ -58,12 +60,22 @@ public static class StorageHelper
                 throw new InvalidOperationException($"The path `{path}` has no matching parent device. Space check invalid.");
             }
 
+            long free = bestMatch.AvailableFreeSpace, total = bestMatch.TotalSize;
+            // Mutti: .NET derives sizes from f_bsize. Some filesystems (for example
+            // Docker Desktop virtiofs) report a large transfer block there, which
+            // inflated capacities 256-fold. statvfs' fragment size is authoritative.
+            if (TryStatVfs(resolvedPath, out var measuredFree, out var measuredTotal))
+            {
+                free = measuredFree;
+                total = measuredTotal;
+            }
+
             return new FolderStorageInfo()
             {
                 Path = path,
                 ResolvedPath = resolvedPath,
-                FreeSpace = bestMatch.AvailableFreeSpace,
-                UsedSpace = bestMatch.TotalSize - bestMatch.AvailableFreeSpace,
+                FreeSpace = free,
+                UsedSpace = total - free,
                 StorageType = bestMatch.DriveType.ToString(),
                 DeviceId = bestMatch.Name,
             };
@@ -81,6 +93,44 @@ public static class StorageHelper
             };
         }
     }
+
+    /// <summary>
+    /// Reads capacity with statvfs on 64-bit Linux (glibc layout: f_bsize, f_frsize, f_blocks, f_bfree, f_bavail as 64-bit fields).
+    /// </summary>
+    /// <param name="path">Resolved directory path.</param>
+    /// <param name="free">Bytes available to unprivileged users.</param>
+    /// <param name="total">Total bytes of the filesystem.</param>
+    /// <returns>Whether a plausible measurement was obtained.</returns>
+    internal static bool TryStatVfs(string path, out long free, out long total)
+    {
+        free = total = 0;
+        if (!OperatingSystem.IsLinux() || !Environment.Is64BitProcess)
+        {
+            return false;
+        }
+
+        Span<byte> buffer = stackalloc byte[256];
+        if (StatVfs(path, buffer) != 0)
+        {
+            return false;
+        }
+
+        var fragment = BinaryPrimitives.ReadUInt64LittleEndian(buffer[8..]);
+        var blocks = BinaryPrimitives.ReadUInt64LittleEndian(buffer[16..]);
+        var available = BinaryPrimitives.ReadUInt64LittleEndian(buffer[32..]);
+        if (fragment == 0 || blocks == 0 || available > blocks || blocks > long.MaxValue / fragment)
+        {
+            return false;
+        }
+
+        free = (long)(available * fragment);
+        total = (long)(blocks * fragment);
+        return true;
+    }
+
+    [LibraryImport("libc", EntryPoint = "statvfs", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+    private static partial int StatVfs(string path, Span<byte> buffer);
 
     /// <summary>
     /// Walk a path and fully resolve any symlinks within it.
