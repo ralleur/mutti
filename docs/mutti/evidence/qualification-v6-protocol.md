@@ -28,6 +28,15 @@ Suite `mutti/tests/fixtures/qualification-real-de-v1.json`
 (SHA-256 `d0a4d5d8c155102edc2f5525f89d7d3df836c4617d70e24570a9b07205a4d649`),
 28 cases, 3 repetitions. Every case also counts for `content.assist`.
 
+**Seen and replaced:** the first run of real-de-v1 (2026-10-06, 69/84) was used
+to fix harness gaps (favourite phrasing, claims without a tool, search retry,
+any-term document fallback) and scorer gaps. It is therefore no longer a gate.
+The German gate is the fresh suite
+`mutti/tests/fixtures/qualification-real-de-v2.json`
+(SHA-256 `86de26a785c2f7336497d06a04be766683d73f32f6130f46e8ffdbb27d5d2cb3`), 28 new cases written
+and frozen before its first run. Same thresholds; not-found cases accept the
+language pack's own wording or the listed phrases.
+
 Per task and language a candidate is `passed` only if:
 
 - at least **85 %** of its runs pass (the v2 “limited” level),
