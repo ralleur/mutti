@@ -11,6 +11,9 @@ final class NativeImportClient {
     private let session: URLSession
     private let origin = URL(string: "http://127.0.0.1:18594/")!
     private var confirming = false
+    /// Write end of the manager's stdin pipe. It stays open for the manager's lifetime:
+    /// EOF on that pipe tells the manager that its parent is gone and it should shut down.
+    private var lifeline: FileHandle?
 
     init() throws {
         var bytes = [UInt8](repeating: 0, count: 32)
@@ -27,8 +30,18 @@ final class NativeImportClient {
     func attach(to process: Process) throws {
         let pipe = Pipe()
         process.standardInput = pipe
-        try pipe.fileHandleForWriting.write(contentsOf: Data(token.utf8))
-        try pipe.fileHandleForWriting.close()
+        let writer = pipe.fileHandleForWriting
+        // Exactly 64 bytes, no terminator: the manager reads the fixed-length token and then
+        // keeps waiting on the pipe for EOF as its lifeline.
+        try writer.write(contentsOf: Data(token.utf8))
+        lifeline = writer
+    }
+
+    /// Closes the lifeline. The manager sees EOF and shuts down gracefully. Idempotent.
+    func release() {
+        guard let lifeline else { return }
+        self.lifeline = nil
+        try? lifeline.close()
     }
 
     nonisolated static func accepts(_ url: URL?, isMainFrame: Bool) -> Bool {

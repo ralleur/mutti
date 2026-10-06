@@ -1,6 +1,10 @@
 # Umsetzungsstand
 
-Stand: 5. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
+Stand: 6. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
+Die Architektur-Review vom 6. Oktober und die Owner-Entscheidungen dazu stehen in
+[review-2026-10-06.md](review-2026-10-06.md) und [plan.md, Abschnitt 15](plan.md#15-entscheidungsprotokoll-vom-6-oktober-2026).
+Seitdem gilt: erste Iteration Mac-only, kein zentrales Relay, Docker/NAS als
+Entwicklerweg ohne Release-Gate.
 
 Die Forks `ralleur/mutti` und `ralleur/mutti-web` behalten ihre vollständige
 Jellyfin-Historie. Die Produktbranches beginnen beim zusammenpassenden stabilen
@@ -232,3 +236,37 @@ und Zugriffsgrenzen ebenfalls. Die aktualisierte App unter
 Quelle. Der Manager steht auf `idle` mit dem bisherigen aktiven Datenordner.
 Der nächste echte Import bleibt beim Owner; keine echte Bibliothek wurde durch
 den Agenten importiert oder aktiviert.
+
+## Review und Verfügbarkeitsarbeit vom 6. Oktober
+
+Umgesetzt auf `claude/peaceful-babbage-rt0p2v` (Pull Request gegen `codex/mutti-foundation`):
+
+- **Supervisor im Manager (`mutti/migrate`):** Ein beendeter Jellyfin-Prozess
+  wird mit wachsendem Abstand neu gestartet; der Zustand `restarting` ist in der
+  Status-API und der Mac-App sichtbar, erst nach mehreren Fehlversuchen in Folge
+  erscheint ein Fehler mit Handlungsanweisung. Der Verbindungsdienst wird mit
+  Abstand neu gestartet; dauerhaftes Scheitern wird als `connectState`/
+  `connectMessage` gemeldet, ohne die Bibliothek zu blockieren. Während einer
+  laufenden Übernahme greift der Supervisor nicht ein.
+- **Prozessgruppe und Lebensader:** Im Mac-Modus bildet der Manager eine eigene
+  Prozessgruppe; die App hält die Token-Pipe offen, deren Ende den Manager
+  geordnet beendet. Als letzte Stufe beendet die App die gesamte Gruppe. Docker
+  bleibt unverändert.
+- **Mac-Hülle:** Start bei der Anmeldung über die System-Anmeldeobjekte,
+  „Mac wach halten“ als Schalter, Beenden-Rückfrage mit Hinweis auf gekoppelte
+  Geräte (nicht bei Abmelden/Herunterfahren), nicht blockierender Stopp,
+  migrationsbewusster Startwächter, Statuszeile in der Menüleiste.
+- **Release-Hygiene:** Format- und StyleCop-Fehler behoben, Windows-Testfehler
+  im Intro-Skipper-Snapshot behoben, geerbte Workflows auf `main` umgestellt und
+  Jellyfin-eigene Automationen für den Fork abgeschaltet, Mutti-CI auf allen
+  Arbeitsbranches, manuell auslösbarer Release-Workflow mit Developer-ID-
+  Signatur, Hardened Runtime, Entitlements und Notarisierung (benötigt
+  hinterlegte Geheimnisse, noch nicht ausgeführt). Offene Lizenzfragen in
+  [licensing.md](licensing.md).
+
+Geprüft: `gofmt`, `go vet` und `go test -race ./...` für `mutti/migrate` auf
+Linux. Die Swift-Änderungen werden ausschließlich durch den `mac-shell`-Job der
+CI auf einem macOS-Runner kompiliert und getestet; ein Start der neuen App auf
+einem echten Mac, die Wirkung der Wach-halten-Einstellung, die Anmeldeobjekt-
+Registrierung und das Verhalten beim Abmelden sind Owner-Tests. Der
+Release-Workflow wurde nicht ausgeführt. Kein WAN-, Geräte- oder NAS-Nachweis.
