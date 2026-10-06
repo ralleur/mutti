@@ -41,8 +41,10 @@ Latency (first output, complete answer; p50/p95), median tokens/s and peak
 resident engine memory are recorded and reported, not gated: the v2 latency
 limits belong to the “recommended” level.
 
-English answers need an English synthetic corpus; until it exists the English
-suite is not run and English stays unqualified.
+English suite `mutti/tests/fixtures/qualification-real-en-v1.json`
+(SHA-256 `c36603de6751d04c16ed1dddaafa88e3a48af30b2f2f1f860ac285f85cd00784`), 28 cases on the English synthetic corpus
+(`*_en` fixtures, seeded once by `module-testenv.py`; movie titles are proper
+nouns shared with the German library). Same thresholds.
 
 ## Development regression (not a gate)
 
