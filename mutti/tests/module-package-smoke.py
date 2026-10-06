@@ -364,6 +364,26 @@ try:
     check('AT-16 Foreign confirmation rejected', status in (403, 404), status)
     status, p = alpha.call('POST', f'ai/proposals/{props[0]["id"]}/confirm', {'conversation': cid})
     check('AT-11 Confirmed action applied and verified by reading back', p['state'] == 'confirmed' and fav() is True, p)
+    # Backups include module data (without models); the probe restores it.
+    ok(jf('POST', '/Mutti/Maintenance/backup', {}, owner), 'backup')
+    for _ in range(180):
+        m = ok(jf('POST', '/Mutti/Maintenance/state', {}, owner), 'maintenance')
+        if not m['busy'] and m['job'].get('kind') == 'backup':
+            break
+        time.sleep(2)
+    check('Backup completes', m['job']['state'] == 'completed' and m['backups'], m['job'])
+    backup_dir = Path(m['directory']) / m['backups'][0]['id']
+    stored = json.loads((backup_dir / 'backup.json').read_text())
+    hub_files = [k for k in stored['Hashes'] if k.startswith('hub/')]
+    check('Backup contains module settings and conversations but no model files',
+          stored.get('Hub') is True and 'hub/hub.json' in hub_files and any('/conversations/' in k for k in hub_files) and not any('models' in k for k in hub_files), hub_files)
+    ok(jf('POST', '/Mutti/Maintenance/verify', {'ID': m['backups'][0]['id'], 'Username': 'Testbesitzer', 'Password': password, 'Confirm': True}, owner), 'verify')
+    for _ in range(300):
+        m = ok(jf('POST', '/Mutti/Maintenance/state', {}, owner), 'maintenance')
+        if not m['busy'] and m['job'].get('kind') == 'verify':
+            break
+        time.sleep(2)
+    check('Restore probe of the backup passes', m['job']['state'] == 'completed' and m['backups'][0].get('verifiedAt'), m['job'])
     # Rights changes apply immediately, also for modules.
     ok(hub_admin('admin/grants', {'module': 'photos', 'userId': users['Alpha'], 'allowed': False}), 'revoke grant')
     status, _ = alpha.call('GET', 'photos/assets')
