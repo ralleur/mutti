@@ -94,7 +94,7 @@ func requestLanguage(explicit string, r *http.Request) (*languagePack, error) {
 		if l, ok := languageFor(explicit); ok {
 			return l, nil
 		}
-		return nil, apiErr(400, "unsupported_language", "This answer language is not supported.")
+		return nil, apiErr(400, "unsupported_language", "Diese Antwortsprache wird nicht unterstützt.")
 	}
 	if r != nil {
 		for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {

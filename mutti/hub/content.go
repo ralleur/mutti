@@ -338,6 +338,7 @@ func (h *Hub) contentSearch(w http.ResponseWriter, r *http.Request, id Identity)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	page := SearchPage{Items: []ContentItem{}, Completeness: "complete", Areas: []SearchArea{}}
+	lang := responseLanguage(r)
 	for _, area := range q.areas() {
 		pos, ok := cursor.Next[area]
 		if !ok {
@@ -347,7 +348,7 @@ func (h *Hub) contentSearch(w http.ResponseWriter, r *http.Request, id Identity)
 			entry := SearchArea{Area: area, State: "not_available", Code: "not_available"}
 			var api *APIError
 			if errors.As(err, &api) {
-				entry.Code, entry.Message = api.Code, api.Message
+				entry.Code, entry.Message = api.Code, lang.say(api.Message)
 			}
 			page.Areas = append(page.Areas, entry)
 			continue
@@ -374,7 +375,7 @@ func (h *Hub) contentSearch(w http.ResponseWriter, r *http.Request, id Identity)
 		entry := SearchArea{Area: area, State: "searched"}
 		if res.err != nil {
 			page.Completeness = "partial"
-			entry.State, entry.Code, entry.Message = "unavailable", "unavailable", areaUnavailable(area)
+			entry.State, entry.Code, entry.Message = "unavailable", "unavailable", lang.say(areaUnavailable(area))
 			if errors.Is(res.err, errUnauthorized) {
 				return res.err
 			}
@@ -831,6 +832,7 @@ type ContentJob struct {
 func (h *Hub) contentJobs(w http.ResponseWriter, r *http.Request, id Identity) error {
 	jobs := []ContentJob{}
 	areas := []SearchArea{}
+	lang := responseLanguage(r)
 	h.ai.mu.Lock()
 	queued := map[string]bool{}
 	for _, l := range h.ai.queue {
@@ -853,13 +855,13 @@ func (h *Hub) contentJobs(w http.ResponseWriter, r *http.Request, id Identity) e
 		tasks, err := h.docs.taskList(ctx, id)
 		cancel()
 		if err != nil {
-			areas = append(areas, SearchArea{Area: ModuleDocuments, State: "unavailable", Code: "unavailable", Message: areaUnavailable(ModuleDocuments)})
+			areas = append(areas, SearchArea{Area: ModuleDocuments, State: "unavailable", Code: "unavailable", Message: lang.say(areaUnavailable(ModuleDocuments))})
 		}
 		cfg := h.store.Read()
 		for _, t := range tasks {
 			job := ContentJob{ID: fmt.Sprint(t["id"]), Type: "document.import", Title: fmt.Sprint(t["fileName"]), State: "unknown"}
 			if msg, ok := t["message"].(string); ok {
-				job.Message = msg
+				job.Message = lang.say(msg)
 			}
 			switch t["state"] {
 			case "processing":

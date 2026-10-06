@@ -89,7 +89,8 @@ func (h *Hub) Run(ctx context.Context) {
 	}
 }
 
-// APIError carries a stable code for clients and a German user message.
+// APIError carries a stable code for clients and a user message, rendered
+// in the request's language when it is written.
 type APIError struct {
 	Status  int    `json:"-"`
 	Code    string `json:"code"`
@@ -115,7 +116,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func writeError(w http.ResponseWriter, err error) {
+func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var api *APIError
 	if !errors.As(err, &api) {
 		if errors.Is(err, errUnauthorized) {
@@ -124,7 +125,9 @@ func writeError(w http.ResponseWriter, err error) {
 			api = apiErr(502, "unavailable", "Der Dienst ist gerade nicht erreichbar.")
 		}
 	}
-	writeJSON(w, api.Status, api)
+	localized := *api
+	localized.Message = responseLanguage(r).say(api.Message)
+	writeJSON(w, api.Status, &localized)
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, limit int64, v any) error {
@@ -202,7 +205,7 @@ func (h *Hub) Handler() http.Handler {
 		// Browsers never talk to the hub directly; the owner UI uses the
 		// Jellyfin bridge and devices use the Connect tunnel.
 		if r.Header.Get("Origin") != "" || r.URL.IsAbs() {
-			writeError(w, errForbidden)
+			writeError(w, r, errForbidden)
 			return
 		}
 		mux.ServeHTTP(w, r)
@@ -213,7 +216,7 @@ func (h *Hub) wrap(fn handler, admin bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := h.jf.identify(r.Context(), requestToken(r), 3*time.Second)
 		if err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 			return
 		}
 		if admin != id.Admin {
@@ -221,13 +224,13 @@ func (h *Hub) wrap(fn handler, admin bool) http.HandlerFunc {
 			// playback profiles. An administrator's private photos or chats are
 			// out of scope for this package's profile model.
 			if admin {
-				writeError(w, errForbidden)
+				writeError(w, r, errForbidden)
 				return
 			}
 		}
 		id.Device = peerDevice(r, h.opts.PeerSecret)
 		if err = fn(w, r, id); err != nil {
-			writeError(w, err)
+			writeError(w, r, err)
 		}
 	}
 }
@@ -283,6 +286,7 @@ func (h *Hub) capabilities(w http.ResponseWriter, r *http.Request, id Identity) 
 		m := cfg.Modules[name]
 		c := moduleCapability{Configured: h.configured(name, m), Enabled: m.Enabled, Allowed: m.Grants[id.UserID], Actions: []string{}}
 		health, message := h.health.get(name)
+		message = lang.say(message)
 		c.Health = health
 		_, err := h.allowed(id, name)
 		var api *APIError
@@ -301,7 +305,7 @@ func (h *Hub) capabilities(w http.ResponseWriter, r *http.Request, id Identity) 
 			model := m.Model
 			c.Model = &model
 			if _, err := h.ai.qualify(assistantTask, lang); err != nil {
-				c.State, c.Message, c.Actions = "qualification_required", err.(*APIError).Message, []string{"sources"}
+				c.State, c.Message, c.Actions = "qualification_required", lang.say(err.(*APIError).Message), []string{"sources"}
 			} else if _, err := h.ai.qualify("media.favorite", lang); err != nil {
 				c.Actions = []string{"chat", "sources"}
 			}
