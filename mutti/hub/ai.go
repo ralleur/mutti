@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,13 +36,17 @@ type Message struct {
 	Error       string      `json:"error,omitempty"`
 	Idempotency string      `json:"-"`
 	Memo        string      `json:"-"`
+	// Used lists every source marker the answer's run touched, cited or not.
+	// History reuse re-authorizes all of them.
+	Used []string `json:"-"`
 }
 
 // storedMessage persists fields that the API intentionally hides.
 type storedMessage struct {
 	Message
-	Idempotency string `json:"idempotency,omitempty"`
-	Memo        string `json:"memo,omitempty"`
+	Idempotency string   `json:"idempotency,omitempty"`
+	Memo        string   `json:"memo,omitempty"`
+	Used        []string `json:"used,omitempty"`
 }
 
 type RunRecord struct {
@@ -65,6 +71,8 @@ type Proposal struct {
 	Expires       time.Time `json:"expires"`
 	Device        string    `json:"-"`
 	Result        string    `json:"result,omitempty"`
+	// Target is the exact content the action applies to.
+	Target *ContentRef `json:"target,omitempty"`
 }
 
 type Attachment struct {
@@ -215,7 +223,7 @@ func (a *AI) load(owner, id string) (*Conversation, map[string]string, error) {
 	c := f.Conversation
 	for _, m := range f.Messages {
 		msg := m.Message
-		msg.Idempotency, msg.Memo = m.Idempotency, m.Memo
+		msg.Idempotency, msg.Memo, msg.Used = m.Idempotency, m.Memo, m.Used
 		c.Messages = append(c.Messages, &msg)
 	}
 	if c.Sources.Items == nil {
@@ -233,7 +241,7 @@ func (a *AI) load(owner, id string) (*Conversation, map[string]string, error) {
 func (a *AI) save(c *Conversation, keys map[string]string) error {
 	f := conversationFile{Conversation: *c, RunKeys: keys}
 	for _, m := range c.Messages {
-		f.Messages = append(f.Messages, storedMessage{Message: *m, Idempotency: m.Idempotency, Memo: m.Memo})
+		f.Messages = append(f.Messages, storedMessage{Message: *m, Idempotency: m.Idempotency, Memo: m.Memo, Used: m.Used})
 	}
 	c.Updated = time.Now().UTC()
 	f.Updated = c.Updated
@@ -757,7 +765,8 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 		return
 	}
 	tools := a.toolsFor(l.identity, c)
-	messages := a.buildMessages(c, l.id, model, tools)
+	omit := a.revokedHistory(ctx, l.identity, c, l.id)
+	messages := a.buildMessages(c, l.id, model, tools, omit)
 	l.emit("state", map[string]any{"state": "running"})
 	think := false
 	h := &Harness{Client: a.engine.stream, Base: base, Model: model.ID, Think: a.thinkFlag(ctx, base, model.ID, &think),
@@ -859,7 +868,10 @@ func (a *AI) toolsFor(id Identity, c *Conversation) *profileTools {
 
 // buildMessages assembles a bounded history. Earlier source context travels
 // as a server-written memo, never as client-provided tool history.
-func (a *AI) buildMessages(c *Conversation, runID string, model CatalogModel, tools *profileTools) []chatMessage {
+//
+// Answers in omit relied on sources this profile may no longer use; their
+// text and memo never reach the model again.
+func (a *AI) buildMessages(c *Conversation, runID string, model CatalogModel, tools *profileTools, omit map[string]bool) []chatMessage {
 	run := findRun(c, runID)
 	msgs := []chatMessage{{Role: "system", Content: SystemPrompt(model.Name, time.Now(), tools.defs)}}
 	history := []chatMessage{}
@@ -872,7 +884,9 @@ func (a *AI) buildMessages(c *Conversation, runID string, model CatalogModel, to
 			continue
 		}
 		content := m.Text
-		if m.Role == "assistant" && m.Memo != "" {
+		if omit[m.ID] {
+			content = "(Frühere Antwort ausgelassen: Ihre Quellen sind nicht mehr freigegeben oder gerade nicht prüfbar.)"
+		} else if m.Role == "assistant" && m.Memo != "" {
 			content += "\n\n(Quellen dieser Antwort: " + m.Memo + ")"
 		}
 		history = append(history, chatMessage{Role: m.Role, Content: content})
@@ -914,7 +928,9 @@ func (a *AI) finish(l *liveRun, state, code string, result HarnessResult, tools 
 		text := result.Text
 		if tools != nil {
 			// Merge the run's registered sources and proposals.
+			a.hub.stampSources(tools.sources)
 			c.Sources = *tools.sources
+			message.Used = slices.Sorted(maps.Keys(tools.sources.touched))
 			var cited []string
 			invalid := 0
 			text, cited, invalid = CleanCitations(text, func(ref string) bool { return c.Sources.Items[ref] != nil })
@@ -923,6 +939,10 @@ func (a *AI) finish(l *liveRun, state, code string, result HarnessResult, tools 
 				message.Sources = recentSources(c, result)
 			}
 			for _, p := range tools.proposals {
+				if s := c.Sources.Items[p.Ref]; s != nil && s.Content != nil {
+					target := *s.Content
+					p.Target = &target
+				}
 				c.Proposals[p.ID] = p
 				message.Proposals = append(message.Proposals, p.ID)
 			}
@@ -1137,18 +1157,65 @@ func (a *AI) decideProposal(w http.ResponseWriter, r *http.Request, id Identity)
 	if s == nil || s.Service != "media" {
 		return errNotFound
 	}
+	cfg := a.hub.store.Read()
+	key := contentKey{Area: AreaMedia, Instance: cfg.MediaInstance, Object: s.ObjectID}
+	if s.Content != nil {
+		// A proposal for an object of a replaced library never executes.
+		if k, ok := a.hub.content.lookup(s.Content.ContentID); !ok || k != key {
+			return errNotFound
+		}
+	}
+	// One operation per object at a time, across conversations and devices.
+	release := a.hub.journal.lockTarget(key)
+	defer release()
+	if prior, ok := a.hub.journal.get(p.ID); ok {
+		// Recorded earlier, possibly before a crash: report, never repeat.
+		p.State, p.Result = prior.State, prior.Result
+		if p.State == "executing" {
+			p.State = "outcome_unknown"
+		}
+		if err = a.save(c, keys); err != nil {
+			return err
+		}
+		return writeOK(w, p)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	path := "/Users/" + id.UserID + "/Items/" + url.PathEscape(s.ObjectID)
+	// Re-authorize the exact target with current rights before any effect.
+	var before jellyItem
+	if err = a.hub.jf.call(ctx, "GET", path, id.token, nil, &before); err != nil {
+		if errors.Is(err, errUnauthorized) {
+			return err
+		}
+		if !errors.Is(err, errNotFound) {
+			return apiErr(502, "unavailable", areaUnavailable(AreaMedia))
+		}
+		p.State, p.Result = "failed", "Der Film ist für dieses Profil nicht mehr verfügbar."
+		if err = a.save(c, keys); err != nil {
+			return err
+		}
+		return writeOK(w, p)
+	}
+	entry := ActionEntry{ID: p.ID, Profile: id.UserID, Device: id.Device, Task: "media.favorite", Target: key, Revision: before.Etag, Title: before.Name,
+		Args: map[string]any{"favorite": p.Favorite}, Qualification: p.Qualification}
+	if s.Content != nil {
+		entry.ContentID = s.Content.ContentID
+	}
+	// Setting a favorite is an absolute per-user state, not an edit of the
+	// item, so a changed item revision does not block it; it is recorded.
+	if err = a.hub.journal.begin(entry); err != nil {
+		return apiErr(503, "journal_unavailable", "Die Aktion konnte nicht sicher vorgemerkt werden. Es wurde nichts geändert.")
+	}
 	method := "POST"
 	if !p.Favorite {
 		method = "DELETE"
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-	path := "/Users/" + id.UserID + "/FavoriteItems/" + url.PathEscape(s.ObjectID)
-	callErr := a.hub.jf.call(ctx, method, path, id.token, nil, nil)
+	callErr := a.hub.jf.call(ctx, method, "/Users/"+id.UserID+"/FavoriteItems/"+url.PathEscape(s.ObjectID), id.token, nil, nil)
 	// Read back instead of trusting the write response; an unclear outcome is
 	// reported as such and never blindly repeated.
 	var item jellyItem
-	readErr := a.hub.jf.call(ctx, "GET", "/Users/"+id.UserID+"/Items/"+url.PathEscape(s.ObjectID), id.token, nil, &item)
+	readErr := a.hub.jf.call(ctx, "GET", path, id.token, nil, &item)
 	switch {
 	case readErr == nil && item.UserData.IsFavorite == p.Favorite:
 		p.State, p.Result = "confirmed", "applied"
@@ -1157,8 +1224,14 @@ func (a *AI) decideProposal(w http.ResponseWriter, r *http.Request, id Identity)
 	default:
 		p.State, p.Result = "outcome_unknown", "Ergebnis unklar. Bitte den Film in der Bibliothek prüfen."
 	}
+	journalErr := a.hub.journal.finish(p.ID, p.State, p.Result)
 	if err = a.save(c, keys); err != nil {
 		return err
+	}
+	if journalErr != nil {
+		// The effect happened; only its record is stale. The next start
+		// reports outcome_unknown instead of repeating it.
+		a.hub.log.Printf("action journal: %v", journalErr)
 	}
 	return writeOK(w, p)
 }
@@ -1176,31 +1249,38 @@ func (a *AI) resolveSource(w http.ResponseWriter, r *http.Request, id Identity) 
 	if s == nil {
 		return errNotFound
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-	switch s.Service {
-	case "media":
-		var item jellyItem
-		if err = a.hub.jf.call(ctx, "GET", "/Users/"+id.UserID+"/Items/"+url.PathEscape(s.ObjectID), id.token, nil, &item); err != nil {
-			return errNotFound
-		}
-	case "documents":
-		n, _ := strconv.Atoi(s.ObjectID)
-		if _, err = a.hub.docs.fetch(ctx, id, n, false); err != nil {
-			return err
-		}
-	case "photos":
-		base, headers, err := a.hub.photos.session(id)
-		if err != nil {
-			return err
-		}
-		if err = serviceCall(ctx, a.hub.photos.client, "GET", base+"/api/assets/"+s.ObjectID, headers, nil, nil); err != nil {
-			return err
-		}
-	case "attachment":
+	if s.Service == "attachment" {
+		// Attachments belong to this conversation and never change.
 		if findAttachment(c, s.ObjectID) == nil {
 			return errNotFound
 		}
+		return writeOK(w, sourceView{Source: s, Status: "current"})
 	}
-	return writeOK(w, s)
+	key, ok := a.hub.sourceKey(s)
+	if !ok {
+		return errNotFound
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	current, err := a.hub.probe(ctx, id, key)
+	if err != nil {
+		return err
+	}
+	items, err := a.hub.finishItems(a.hub.store.Read(), []pendingItem{current})
+	if err != nil {
+		return err
+	}
+	status := "unknown"
+	if s.Content != nil && s.Content.Revision != nil {
+		status = revisionStatus(*s.Content.Revision, items[0].Ref.Revision)
+	}
+	return writeOK(w, sourceView{Source: s, Status: status, Item: &items[0]})
+}
+
+// sourceView adds the re-authorized current state to a stored source:
+// status is current, changed or unknown against the revision then used.
+type sourceView struct {
+	*Source
+	Status string       `json:"status"`
+	Item   *ContentItem `json:"item,omitempty"`
 }

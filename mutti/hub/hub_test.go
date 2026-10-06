@@ -35,6 +35,7 @@ func newFakeJellyfin() *fakeJellyfin {
 	item := func(id, name string, seconds int, played bool) jellyItem {
 		it := jellyItem{ID: id, Name: name, ProductionYear: 2024, RunTimeTicks: int64(seconds) * 10_000_000, Genres: []string{"Drama"}, Overview: "Synthetischer Testfilm."}
 		it.UserData.Played = played
+		it.Type, it.Etag = "Movie", "etag-"+id[:4]
 		return it
 	}
 	common := []jellyItem{item("11111111111111111111111111111111", "Nordlicht", 84, false), item("22222222222222222222222222222222", "Sommer am See", 95, false),
@@ -75,7 +76,7 @@ func (f *fakeJellyfin) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 		reply(map[string]any{})
 	case path == "/Users/"+user+"/Items":
-		reply(map[string]any{"Items": f.movies[user]})
+		reply(f.query(user, r))
 	case strings.HasPrefix(path, "/Users/"+user+"/Items/"):
 		id := strings.TrimPrefix(path, "/Users/"+user+"/Items/")
 		for _, m := range f.movies[user] {

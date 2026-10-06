@@ -22,6 +22,12 @@ type Source struct {
 	Title    string         `json:"title"`
 	Subtitle string         `json:"subtitle,omitempty"`
 	Facts    map[string]any `json:"-"`
+	// SourceRef provenance (contracts.md): stable content reference with the
+	// revision seen when the source was retrieved, and what part was used.
+	Content   *ContentRef    `json:"content,omitempty"`
+	Locator   *SourceLocator `json:"locator,omitempty"`
+	Retrieved *time.Time     `json:"retrieved,omitempty"`
+	Revision  string         `json:"-"` // backend revision while a run is active
 }
 
 // sourceBook allocates conversation-scoped markers. A run works on a copy and
@@ -29,17 +35,29 @@ type Source struct {
 type sourceBook struct {
 	Items map[string]*Source `json:"items"`
 	Next  int                `json:"next"`
+	// touched lists the markers a run used, cited or not.
+	touched map[string]bool
+}
+
+func (b *sourceBook) touch(ref string) {
+	if b.touched == nil {
+		b.touched = map[string]bool{}
+	}
+	b.touched[ref] = true
 }
 
 func (b *sourceBook) add(s Source) *Source {
 	for _, existing := range b.Items {
 		if existing.Service == s.Service && existing.ObjectID == s.ObjectID {
+			existing.Revision = s.Revision
+			b.touch(existing.Ref)
 			return existing
 		}
 	}
 	b.Next++
 	s.Ref = "Q" + strconv.Itoa(b.Next)
 	b.Items[s.Ref] = &s
+	b.touch(s.Ref)
 	return &s
 }
 
@@ -105,6 +123,7 @@ type Movie struct {
 	Genres   []string
 	Overview string
 	Added    string
+	Revision string
 }
 
 func movieTools() []toolDef {
@@ -224,7 +243,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		out := []map[string]any{}
 		for _, m := range hits {
 			s := t.sources.add(Source{Service: "media", Kind: "movie", ObjectID: m.ID, Title: m.Title, Subtitle: movieSubtitle(m),
-				Facts: map[string]any{"seconds": m.Seconds}})
+				Facts: map[string]any{"seconds": m.Seconds}, Revision: m.Revision})
 			out = append(out, map[string]any{"quelle": s.Ref, "titel": m.Title, "jahr": m.Year, "laufzeit": formatRuntime(m.Seconds),
 				"laufzeit_sekunden": m.Seconds, "gesehen": m.Watched, "genres": m.Genres})
 		}
@@ -278,7 +297,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		}
 		out := []map[string]any{}
 		for _, d := range items {
-			s := t.sources.add(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created})
+			s := t.sources.add(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created, Revision: d.revision})
 			out = append(out, map[string]any{"quelle": s.Ref, "titel": d.Title, "datum": d.Created, "auszug_daten": d.Snippet})
 		}
 		return ToolResult{Content: toolJSON(map[string]any{"anzahl": len(out), "treffer": out}),
@@ -322,7 +341,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			if title == "" {
 				title = p.FileName
 			}
-			s := t.sources.add(Source{Service: "photos", Kind: p.Type, ObjectID: p.ID, Title: title, Subtitle: dateOnly(p.Taken)})
+			s := t.sources.add(Source{Service: "photos", Kind: p.Type, ObjectID: p.ID, Title: title, Subtitle: dateOnly(p.Taken), Revision: p.revision})
 			out = append(out, map[string]any{"quelle": s.Ref, "art": p.Type, "aufgenommen": dateOnly(p.Taken), "beschreibung_daten": p.Description, "ort": p.City})
 		}
 		return ToolResult{Content: toolJSON(map[string]any{"anzahl": len(out), "treffer": out}),
@@ -412,6 +431,9 @@ type jellyItem struct {
 	Genres         []string `json:"Genres"`
 	Overview       string   `json:"Overview"`
 	DateCreated    string   `json:"DateCreated"`
+	PremiereDate   string   `json:"PremiereDate"`
+	Type           string   `json:"Type"`
+	Etag           string   `json:"Etag"`
 	UserData       struct {
 		Played     bool `json:"Played"`
 		IsFavorite bool `json:"IsFavorite"`
@@ -420,14 +442,14 @@ type jellyItem struct {
 
 func (j jellyItem) movie() Movie {
 	return Movie{ID: normalizeID(j.ID), Title: j.Name, Year: j.ProductionYear, Seconds: int(j.RunTimeTicks / 10_000_000), Watched: j.UserData.Played,
-		Genres: j.Genres, Overview: j.Overview, Added: j.DateCreated}
+		Genres: j.Genres, Overview: j.Overview, Added: j.DateCreated, Revision: j.Etag}
 }
 
 func (m jellyfinMedia) Movies(ctx context.Context) ([]Movie, error) {
 	var out struct {
 		Items []jellyItem `json:"Items"`
 	}
-	params := url.Values{"IncludeItemTypes": {"Movie"}, "Recursive": {"true"}, "Fields": {"Genres,Overview,DateCreated"}, "Limit": {"2000"}, "EnableImages": {"false"}}
+	params := url.Values{"IncludeItemTypes": {"Movie"}, "Recursive": {"true"}, "Fields": {"Genres,Overview,DateCreated,Etag"}, "Limit": {"2000"}, "EnableImages": {"false"}}
 	if err := m.jf.call(ctx, "GET", "/Users/"+m.id.UserID+"/Items?"+params.Encode(), m.id.token, nil, &out); err != nil {
 		return nil, err
 	}

@@ -141,6 +141,9 @@ func (j *jellyfin) call(ctx context.Context, method, path, token string, body io
 	if res.StatusCode == 401 || res.StatusCode == 403 {
 		return errUnauthorized
 	}
+	if res.StatusCode == 404 || res.StatusCode == 400 {
+		return errNotFound
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return fmt.Errorf("jellyfin status %d", res.StatusCode)
 	}
