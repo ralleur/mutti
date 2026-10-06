@@ -19,6 +19,7 @@ import (
 type Photos struct {
 	hub    *Hub
 	client *http.Client
+	stream *http.Client
 }
 
 // Immich permissions requested for a profile key: read, view, download and
@@ -363,15 +364,15 @@ func (p *Photos) media(w http.ResponseWriter, r *http.Request, id Identity) erro
 	r = r.WithContext(ctx)
 	switch kind {
 	case "thumbnail", "preview":
-		return relay(w, r, p.client, base+"/api/assets/"+asset+"/thumbnail?size="+kind, headers, "")
+		return relay(w, r, p.stream, base+"/api/assets/"+asset+"/thumbnail?size="+kind, headers, "")
 	case "video":
-		return relay(w, r, p.client, base+"/api/assets/"+asset+"/video/playback", headers, "")
+		return relay(w, r, p.stream, base+"/api/assets/"+asset+"/video/playback", headers, "")
 	case "original":
 		var meta immichAsset
 		if err = serviceCall(ctx, p.client, "GET", base+"/api/assets/"+asset, headers, nil, &meta); err != nil {
 			return err
 		}
-		return relay(w, r, p.client, base+"/api/assets/"+asset+"/original", headers, meta.OriginalFileName)
+		return relay(w, r, p.stream, base+"/api/assets/"+asset+"/original", headers, meta.OriginalFileName)
 	}
 	return errNotFound
 }
@@ -462,7 +463,7 @@ func (p *Photos) forwardUpload(w http.ResponseWriter, ctx context.Context, base 
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	res, err := p.client.Do(req)
+	res, err := p.stream.Do(req)
 	if err != nil {
 		var max *http.MaxBytesError
 		if errors.As(err, &max) {

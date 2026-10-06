@@ -485,6 +485,18 @@ func (a *AI) postMessage(w http.ResponseWriter, r *http.Request, id Identity) er
 func (a *AI) enqueue(c *Conversation, keys map[string]string, user *Message, id Identity) (*RunRecord, error) {
 	cfg := a.hub.store.Read().Modules[ModuleAI]
 	now := time.Now().UTC()
+	a.mu.Lock()
+	open := 0
+	for _, l := range a.live {
+		if l.owner == c.Owner {
+			open++
+		}
+	}
+	a.mu.Unlock()
+	if open >= 2 {
+		// One household engine: a single profile cannot fill the shared queue.
+		return nil, apiErr(429, "busy", "Es laufen bereits Antworten für dieses Profil. Bitte kurz warten.")
+	}
 	if findMessage(c, user.ID) == nil {
 		c.Messages = append(c.Messages, user)
 	}

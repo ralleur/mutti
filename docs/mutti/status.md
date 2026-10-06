@@ -66,6 +66,26 @@ und Restore in eine zweite leere Instanz erhalten Original, Text und Rechte.
 Das ist eine Dienstqualifikation, noch kein Mutti-Adapter oder nativer Foto-/
 Dokumentenbereich. [Ergebnis, Lizenzen und Grenzen](modules-qualification.md).
 
+## Zwischenstand Module, 6. Oktober 2026 (unterbrochen durch Nutzungslimit)
+
+Implementiert und getestet: `mutti/hub` (KI, Fotos, Dokumente; [modules.md](modules.md)),
+Anbindung über Connect-Tunnel, Besitzer-Bridge, Manager, Sicherung inkl. Moduldaten,
+Mac-Paket mit gepinnter Ollama-Engine (`build/macos/osx-arm64/Mutti.app`), Docker-Image
+`mutti:autonomy-20261006`, Mutti-Web-Modulverwaltung, native kurtz-Ansichten
+(Fragen/Fotos/Dokumente; Mac Catalyst Build 79 und iOS-Simulator gebaut, **noch nicht
+zur Laufzeit bedient**). Hub-Unit-/Race-Tests, echte Immich/Paperless-Integration,
+Connect-Weiterleitung, Docker-Modultest (ohne KI) bestanden. Gerätewiderruf meldet
+jetzt auch die Jellyfin-Sitzung ab; Linux-Kapazität per statvfs korrigiert.
+
+Casting v2 (720 Antworten, `build/model-casting/2026-10-06-v2`): kein Modell erreicht
+die vorab eingefrorenen Schwellen; Qwen 3.6 35B: Werkzeuge 57/60, Dokumente 39/45,
+Fremdanweisungen 24/30, Dialog Ø 3,4. v3 mit Werkzeug-zuerst-Wächter läuft/lief
+unter `build/model-casting/2026-10-06-v3`; Auswertung offen. Pydantic AI: nur
+Paketprüfung (27 Pakete, versteckte Netzpfade `tiktoken`/`genai-prices`), Funktionsvergleich offen.
+
+Offen: Mac-E2E `mutti/tests/module-package-smoke.py`, native Laufzeitprüfung,
+Docker-KI-Teil, Casting-v3-Auswertung/Modellfreigabe, Testpakete und Belegdokumente.
+
 ## Tatsächlich geprüft
 
 - .NET 10.0.401, Node 26.7.0, Xcode 27.0, Go 1.27.1; Linux arm64 im lokalen Docker.

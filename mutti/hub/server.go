@@ -47,8 +47,10 @@ func New(opts Options) (*Hub, error) {
 		return nil, err
 	}
 	h := &Hub{opts: opts, store: store, jf: jf, health: newHealthCache(), streams: newStreamRegistry(), log: log.New(io.Discard, "", 0)}
-	h.photos = &Photos{hub: h, client: guardedClient(10 * time.Minute)}
-	h.docs = &Documents{hub: h, client: guardedClient(10 * time.Minute)}
+	// API calls are bounded; media relays and uploads only bound the wait for
+	// response headers, so long videos and large originals are not cut off.
+	h.photos = &Photos{hub: h, client: guardedClient(time.Minute), stream: guardedClient(0)}
+	h.docs = &Documents{hub: h, client: guardedClient(time.Minute), stream: guardedClient(0)}
 	if h.ai, err = newAI(h); err != nil {
 		return nil, err
 	}

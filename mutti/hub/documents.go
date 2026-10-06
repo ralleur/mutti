@@ -24,6 +24,7 @@ import (
 type Documents struct {
 	hub    *Hub
 	client *http.Client
+	stream *http.Client
 	mu     sync.Mutex
 }
 
@@ -256,15 +257,15 @@ func (d *Documents) media(w http.ResponseWriter, r *http.Request, id Identity) e
 	path := base + "/api/documents/" + strconv.Itoa(doc)
 	switch r.PathValue("kind") {
 	case "thumbnail":
-		return relay(w, r, d.client, path+"/thumb/", headers, "")
+		return relay(w, r, d.stream, path+"/thumb/", headers, "")
 	case "preview":
-		return relay(w, r, d.client, path+"/preview/", headers, "")
+		return relay(w, r, d.stream, path+"/preview/", headers, "")
 	case "original":
 		meta, err := d.fetch(ctx, id, doc, false)
 		if err != nil {
 			return err
 		}
-		return relay(w, r, d.client, path+"/download/?original=true", headers, meta.FileName)
+		return relay(w, r, d.stream, path+"/download/?original=true", headers, meta.FileName)
 	}
 	return errNotFound
 }
@@ -393,7 +394,7 @@ func (d *Documents) forward(ctx context.Context, base string, headers map[string
 		req.Header.Set(k, v)
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	res, err := d.client.Do(req)
+	res, err := d.stream.Do(req)
 	if err != nil {
 		return "", apiErr(502, "unavailable", "Das Dokumentenarchiv ist gerade nicht erreichbar.")
 	}
