@@ -112,6 +112,9 @@ func (a *AI) adminEngine(w http.ResponseWriter, r *http.Request, id Identity) er
 func (a *AI) adminModels(w http.ResponseWriter, r *http.Request, id Identity) error {
 	var req struct {
 		Model string `json:"model"`
+		// Source optionally names another local engine store to adopt from;
+		// every layer is verified against the pinned digest before use.
+		Source string `json:"source,omitempty"`
 	}
 	if err := decodeJSON(w, r, 4096, &req); err != nil {
 		return err
@@ -136,7 +139,17 @@ func (a *AI) adminModels(w http.ResponseWriter, r *http.Request, id Identity) er
 		if runtime.GOOS != "darwin" || err != nil {
 			return apiErr(409, "unsupported", "Die Übernahme ist nur aus einer lokalen Mac-Installation möglich.")
 		}
-		if err = a.engine.adopt(model, filepath.Join(home, ".ollama", "models")); err != nil {
+		source := filepath.Join(home, ".ollama", "models")
+		if req.Source != "" {
+			if !filepath.IsAbs(req.Source) || filepath.Clean(req.Source) != req.Source {
+				return errInvalid
+			}
+			if info, err := os.Stat(filepath.Join(req.Source, "manifests")); err != nil || !info.IsDir() {
+				return apiErr(404, "not_found", "Unter diesem Pfad liegt kein lokaler Modellspeicher.")
+			}
+			source = req.Source
+		}
+		if err = a.engine.adopt(model, source); err != nil {
 			return err
 		}
 	case "select":

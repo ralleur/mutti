@@ -37,6 +37,8 @@ parser.add_argument('--testenv', type=Path, required=True)
 parser.add_argument('--model', help='also install and select this pinned model')
 parser.add_argument('--expect-qualified', action='store_true', help='run the positive AI path (requires real qualification)')
 parser.add_argument('--model-source', choices=('pull', 'adopt'), default='pull')
+parser.add_argument('--language', default='de', help='answer language sent with AI messages (the AT prompts are German)')
+parser.add_argument('--adopt-from', help='local engine store (models dir) to adopt from; digests are verified')
 parser.add_argument('--keep', action='store_true', help='keep the instance running for native client checks')
 parser.add_argument('--setup-only', action='store_true', help='set up the synthetic instance, write fixture.json for qualification and keep it running')
 args = parser.parse_args()
@@ -150,6 +152,8 @@ class Device:
         return self
 
     def call(self, method, path, body=None, headers=None, raw=False, timeout=120):
+        if path.endswith('/messages') and isinstance(body, dict):
+            body = dict(body, language=body.get('language', args.language))
         return http(method, self.base + '/mutti/hub/v1/' + path, body, headers, timeout=timeout, raw=raw)
 
     def media(self, path):
@@ -297,7 +301,10 @@ try:
     if args.expect_qualified and not args.model:
         raise SystemExit('--expect-qualified needs --model')
     if args.model:
-        ok(hub_admin(f'admin/ai/models/{args.model_source}', {'model': args.model}), 'model download')
+        request = {'model': args.model}
+        if args.model_source == 'adopt' and args.adopt_from:
+            request['source'] = str(Path(args.adopt_from).resolve())
+        ok(hub_admin(f'admin/ai/models/{args.model_source}', request), 'model download')
         t0 = time.time()
         while True:
             engine = ok(hub_admin('admin/state'), 'state')['modules']['ai']['ai']['engine']
@@ -324,7 +331,7 @@ try:
     beta = Device('Beta-Testgeraet', users['Beta']).pair()
     ai_ready = 'ready' if args.expect_qualified else None
     for _ in range(30):
-        caps = alpha.call('GET', 'capabilities')[1]
+        caps = alpha.call('GET', f'capabilities?language={args.language}')[1]
         if all(caps['modules'][m]['state'] == 'ready' for m in ('photos', 'documents', 'content')) and (ai_ready is None or caps['modules']['ai']['state'] == 'ready'):
             break
         time.sleep(2)
@@ -483,7 +490,7 @@ try:
     subprocess.run(['docker', 'compose', '-p', project, '-f', str(args.testenv.parent / 'compose.json'), 'stop', 'paperless'], check=True, capture_output=True)
     try:
         time.sleep(25)
-        caps = alpha.call('GET', 'capabilities')[1]
+        caps = alpha.call('GET', f'capabilities?language={args.language}')[1]
         status, body = alpha.media(f'/Users/{users["Alpha"]}/Items?IncludeItemTypes=Movie&Recursive=true')
         check('Documents outage is reported while movies keep working', caps['modules']['documents']['state'] == 'unavailable' and status == 200, caps['modules']['documents'])
         status, partial = search(alpha, size=50)
