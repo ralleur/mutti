@@ -18,6 +18,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 
@@ -26,6 +27,7 @@ for name in ('--app', '--root', '--testenv', '--models', '--suite'):
     parser.add_argument(name, type=Path, required=True)
 parser.add_argument('--model', required=True)
 parser.add_argument('--repetitions', type=int, default=3)
+parser.add_argument('--playback', action='store_true', help='measure playback headroom idle and under the AI load of this run')
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[2]
 root = args.root.resolve()
@@ -61,8 +63,32 @@ try:
            '--models', str(args.models.resolve()), '--model', args.model, '--suite', str(args.suite.resolve()),
            '--profiles', str(root / 'profiles.json'), '--objects', str(root / 'objects.json'), '--out', str(root / 'result'),
            '--repetitions', str(args.repetitions)]
+    probe = [sys.executable, str(repo / 'mutti/tests/playback-under-load.py'), '--fixture', str(instance / 'fixture.json'),
+             '--ffmpeg', str(resources / 'ffmpeg/ffmpeg')]
+
+    def playback(label):
+        with (root / f'playback-{label}.json').open('w') as out:
+            subprocess.call(probe + ['--label', label], stdout=out, stderr=subprocess.STDOUT)
+
+    if args.playback:
+        playback('idle')
+
+    def under_load():
+        results = root / 'result' / 'results.jsonl'
+        while qualify.poll() is None:
+            if results.exists() and len(results.read_text().splitlines()) >= 3:
+                playback('ai-load')
+                return
+            time.sleep(5)
+
     started = time.time()
-    code = subprocess.call(cmd)
+    qualify = subprocess.Popen(cmd)
+    watcher = threading.Thread(target=under_load, daemon=True)
+    if args.playback:
+        watcher.start()
+    code = qualify.wait()
+    if args.playback:
+        watcher.join(timeout=600)
     print(f'qualify exit {code} after {time.time() - started:.0f}s; evidence in {root / "result"}', flush=True)
     sys.exit(code)
 finally:

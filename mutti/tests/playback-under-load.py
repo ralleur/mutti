@@ -48,14 +48,19 @@ for item in items:
                                     'VideoBitrate': 4000000, 'MaxWidth': 1920, 'MaxHeight': 1080, 'TranscodingMaxAudioChannels': 2,
                                     'SegmentContainer': 'ts', 'MinSegments': 1, 'BreakOnNonKeyFrames': 'true',
                                     'PlaySessionId': f'probe-{int(time.time() * 1000)}', 'DeviceId': 'playback-probe'})
-    url = f'{base}/Videos/{item["Id"]}/master.m3u8?{query}'
-    started = time.time()
-    proc = subprocess.run([str(args.ffmpeg), '-hide_banner', '-nostats', '-progress', 'pipe:1', '-i', url, '-f', 'null', '-'],
-                          capture_output=True, text=True, timeout=600)
-    wall = time.time() - started
+    attempts = [('hls', f'{base}/Videos/{item["Id"]}/master.m3u8?{query}'),
+                # Progressive transcode as fallback if the HLS playlist is refused.
+                ('progressive', f'{base}/Videos/{item["Id"]}/stream.mp4?{query}&static=false&container=mp4')]
+    for mode, url in attempts:
+        started = time.time()
+        proc = subprocess.run([str(args.ffmpeg), '-hide_banner', '-nostats', '-progress', 'pipe:1', '-i', url, '-f', 'null', '-'],
+                              capture_output=True, text=True, timeout=600)
+        wall = time.time() - started
+        if proc.returncode == 0:
+            break
     duration = item.get('RunTimeTicks', 0) / 1e7
     speeds = [float(s) for s in re.findall(r'speed=\s*([\d.]+)x', proc.stdout)]
-    results.append({'title': item['Name'], 'seconds': round(duration, 1), 'wallSeconds': round(wall, 1),
-                     'speed': speeds[-1] if speeds else None, 'realtimeFactor': round(duration / wall, 2) if wall else None, 'ok': proc.returncode == 0,
-                     'error': proc.stderr.strip().splitlines()[-1][:200] if proc.returncode and proc.stderr.strip() else None})
+    results.append({'title': item['Name'], 'mode': mode, 'seconds': round(duration, 1), 'wallSeconds': round(wall, 1),
+                    'speed': speeds[-1] if speeds else None, 'realtimeFactor': round(duration / wall, 2) if wall else None, 'ok': proc.returncode == 0,
+                    'error': proc.stderr.strip().splitlines()[-1][:200] if proc.returncode and proc.stderr.strip() else None})
 print(json.dumps({'label': args.label, 'at': time.strftime('%Y-%m-%dT%H:%M:%S'), 'results': results}, ensure_ascii=False))
