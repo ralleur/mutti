@@ -16,8 +16,8 @@ import (
 func main() {
 	var o hub.CastOptions
 	models := flag.String("models", "", "comma-separated catalog model ids")
-	flag.StringVar(&o.Fixture, "fixture", "mutti/tests/fixtures/model-casting-v2.json", "frozen fixture")
-	flag.StringVar(&o.Rubric, "rubric", "docs/mutti/evidence/casting-v2-rubric.md", "frozen rubric")
+	flag.StringVar(&o.Fixture, "fixture", "mutti/tests/fixtures/model-casting-v5-dev.json", "frozen fixture")
+	flag.StringVar(&o.Rubric, "rubric", "docs/mutti/evidence/casting-v5-rubric.md", "frozen rubric")
 	flag.StringVar(&o.Output, "output", "", "new result directory")
 	flag.StringVar(&o.Store, "store", "", "engine directory containing models/ (never the user's store)")
 	flag.StringVar(&o.Ollama, "ollama", "", "engine executable")

@@ -81,6 +81,7 @@ type castCase struct {
 		NoCitations      bool     `json:"no_citations"`
 		Question         bool     `json:"question"`
 		NoForeignMarkers bool     `json:"no_foreign_markers"`
+		German           bool     `json:"german"`
 	} `json:"checks"`
 }
 
@@ -223,6 +224,7 @@ type castResult struct {
 	Error        string         `json:"error,omitempty"`
 	Rounds       int            `json:"rounds"`
 	Guarded      bool           `json:"guarded"`
+	Corrections  []string       `json:"interventions,omitempty"`
 	Sources      map[string]any `json:"sources"`
 }
 
@@ -326,7 +328,6 @@ func RunCasting(o CastOptions) error {
 }
 
 var cjk = regexp.MustCompile(`[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}\p{Cyrillic}\p{Arabic}]`)
-var claimed = regexp.MustCompile(`(?i)(wurde|habe|ist jetzt|sind jetzt)[^.]{0,40}(als favorit markiert|gelöscht|entfernt\b)`)
 
 func castOne(ctx context.Context, h *Harness, f *castFixture, c castCase, model CatalogModel) castResult {
 	fail := map[string]bool{}
@@ -364,7 +365,8 @@ func castOne(ctx context.Context, h *Harness, f *castFixture, c castCase, model 
 	start := time.Now()
 	res, err := h.Run(runCtx, msgs, tools, func(HarnessEvent) {})
 	r := castResult{Model: model.ID, Case: c.ID, Category: c.Category, Raw: res.Text, Calls: tools.calls, Seconds: time.Since(start).Seconds(),
-		FirstSeconds: res.FirstToken.Seconds(), EvalTokens: res.EvalTokens, Truncated: res.Truncated, Rounds: res.Rounds, Guarded: res.Guarded, Sources: map[string]any{}}
+		FirstSeconds: res.FirstToken.Seconds(), EvalTokens: res.EvalTokens, Truncated: res.Truncated, Rounds: res.Rounds, Guarded: res.Guarded,
+		Corrections: res.Interventions, Sources: map[string]any{}}
 	if res.EvalNanos > 0 {
 		r.TokensPerSec = float64(res.EvalTokens) / (float64(res.EvalNanos) / 1e9)
 	}
@@ -505,6 +507,9 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	if ch.NoCitations && len(r.Cited) > 0 {
 		add("unexpected citation")
 	}
+	if ch.German && looksEnglish(answer) {
+		add("answer not German")
+	}
 	if ch.Question && !strings.Contains(answer, "?") {
 		add("no follow-up question")
 	}
@@ -514,7 +519,48 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	return fails
 }
 
+// canonicalArgs compares filter meaning, not spelling: the v4 movie contract
+// offers equivalent forms (minutes or seconds, inclusive or exclusive bound,
+// watched or unwatched). Runtimes are whole seconds.
+func canonicalArgs(name string, in map[string]any) map[string]any {
+	if name != "search_movies" {
+		return in
+	}
+	out := map[string]any{}
+	for k, v := range in {
+		out[k] = v
+	}
+	num := func(k string) (float64, bool) {
+		n, ok := out[k].(float64)
+		delete(out, k)
+		return n, ok
+	}
+	if b, ok := out["unwatched"].(bool); ok {
+		delete(out, "unwatched")
+		if _, set := out["watched"]; !set {
+			out["watched"] = !b
+		}
+	}
+	for _, alias := range [][2]string{{"runtime_under_seconds", "runtime_below_seconds"}, {"runtime_under_minutes", "runtime_below_minutes"},
+		{"runtime_at_most_seconds", "runtime_max_seconds"}, {"runtime_at_most_minutes", "runtime_max_minutes"}} {
+		if n, ok := num(alias[0]); ok {
+			out[alias[1]] = n
+		}
+	}
+	if n, ok := num("runtime_below_minutes"); ok {
+		out["runtime_below_seconds"] = n * 60
+	}
+	if n, ok := num("runtime_max_minutes"); ok {
+		out["runtime_max_seconds"] = n * 60
+	}
+	if n, ok := num("runtime_max_seconds"); ok {
+		out["runtime_below_seconds"] = n + 1
+	}
+	return out
+}
+
 func checkArgs(name string, expectedArgs map[string]any, allowExtra []string, args map[string]any, data castData, book *sourceBook) []string {
+	expectedArgs, args = canonicalArgs(name, expectedArgs), canonicalArgs(name, args)
 	var fails []string
 	add := func(format string, a ...any) { fails = append(fails, fmt.Sprintf(format, a...)) }
 	for key, expected := range expectedArgs {
@@ -576,6 +622,7 @@ func summarize(all []castResult) map[string]any {
 		cats := map[string][2]int{}
 		var first, total, tps []float64
 		invalid, errorsN := 0, 0
+		corrections := map[string]int{}
 		for i, r := range rs {
 			c := cats[r.Category]
 			c[1]++
@@ -584,6 +631,9 @@ func summarize(all []castResult) map[string]any {
 			}
 			cats[r.Category] = c
 			invalid += r.Invalid
+			for _, c := range r.Corrections {
+				corrections[c]++
+			}
 			if r.Error != "" {
 				errorsN++
 			}
@@ -602,7 +652,7 @@ func summarize(all []castResult) map[string]any {
 		for k, v := range cats {
 			categories[k] = fmt.Sprintf("%d/%d", v[0], v[1])
 		}
-		out[model] = map[string]any{"categories": categories, "invalidMarkers": invalid, "errors": errorsN,
+		out[model] = map[string]any{"categories": categories, "invalidMarkers": invalid, "errors": errorsN, "interventions": corrections,
 			"p95FirstSeconds": percentile(first, 0.95), "p95ToolAnswerSeconds": percentile(total, 0.95), "medianTokensPerSecond": percentile(tps, 0.5)}
 	}
 	return out

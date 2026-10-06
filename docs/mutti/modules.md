@@ -53,7 +53,7 @@ mutti-hub ── Profilkonto ──> Immich        (Fotos, private Videos)
 ## Lokale KI
 
 - **Harness:** eigener schlanker Werkzeugkreis in Go (`harness.go`) mit
-  versioniertem, derzeit deutschem Promptvertrag `mutti-assistant-v4`.
+  versioniertem, derzeit deutschem Promptvertrag `mutti-assistant-v5`.
   Begrenzte Korrekturen, je höchstens einmal pro Run und für den Nutzer nur als
   zurückgezogener Entwurf (`reset`) sichtbar: Werkzeug zuerst (auch bei
   Ausweichen wie „soll ich suchen?“), eigene Archivsuche, wenn das Modell zu
@@ -142,6 +142,11 @@ Besitzer (`/Mutti/Hub/admin/…`): `state`, `enable/{modul}`, `grants`,
 
 - Keine verwaltete Installation/Aktualisierung von Immich/Paperless durch Mutti;
   kein iOS-Hintergrund-Fotobackup; keine Immich-Löschung/Bearbeitung.
+- Mac (arm64): Die gebündelte Engine (Ollama 0.32.13, gepinntes Archiv) enthält
+  seit 06.10.2026 die MLX-Kernel `mlx_metal_v3/v4` (+~380 MB, Lizenz
+  `LICENSE-mlx.txt`). Die OS-Netzsperre (`sandbox-exec`) wird beim Start mit
+  `nc -v` gegen eine TEST-NET-Adresse nachgewiesen (`networkLock: verified`);
+  der MLX-Runner läuft als Kindprozess unter derselben Sperre.
 - Docker: keine mitgelieferte Engine und keine OS-Netzsperre für eine externe Engine.
 - Medienvorrang ist durch Warteschlange und eine Generierung gleichzeitig
   angenähert; keine Kopplung an laufende Transcodes. Lastprüfung (AT-22) offen.

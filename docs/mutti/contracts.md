@@ -151,9 +151,10 @@ it is not a general proof of model correctness or a signed-evidence verifier yet
 
 The German `mutti-assistant-v3` and its frozen casting suites remain unchanged
 legacy measurement inputs. The current German product prompt is
-`mutti-assistant-v4` (tool contract and bounded harness corrections, see
-[casting-v4-rubric](evidence/casting-v4-rubric.md)); it changes the qualification
-fingerprint, so no v3 evidence applies to it. English production prompts/tools and localized output
+`mutti-assistant-v5` (tool contract and bounded harness corrections, see
+[casting-v4-rubric](evidence/casting-v4-rubric.md) and
+[casting-v5-rubric](evidence/casting-v5-rubric.md)); each version changes the
+qualification fingerprint, so no earlier evidence applies to it. English production prompts/tools and localized output
 require a new version and fresh qualification, never relabel old measurements.
 Use [release-test draft](evidence/model-release-tests-2026-10-06.md) for four-axis
 measurement and the deferred expenditure dashboard. No current model is promoted.

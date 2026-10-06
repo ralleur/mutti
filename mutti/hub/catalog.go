@@ -35,6 +35,15 @@ var catalog = []CatalogModel{
 	{ID: "qwen3.6:35b-a3b", Name: "Qwen 3.6 35B-A3B", Family: "qwen3.6", Digest: "07d35212591fc27746f0a317c975a6d68754fb38e9053d82e25f06057af28522",
 		Bytes: 23938333115, MinMemoryGB: 64, Profile: "hohe Qualität", Qualification: "not_qualified", License: "Apache-2.0",
 		Note: "Großes Modell für starke Rechner; Qualifikation siehe Castingnachweis.", ContextTokens: 8192},
+	{ID: "qwen3.8:27b", Name: "Qwen 3.8 27B", Family: "qwen3.8", Digest: "aaee06c39dcf2437cde036998d960e1fc1494b8191be7cc9657d01e509097813",
+		Bytes: 17741871939, MinMemoryGB: 32, Profile: "hohe Qualität", Qualification: "not_qualified", License: "Apache-2.0",
+		Note: "Neuer Castingkandidat; noch keine Produktfreigabe.", ContextTokens: 8192},
+	{ID: "qwen3.8:27b-mlx", Name: "Qwen 3.8 27B MLX", Family: "qwen3.8", Digest: "5642e97495e1a088883805981563dcdc4a040c2f53388b7a41d1f24d3622cf7e",
+		Bytes: 18174721596, MinMemoryGB: 32, Profile: "hohe Qualität", Qualification: "limited", License: "Apache-2.0",
+		Note: "Eingeschränkt freigegeben für Harness mutti-assistant-v5 auf Apple Silicon (Owner-Entscheidung 06.10.2026); Nachweis model-comparison-v5-2026-10-06.md.", ContextTokens: 8192},
+	{ID: "qwen3.5:9b-mlx", Name: "Qwen 3.5 9B MLX", Family: "qwen3.5", Digest: "203e30078279db51132b9e026ceb7bb21330e5b1af67ef190671b375c9770404",
+		Bytes: 8903014479, MinMemoryGB: 24, Profile: "ausgewogen", Qualification: "not_qualified", License: "Apache-2.0",
+		Note: "MLX-Castingkandidat; noch keine Produktfreigabe.", ContextTokens: 8192},
 }
 
 func catalogModel(id string) (CatalogModel, bool) {
