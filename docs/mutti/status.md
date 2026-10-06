@@ -62,9 +62,20 @@ real-de-v3 und real-en-v1. **Nichts signiert, keine KI freigeschaltet.**
 [Messungen](evidence/qualification-v6-2026-10-06.md),
 [Entscheidungsvorlage Mac-Laufzeit](decision-mac-service-runtime.md).
 
-Nächste Schritte (Inferenz nur tagsüber, Lüfter im Schlafzimmer): Paket aus
-aktuellem Stand bauen, real-de-v3 und real-en-v1 messen, v6-Holdout und
-Wiedergabe unter KI-Last; danach Review/Signatur durch Ralf, Produkt-E2E mit
+Nachtrag 06.10.2026, nachts (ohne Inferenz/Builds): Hub-Meldungen folgen der
+Sprache der Anfrage (DE/EN; Fehler, Modulstatus, Suchbereiche, Aufträge sowie in
+Gesprächen gespeicherte Hinweise und Vorschlagsergebnisse), Test hält jede
+Meldung übersetzt; Owner-Webansicht „Freigabe“ (nur lesend, Mutti Web
+`6732fe42`, ESLint sauber, TypeScript-/Webbuild noch nicht gelaufen);
+Messsonde Wiedergabe mit Rückfall auf progressiven Transcode;
+`mutti/tests/qualification-session.py` für einen Messtag. Go-Tests (`-race`) grün.
+
+Nächste Schritte (Inferenz nur tagsüber, Lüfter im Schlafzimmer): ein Aufruf
+`python3 mutti/tests/qualification-session.py --testenv
+/Users/ai/workspace/mutti/build/module-testenv/private.json --models
+/Users/ai/workspace/mutti/build/model-casting/store-mlx/models` baut das Paket
+(inkl. Webbuild) und misst real-de-v3, real-en-v1 (je mit Wiedergabe leer/unter
+KI-Last) und den v6-Holdout. Danach Review/Signatur durch Ralf, Produkt-E2E mit
 `--expect-qualified`, native Bedienung der KI in kurtz. Offene Owner-Entscheidungen:
 Signatur/Review, Mac-Laufzeit für verwaltete Dienste, Bindung an exaktes Mac-Modell.
 
