@@ -64,7 +64,10 @@ im Plan nachvollziehbar festgehalten.
 - Do not treat Jellyfin Quick Connect as cryptographic network enrollment.
 - Changes belong on `codex/` branches. Keep the upstream diff small.
 - Never use real libraries or existing Jellyfin databases for destructive tests.
-- Mac and Docker/NAS are one release gate. Local development is not remote readiness.
+- Day 1 is Mac only (Apple Silicon, MLX). Docker/NAS is a roadmap item, not a
+  release gate; keep existing Docker paths intact but do not build, test or claim
+  them as ready (owner decision 2026-10-06, see `docs/mutti/plan.md` §17).
+  Local development is not remote readiness.
 
 ## Kurt — gemeinsame Quelle
 

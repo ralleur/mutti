@@ -292,6 +292,8 @@ func TestRealDocumentsModule(t *testing.T) {
 		}
 	}
 	// The AI tool uses the same profile-bound search and never sees B's data.
+	// Since P0 a tool runs only for a qualified deployed model (synthetic here).
+	e.configureAI()
 	tools := &profileTools{hub: e.hub, id: Identity{UserID: userA}, sources: &sourceBook{Items: map[string]*Source{}}, defs: documentTools(),
 		docs: hubDocuments{e.hub.docs, Identity{UserID: userA}}}
 	result := tools.Call(context.Background(), "search_documents", json.RawMessage(`{"query":"Rechnung"}`))

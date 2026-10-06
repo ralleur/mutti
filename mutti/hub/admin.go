@@ -178,6 +178,7 @@ func (h *Hub) adminService(w http.ResponseWriter, r *http.Request, id Identity) 
 		if m.ServiceURL != normalized {
 			// Accounts belong to one service instance; never reuse keys elsewhere.
 			m.Links = map[string]*Link{}
+			m.Instance = randomID()
 		}
 		m.ServiceURL = normalized
 		return nil

@@ -33,8 +33,12 @@ type Hub struct {
 	docs    *Documents
 	health  *healthCache
 	streams *streamRegistry
-	mu      sync.Mutex
-	log     *log.Logger
+	content *contentIndex
+	journal *actionJournal
+	// cursorKey signs search cursors; they expire with the process.
+	cursorKey []byte
+	mu        sync.Mutex
+	log       *log.Logger
 }
 
 func New(opts Options) (*Hub, error) {
@@ -46,7 +50,16 @@ func New(opts Options) (*Hub, error) {
 	if err != nil {
 		return nil, err
 	}
-	h := &Hub{opts: opts, store: store, jf: jf, health: newHealthCache(), streams: newStreamRegistry(), log: log.New(io.Discard, "", 0)}
+	content, err := openContentIndex(opts.State)
+	if err != nil {
+		return nil, err
+	}
+	journal, err := openJournal(opts.State)
+	if err != nil {
+		return nil, err
+	}
+	h := &Hub{opts: opts, store: store, jf: jf, health: newHealthCache(), streams: newStreamRegistry(), content: content, journal: journal,
+		cursorKey: newCursorKey(), log: log.New(io.Discard, "", 0)}
 	// API calls are bounded; media relays and uploads only bound the wait for
 	// response headers, so long videos and large originals are not cut off.
 	h.photos = &Photos{hub: h, client: guardedClient(time.Minute), stream: guardedClient(0)}
@@ -137,6 +150,11 @@ func (h *Hub) Handler() http.Handler {
 		mux.HandleFunc(pattern, h.wrap(fn, true))
 	}
 	user("GET /mutti/hub/v1/capabilities", h.capabilities)
+
+	user("GET /mutti/hub/v1/content/search", h.contentSearch)
+	user("GET /mutti/hub/v1/content/jobs", h.contentJobs)
+	user("GET /mutti/hub/v1/content/items/{id}", h.contentItem)
+	user("GET /mutti/hub/v1/content/items/{id}/{kind}", h.contentMedia)
 
 	user("GET /mutti/hub/v1/ai/conversations", h.ai.listConversations)
 	user("POST /mutti/hub/v1/ai/conversations", h.ai.createConversation)
@@ -249,7 +267,9 @@ type moduleCapability struct {
 
 func (h *Hub) capabilities(w http.ResponseWriter, r *http.Request, id Identity) error {
 	cfg := h.store.Read()
-	modules := map[string]any{"media": moduleCapability{Configured: true, Enabled: true, Allowed: true, State: "ready", Health: "ok", Actions: []string{"browse", "play"}}}
+	modules := map[string]any{"media": moduleCapability{Configured: true, Enabled: true, Allowed: true, State: "ready", Health: "ok", Actions: []string{"browse", "play"}},
+		// Shared content access works without any model: search, open, jobs.
+		"content": moduleCapability{Configured: true, Enabled: true, Allowed: true, State: "ready", Health: "ok", Actions: []string{"search", "open", "jobs"}}}
 	actions := map[string][]string{ModuleAI: {"chat", "sources", "favorite"}, ModulePhotos: {"view", "search", "albums", "upload"}, ModuleDocuments: {"view", "search", "upload"}}
 	for _, name := range moduleIDs {
 		m := cfg.Modules[name]

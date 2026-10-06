@@ -39,21 +39,24 @@ Produktempfehlung für eine verpflichtende externe Tailscale-Einrichtung.
 | Grundlage | Eigener Jellyfin-Fork mit erhaltener Historie und möglichst kleinen, klar abgegrenzten Anpassungen. |
 | Client | kurtz bleibt ein eigenständiges Produkt und weiterhin mit gewöhnlichen Jellyfin-Servern kompatibel. |
 | Gestaltung | Vorhandenes kurtz-Designsystem als Grundlage; eigene Mutti-Identität und passende Server-Oberfläche. |
-| Erste Auslieferung | **Mac-App und Docker/NAS gemeinsam**, mit identischem Serverstand und gemeinsamem Funktionsumfang. |
+| Erste Auslieferung (Owner-Entscheidung 06.10.2026) | **Day 1 ist Mac only: Mac-App auf Apple Silicon mit MLX-Engine.** Ersetzt die frühere Festlegung „Mac-App und Docker/NAS gemeinsam“. Docker/NAS steht auf der [Roadmap](#17-roadmap-docker-nas-nach-day-1) und ist kein Day-1-Gate. |
 | Konto | Kein verpflichtendes Konto bei Ralleur, Tailscale, Cloudflare oder einem anderen Anbieter für Endnutzer. Lokale Besitzeridentität und Jellyfin-Benutzerrechte bleiben notwendig. |
 | Day 1 | Sichere lokale Verbindung und direkter verschlüsselter Fernzugriff, soweit beide Netze das ermöglichen. |
 | Relay | **Day 2. In Day 1 kein Medien-Relay, kein stiller Rückfall auf öffentliche DERP-, TURN- oder Peer-Relays.** |
 | Spätere Anbieterauswahl | Erst zum Start von Day 2 den Markt erneut prüfen, insbesondere kostenlose Angebote und deren reale Grenzen. Heute keine Anbieterbindung und kein dauerhaftes Gratisversprechen. |
 | Netzwerkfehler | Verständliche Meldung und erneuter Versuch; niemals unverschlüsselter oder öffentlich freigeschalteter Ersatzweg. |
-| Lokale KI-Engine (Nutzerentscheidung 06.10.2026) | Auf Apple Silicon werden ab sofort **MLX-Modellvarianten** gemessen und bevorzugt (Begründung: [MLX-Vergleich](evidence/model-mlx-comparison-2026-10-06.md), deutlich niedrigere Latenz). Der Harness darf deshalb keine `system`-Nachricht nach Gesprächsbeginn senden. Docker/NAS unter Linux kann kein MLX nutzen; dort bleiben GGUF-Varianten nötig und werden getrennt qualifiziert. Ob die gebündelte Mac-Engine MLX enthält, ist für das Paket noch zu prüfen. Entwicklungsfokus ab v5: **Qwen3.8 27B (MLX)**; ein vorgeschaltetes Decider-Modell ist vorerst ausgeschlossen. Owner-Entscheidung 06.10.2026: `qwen3.8:27b-mlx` im Katalog als **„limited“** eingestuft (Harness `mutti-assistant-v5`, [Nachweis](evidence/model-comparison-v5-2026-10-06.md)); das schaltet unter P0 ohne Runtime-Attestation und vertrauenswürdigen Nachweis keine Produktnutzung frei. |
+| Lokale KI-Engine (Nutzerentscheidung 06.10.2026) | Auf Apple Silicon werden ab sofort **MLX-Modellvarianten** gemessen und bevorzugt (Begründung: [MLX-Vergleich](evidence/model-mlx-comparison-2026-10-06.md), deutlich niedrigere Latenz). Der Harness darf deshalb keine `system`-Nachricht nach Gesprächsbeginn senden. Day-1-Engine ist MLX auf Apple Silicon; die gebündelte Mac-Engine enthält seit Commit `c74373310c` die MLX-Kernel. GGUF-Varianten werden nur für die Docker/NAS-Roadmap gebraucht und dort getrennt qualifiziert. Entwicklungsfokus ab v5: **Qwen3.8 27B (MLX)**; ein vorgeschaltetes Decider-Modell ist vorerst ausgeschlossen. Owner-Entscheidung 06.10.2026: `qwen3.8:27b-mlx` im Katalog als **„limited“** eingestuft (Harness `mutti-assistant-v5`, [Nachweis](evidence/model-comparison-v5-2026-10-06.md)); das schaltet unter P0 ohne Runtime-Attestation und vertrauenswürdigen Nachweis keine Produktnutzung frei. |
 | Aktueller Auftrag | Plan ausführen. Eigene Forks, lokale Implementierung und überprüfbare Builds sind beauftragt. Hosting und öffentliche Release-Freigabe folgen nach den jeweiligen Abnahmen. |
 
-**Plattformentscheidung:** Mac-App und Docker/NAS gehören gemeinsam zu Day 1.
-Beide Auslieferungen bauen auf demselben plattformübergreifenden Kern und
-derselben Weboberfläche auf. Installation und Betrieb werden pro Plattform
-geprüft; eine fertige Mac-App allein erfüllt das erste Release noch nicht.
-Windows-Installer und herstellerspezifische NAS-Pakete ohne Containerbetrieb
-gehören zunächst zum späteren Ausbau.
+**Plattformentscheidung (Owner, 06.10.2026):** Day 1 ist **nur die Mac-App auf
+Apple Silicon** mit MLX als lokaler KI-Engine. Docker/NAS wird aus dem
+Entwicklungsplan genommen und auf die [Roadmap](#17-roadmap-docker-nas-nach-day-1)
+gesetzt. Begründung: Ohne passende Hardware lässt sich Docker/NAS weder seriös
+testen noch qualifizieren; der gemeinsame Gate hätte den Day-1-Weg blockiert.
+Der plattformübergreifende Kern und die gemeinsame Weboberfläche bleiben
+erhalten, damit Docker/NAS später darauf aufsetzen kann. Intel-Macs, Windows-
+Installer und herstellerspezifische NAS-Pakete gehören ebenfalls zum späteren
+Ausbau. *Frühere Fassung: „Mac-App und Docker/NAS gehören gemeinsam zu Day 1“.*
 
 **Architekturvorschlag:** Ein kleiner erreichbarer Dienst vermittelt Kopplung
 und Verbindungsinformationen. STUN hilft beim Ermitteln erreichbarer Adressen.
@@ -504,7 +507,7 @@ Upstream-Laufzeit und alle gebündelten Komponenten müssen diese Kombination
 tragen. Älteste unterstützte macOS-Version und tatsächliche Architekturfreigaben
 werden in M0 festgelegt und durch eigene Build-/Runtime-Prüfungen belegt.
 
-**Docker/NAS im selben ersten Release:** versioniertes Image und verständliche Compose-Vorlage,
+**Docker/NAS (seit 06.10.2026 Roadmap, kein Day-1-Umfang; Anforderungen für später):** versioniertes Image und verständliche Compose-Vorlage,
 persistente Konfiguration und Sicherungen, Medien standardmäßig nur lesbar,
 keine privilegierten Container oder pauschalen Heimnetzfreigaben. DNS, Discovery,
 Dateirechte, Host-Netzwerkbesonderheiten und Hardware-Transcoding werden für
@@ -593,6 +596,12 @@ Die Etappen beschreiben Ergebnisgrenzen, keine bereits zugesagten Termine.
 Eine belastbare Aufwandsschätzung folgt nach dem Transportvorversuch und dem
 unveränderten Upstream-Build; gerade diese zwei Unsicherheiten bestimmen den
 Umfang wesentlich.
+
+Seit der Owner-Entscheidung vom 06.10.2026 gelten die Docker-/NAS-Anteile der
+folgenden Etappen und der Day-1-Abnahme in Abschnitt 12 nicht mehr für Day 1;
+sie gehen unverändert als Anforderungen auf die [Roadmap](#17-roadmap-docker-nas-nach-day-1).
+Für Day 1 heißt „beide Pakete“ bzw. „Mac und Docker/NAS“ jeweils: das Mac-Paket
+auf Apple Silicon.
 
 | Etappe | Arbeit und Ergebnis | Abschlusskriterium |
 | --- | --- | --- |
@@ -723,7 +732,7 @@ Die Planung verwendet keine Umbrel-Implementierung oder App-Store-Produktlogik.
 | **P1 — Kleiner gemeinsamer Inhaltsweg** | E3/E4, E6/E8, UX3/UX4; M3 | Gemeinsame Inhaltsreferenz und föderierte Suche über vorhandene Adapter; berechtigte Quellen mit Revision/Fundstelle; Auftragszustände; Aktionsjournal und Idempotenz. Privater/entzogener Inhalt erscheint weder in Treffern noch alten Chatkontexten. Native Ende-zu-Ende-Bedienung. Keine zweite Kopplung, zunächst kein gemeinsamer Volltext-/Vektorindex. |
 | **P2 — Verwalteter Betrieb und qualifizierte KI** | E1/E2/E5/E7/E8; M1/M2/M5 | Mac-Laufzeitentscheidung, gepinnte Dienste samt Kontenanlage, isolierte Netze, Mount-/Kapazitätsprüfung und Sicherungsverträge. Echte Runtime-Attestation und vertrauenswürdiges Freigaberegister implementieren; englischen Produktionsharness versionieren und pro Hardware/Aufgabe mit echten Adaptern messen. Externe oder unbekannte Engine-Identität bleibt gesperrt. Wiedergabe unter KI-/OCR-Last prüfen. |
 | **P3 — Wiederherstellbare Updates** | E5/E7/E8; M5 | Signierte/verifizierte Komponentensätze, konsistente Sicherung vor Migration, Rechte-/Datenprüfung danach. Abbruch und Vollverlust auf leerem Ziel prüfen. Kein Rückfall allein durch altes Binary auf bereits migrierter DB; Identitäts-/Widerrufsverhalten ausdrücklich festlegen. |
-| **P4 — Gemeinsame Produktabnahme** | UX4; M0/M3/M4/M5/M6 | Mac und echtes Docker/NAS, native Apple-Geräte, Bedienbarkeit/DE/EN/Accessibility, Speicher- und Langzeitlast, reale WAN-Matrix und Netzwechsel. Quellen-/Lizenzinventar, Signierung und Paketnachweise. Keine öffentliche Auslieferung ohne gesonderte Freigabe. |
+| **P4 — Gemeinsame Produktabnahme** | UX4; M0/M3/M4/M5/M6 | Mac-Paket auf Apple Silicon mit MLX (Docker/NAS: Roadmap), native Apple-Geräte, Bedienbarkeit/DE/EN/Accessibility, Speicher- und Langzeitlast, reale WAN-Matrix und Netzwechsel. Quellen-/Lizenzinventar, Signierung und Paketnachweise. Keine öffentliche Auslieferung ohne gesonderte Freigabe. |
 
 Abhängigkeiten: P0 vor P1. P1 kann ohne freigegebenes Modell über manuelle Suche
 und gesperrten KI-Zweig abgenommen werden. Die positive KI-Strecke verlangt
@@ -743,7 +752,7 @@ wird allein aus einer alten Kandidatenliste eingeführt.
 
 | Risiko | Überprüfbarer Test / harte Grenze |
 | --- | --- |
-| Rechteverlust durch Zusammenführung | Zwei Profile, private/geteilte Testinhalte; Rechte während Suche, Download und KI-Ausgabe entziehen. Keine fremden Treffer, Zählwerte, Ausschnitte oder wiederverwendeten Kontexte. Neue Zugriffe verweigern, laufende Arbeit spätestens nach fünf Sekunden abbrechen. Mac und NAS. |
+| Rechteverlust durch Zusammenführung | Zwei Profile, private/geteilte Testinhalte; Rechte während Suche, Download und KI-Ausgabe entziehen. Keine fremden Treffer, Zählwerte, Ausschnitte oder wiederverwendeten Kontexte. Neue Zugriffe verweigern, laufende Arbeit spätestens nach fünf Sekunden abbrechen. Mac-Paket (NAS: Roadmap). |
 | Inkonsistenz bei Update/Import/Restore | Synthetische Installation an jeder Phase abbrechen; Mount entziehen und Speicher erschöpfen; auf zweitem leerem Ziel wiederherstellen. Original-Hashes, ACLs und Zuordnungen erhalten; alter oder neuer konsistenter Zustand, keine leere Ersatzbibliothek. |
 | Falsche KI-Freigabe | Direkte API, alte Vorschläge, unbekanntes Modell, geänderte Engine/Hardware/Prompts/Adapter und abgelaufener Test müssen vor Wirkung sperren. Echte Adapter mit Fremdanweisungen, erfundenen Quellen und Medienlast: null kritische Fehler; vorab definierte Qualitäts-, RAM- und p95-Grenzen. |
 
@@ -761,7 +770,7 @@ wird allein aus einer alten Kandidatenliste eingeführt.
 4. Dokumentfreigabe und Gerät entziehen; Quellen, laufende Arbeit und spätere
    Chatkontexte prüfen. Sichern und auf leerem Ziel wiederherstellen; entzogene
    Geräte werden nicht durch alte Sicherungen reaktiviert.
-5. Identischer Nachweis auf Mac und NAS. Separater WAN-Durchgang mit zwei
+5. Nachweis auf dem Mac-Paket (Apple Silicon, MLX); NAS folgt mit der Roadmap. Separater WAN-Durchgang mit zwei
    Anschlüssen, CGNAT/IPv6, UDP-Sperre und Netzwechsel; Paketmitschnitt zeigt
    keinen DERP/TURN/Peer-Relay-/Klartext-Ausweichweg. Direkter Fehlschlag ist ein
    zulässiger, begrenzt wartender Fehler, kein scheinbarer Verbindungserfolg.
@@ -772,3 +781,33 @@ Mac-Laufzeit für Linux-Dienste; allgemeine Dateien; Haushalts-/Sammlungsrechte;
 Identitätswiederherstellung; Betreiber der Vermittlung; messbare Hardwareklassen
 und Budget für parallele Wiedergabe/OCR/KI. Details und Zustandsverträge:
 [contracts.md](contracts.md). P0 löst diese Fragen nicht durch stille Annahmen.
+Mit Day 1 Mac only beschränken sich die Hardwareklassen für Day 1 auf Apple
+Silicon; die „Mac-Laufzeit für Linux-Dienste“ (Immich/Paperless) bleibt offen.
+
+**Owner-Entscheidungen zu P1, 06.10.2026:** P1 wird auf eigenem Branch
+`codex/mutti-p1-content` (Worktree) umgesetzt, nachdem P0 separat committet
+wurde; die parallele Harness-Arbeit bleibt davon getrennt. Umfang ausdrücklich
+Hub **und** kurtz-Client einschließlich Umstellung vorhandener Suchwege.
+Für P1 gilt als geteilt nur, was das jeweilige Backend dem eigenen Konto des
+Profils zeigt; ein Mutti-eigenes Haushalts-/Sammlungsmodell bleibt offene
+Entscheidung 3 und wird nicht still eingeführt.
+
+## 17. Roadmap: Docker/NAS nach Day 1
+
+Owner-Entscheidung 06.10.2026: Docker/NAS ist **kein Teil des Entwicklungsplans
+und kein Day-1-Gate** mehr. Es wird später oder von jemandem mit passender
+Hardware übernommen. Bis dahin gilt:
+
+- Vorhandenes bleibt im Repository und wird nicht absichtlich gebrochen:
+  `mutti/packaging/docker/` (Image, Compose, Entrypoint), Docker-Modultest und
+  der Linux-Zweig von Hub, Connect und Migrationsdienst. Es wird nicht weiter
+  ausgebaut, nicht abgenommen und nirgends als bereit bezeichnet.
+- Neue Arbeit muss Docker/NAS weder bauen noch testen. Plattformneutrale Verträge
+  (Inhalt, Rechte, Sicherung, Kopplung) bleiben plattformneutral formuliert.
+- Bei Wiederaufnahme nötig: konkrete NAS-/Betriebssystem-Matrix mit echter
+  Hardware, Multiarch-Image (`amd64`/`arm64`) nur für geprüfte Architekturen,
+  GGUF-Modellqualifikation (Linux hat kein MLX) mit eigener Runtime-Attestation,
+  Paket-Smoke inkl. P1-Inhaltsweg auf echtem NAS, Mounts/Dateirechte/Discovery/
+  Transcoding, Update- und Restore-Ablauf mit Digest-Pins, gemeinsame Release-
+  Pipeline mit dem Mac-Paket. Die früheren Anforderungen in Abschnitt 8
+  („Docker/NAS …“), 11 und 12 gelten dann als Ausgangspunkt.

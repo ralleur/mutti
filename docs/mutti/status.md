@@ -9,18 +9,47 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 
 ## Aktuelle Übergabe und nächste Schritte
 
-Stand 06.10.2026: P0 ist als sichere Ausgangsbasis implementiert und geprüft;
-der integrierte P0–P4-Plan liegt vor. Die Änderungen liegen noch uncommittet auf
-`codex/mutti-foundation` (Basis-HEAD `f98bab2be48f326741cec1a8dbef9959ec306bdf`).
-Kein neues Paket ausgeliefert, kein Modell produktiv qualifiziert.
+Stand 06.10.2026 (abends): P0 (`750f9158a2`), Harness v5 (`c74373310c`) und P1
+sind auf `codex/mutti-foundation` zusammengeführt (Merge von
+`codex/mutti-p1-content`, Tests grün). kurtz ist auf `codex/rebrand-kurtz` in
+thematischen Commits gesichert (letzter `9009779f`, entspricht dem gebauten und
+im Simulator geprüften Stand; Zwischencommits nicht einzeln gebaut). Nichts
+gepusht, kein Paket ausgeliefert. `qwen3.8:27b-mlx` ist per
+Owner-Entscheidung im Katalog „limited“, unter P0 aber ohne Runtime-Attestation
+und vertrauenswürdigen Nachweis weiterhin **nicht** produktiv freigeschaltet.
 
-Nächster Umsetzungsschritt bei einem entsprechenden Fortsetzungsauftrag:
-**P1 — gemeinsamer Inhaltsweg**. Zuerst bestehende Adapter-DTOs gegen ContentRef-,
-Rechte- und Quellenvertrag abgleichen und das kleinste additive Such-/Referenz-
-Inkrement festlegen; anschließend mit zwei synthetischen Profilen prüfen.
-Manuelle Suche bleibt unabhängig von KI. Positive KI-E2E benötigt zusätzlich
-P2-Qualifikation; Runtime-Attestation und vertrauenswürdige Evidenzübernahme
-bleiben offen. Vollständige Paket-, native Geräte-, NAS- und WAN-Abnahmen fehlen.
+**Plattformentscheidung (Owner, 06.10.2026):** Day 1 ist **Mac only, Apple
+Silicon, MLX**. Docker/NAS ist aus dem Entwicklungsplan genommen und steht auf
+der [Roadmap](plan.md#17-roadmap-docker-nas-nach-day-1); vorhandener Docker-Code
+bleibt unangetastet, wird aber weder gebaut, getestet noch als bereit
+bezeichnet. Nachgezogen in `plan.md` (§1, §8, §11/12-Hinweis, §16, §17),
+`AGENTS.md` und `contracts.md`; historische Belege bleiben unverändert.
+
+**P1 — gemeinsamer Inhaltsweg: für den Day-1-Umfang umgesetzt und auf dem
+Mac-Paket sowie nativ im Simulator geprüft.** Branch `codex/mutti-p1-content`
+(Worktree `/Users/ai/workspace/mutti-p1`). Hub: ContentRef mit persistiertem
+ID-Index, föderierte Suche `content/search` mit gebundenen Cursorn und ehrlichem
+`partial`, Öffnen mit Revisionsstatus und Objekt-Nachprüfung im Medienstrom,
+`content/jobs`, Quellen-Provenienz, Rücknahme widerrufener Quellen aus der
+Modellhistorie, dauerhaftes Aktionsjournal; Sicherung/Restore umfassen jetzt
+ID-Index und Journal. kurtz (`vela-swiftfin`, `codex/rebrand-kurtz`,
+Commit `2f32ca98`/`9009779f`): Bereich „Alles“ mit gemeinsamer Suche und Aufträgen, Fotos-/
+Dokumentsuche über denselben Weg, Kopplungslink-Korrektur.
+
+Belege: Go-Tests (`-race`) und echte Immich/Paperless-Tests grün; angepasster
+`module-package-smoke.py` mit 41 bestandenen Prüfungen über den echten Tunnel;
+native Bedienung im iPad-Simulator (Suche, Öffnen, Ausfall, Rechteentzug). Der
+Paketlauf deckte fehlende Sicherung von `content-ids.json`/`actions.json` auf
+(behoben). Einzelheiten und Grenzen: [P1-Nachweis](evidence/p1-2026-10-06.md);
+Vertrag: [contracts.md](contracts.md); Owner-Entscheidungen:
+[plan.md](plan.md#offene-entscheidungen-vor-jeweiliger-umsetzung).
+
+Nächste Schritte: Kritischer
+Pfad zur nutzbaren KI ist P0-Freigabe für genau die Mac/MLX-Konfiguration
+(P2-Anteil): echte Runtime-Attestation (Engine-/Runner-Digest inkl. MLX, Hardware,
+OS-Build, Adapter, Inferenzparameter) und vertrauenswürdiges Laden der
+Freigabeeinträge mit Widerruf; danach Messung mit Prompt `mutti-assistant-v5`
+pro Aufgabe gegen die Freigabekriterien und P1-E2E mit `--expect-qualified`.
 
 **Modellfreigabe v4, 06.10.2026 (P2-Vorarbeit, abgeschlossen als Messung):**
 Nutzerauftrag „Werkzeuge/Harness verbessern, dann mit neuem ungesehenem Satz

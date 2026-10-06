@@ -16,6 +16,8 @@ func TestHubBackupExcludesModelsAndRestoresWithRollbackCopy(t *testing.T) {
 	files := map[string]string{
 		"hub.json":            `{"version":1}`,
 		"document-tasks.json": `[]`,
+		"content-ids.json":    `{"version":1,"items":{}}`,
+		"actions.json":        `{"version":1,"entries":[]}`,
 		"ai/conversations/" + owner + "/" + conv + ".json":          `{"id":"x"}`,
 		"ai/attachments/" + owner + "/" + conv + "/" + att:          "raw",
 		"ai/attachments/" + owner + "/" + conv + "/" + att + ".txt": "text",
@@ -36,7 +38,7 @@ func TestHubBackupExcludesModelsAndRestoresWithRollbackCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	sort.Strings(names)
-	if len(names) != 5 {
+	if len(names) != 7 {
 		t.Fatalf("snapshot %v", names)
 	}
 	for _, n := range names {

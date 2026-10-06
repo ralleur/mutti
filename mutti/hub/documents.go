@@ -43,6 +43,7 @@ type Document struct {
 	DocumentType  string   `json:"documentType,omitempty"`
 	Tags          []string `json:"tags,omitempty"`
 	Content       *string  `json:"content,omitempty"`
+	revision      string
 }
 
 type paperlessDocument struct {
@@ -51,6 +52,7 @@ type paperlessDocument struct {
 	Content          string `json:"content"`
 	Created          string `json:"created"`
 	Added            string `json:"added"`
+	Modified         string `json:"modified"`
 	PageCount        *int   `json:"page_count"`
 	MimeType         string `json:"mime_type"`
 	OriginalFileName string `json:"original_file_name"`
@@ -65,7 +67,7 @@ type paperlessDocument struct {
 var tagPattern = regexp.MustCompile(`<[^>]*>`)
 
 func (d paperlessDocument) public() Document {
-	doc := Document{ID: d.ID, Title: d.Title, Created: d.Created, Added: d.Added, Pages: d.PageCount, Mime: d.MimeType, FileName: d.OriginalFileName}
+	doc := Document{ID: d.ID, Title: d.Title, Created: d.Created, Added: d.Added, Pages: d.PageCount, Mime: d.MimeType, FileName: d.OriginalFileName, revision: d.Modified}
 	if d.SearchHit != nil {
 		// Highlights are upstream HTML; clients receive plain text only.
 		doc.Snippet = html.UnescapeString(tagPattern.ReplaceAllString(d.SearchHit.Highlights, ""))
@@ -140,11 +142,23 @@ type documentPage struct {
 }
 
 func (d *Documents) search(ctx context.Context, id Identity, query string, page, size int) (documentPage, error) {
+	return d.searchDated(ctx, id, query, "", "", page, size)
+}
+
+// searchDated filters by the document date (Paperless "created", a calendar
+// day); from and to are inclusive YYYY-MM-DD bounds.
+func (d *Documents) searchDated(ctx context.Context, id Identity, query, from, to string, page, size int) (documentPage, error) {
 	base, headers, err := d.session(id)
 	if err != nil {
 		return documentPage{}, err
 	}
 	params := url.Values{"page": {strconv.Itoa(page)}, "page_size": {strconv.Itoa(size)}, "truncate_content": {"true"}}
+	if from != "" {
+		params.Set("created__date__gte", from)
+	}
+	if to != "" {
+		params.Set("created__date__lte", to)
+	}
 	if query != "" {
 		params.Set("query", query)
 	} else {
@@ -413,9 +427,18 @@ func (d *Documents) forward(ctx context.Context, base string, headers map[string
 }
 
 func (d *Documents) tasks(w http.ResponseWriter, r *http.Request, id Identity) error {
-	base, headers, err := d.session(id)
+	out, err := d.taskList(r.Context(), id)
 	if err != nil {
 		return err
+	}
+	return writeOK(w, map[string]any{"items": out})
+}
+
+// taskList returns the profile's own recent imports with their current state.
+func (d *Documents) taskList(ctx context.Context, id Identity) ([]map[string]any, error) {
+	base, headers, err := d.session(id)
+	if err != nil {
+		return nil, err
 	}
 	d.mu.Lock()
 	all := d.loadTasks()
@@ -432,7 +455,7 @@ func (d *Documents) tasks(w http.ResponseWriter, r *http.Request, id Identity) e
 			Result          *string `json:"result"`
 			RelatedDocument *string `json:"related_document"`
 		}
-		if serviceCall(r.Context(), d.client, "GET", base+"/api/tasks/?task_id="+t.ID, headers, nil, &upstream) == nil && len(upstream) == 1 {
+		if serviceCall(ctx, d.client, "GET", base+"/api/tasks/?task_id="+t.ID, headers, nil, &upstream) == nil && len(upstream) == 1 {
 			switch upstream[0].Status {
 			case "PENDING", "STARTED", "RETRY":
 				entry["state"] = "processing"
@@ -453,7 +476,7 @@ func (d *Documents) tasks(w http.ResponseWriter, r *http.Request, id Identity) e
 		}
 		out = append(out, entry)
 	}
-	return writeOK(w, map[string]any{"items": out})
+	return out, nil
 }
 
 func decodeLimited(r io.Reader, out any) error {

@@ -45,11 +45,19 @@ type ModuleConfig struct {
 	Links      map[string]*Link `json:"links,omitempty"`
 	Engine     *Engine          `json:"engine,omitempty"`
 	Model      string           `json:"model,omitempty"`
+	// Instance identifies the backend behind ServiceURL. Pointing the module
+	// at another service creates a new instance, so earlier content IDs never
+	// resolve to objects of a replaced backend.
+	Instance string `json:"instance,omitempty"`
 }
 
 type Config struct {
 	Version int                      `json:"version"`
 	Modules map[string]*ModuleConfig `json:"modules"`
+	// MuttiID names this installation in content references; MediaInstance
+	// is the identity of its own media library.
+	MuttiID       string `json:"muttiId,omitempty"`
+	MediaInstance string `json:"mediaInstance,omitempty"`
 }
 
 // Store persists owner configuration privately and atomically.
@@ -76,7 +84,39 @@ func OpenStore(dir string) (*Store, error) {
 		}
 	}
 	normalize(&s.config)
+	// Content identities are created once and persisted before first use.
+	if missingIdentity(s.config) {
+		if err := s.Update(func(c *Config) error { assignIdentity(c); return nil }); err != nil {
+			return nil, err
+		}
+	}
 	return s, nil
+}
+
+func missingIdentity(c Config) bool {
+	if c.MuttiID == "" || c.MediaInstance == "" {
+		return true
+	}
+	for _, m := range c.Modules {
+		if m.ServiceURL != "" && m.Instance == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func assignIdentity(c *Config) {
+	if c.MuttiID == "" {
+		c.MuttiID = randomID()
+	}
+	if c.MediaInstance == "" {
+		c.MediaInstance = randomID()
+	}
+	for _, m := range c.Modules {
+		if m.ServiceURL != "" && m.Instance == "" {
+			m.Instance = randomID()
+		}
+	}
 }
 
 // normalize guarantees non-nil maps; JSON round trips drop empty ones.

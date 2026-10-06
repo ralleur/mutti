@@ -42,6 +42,7 @@ type PhotoAsset struct {
 	Camera      string  `json:"camera,omitempty"`
 	Live        bool    `json:"livePhoto,omitempty"`
 	Size        float64 `json:"size,omitempty"`
+	revision    string
 }
 
 type immichAsset struct {
@@ -56,6 +57,7 @@ type immichAsset struct {
 	Width            *int   `json:"width"`
 	Height           *int   `json:"height"`
 	LivePhotoVideoID string `json:"livePhotoVideoId"`
+	UpdatedAt        string `json:"updatedAt"`
 	ExifInfo         *struct {
 		Description    string  `json:"description"`
 		City           string  `json:"city"`
@@ -70,7 +72,7 @@ type immichAsset struct {
 
 func (a immichAsset) public() PhotoAsset {
 	p := PhotoAsset{ID: a.ID, Type: strings.ToLower(a.Type), Taken: a.LocalDateTime, FileName: a.OriginalFileName, Mime: a.OriginalMimeType,
-		Favorite: a.IsFavorite, Live: a.LivePhotoVideoID != ""}
+		Favorite: a.IsFavorite, Live: a.LivePhotoVideoID != "", revision: a.UpdatedAt}
 	if p.Taken == "" {
 		p.Taken = a.FileCreatedAt
 	}
@@ -220,11 +222,28 @@ func (p *Photos) search(w http.ResponseWriter, r *http.Request, id Identity) err
 }
 
 func (p *Photos) find(ctx context.Context, id Identity, q, from, to string, size int) ([]PhotoAsset, string, error) {
+	items, _, mode, err := p.findPage(ctx, id, photoQuery{Text: q, From: from, To: to}, 1, size)
+	return items, mode, err
+}
+
+// photoQuery filters a paged search. Type is "", "IMAGE" or "VIDEO".
+type photoQuery struct {
+	Text, From, To, Type string
+}
+
+// findPage returns one page of Immich's own search and whether more follow.
+// The metadata fallback merges three field searches; an asset matching
+// several fields can reappear on a later page and is not deduplicated there.
+func (p *Photos) findPage(ctx context.Context, id Identity, pq photoQuery, page, size int) ([]PhotoAsset, bool, string, error) {
+	q, from, to := pq.Text, pq.From, pq.To
 	base, headers, err := p.session(id)
 	if err != nil {
-		return nil, "", err
+		return nil, false, "", err
 	}
 	dates := map[string]any{}
+	if pq.Type != "" {
+		dates["type"] = pq.Type
+	}
 	if from != "" {
 		dates["takenAfter"] = from + "T00:00:00.000Z"
 	}
@@ -236,13 +255,14 @@ func (p *Photos) find(ctx context.Context, id Identity, q, from, to string, size
 	}
 	_ = serviceCall(ctx, p.client, "GET", base+"/api/server/features", headers, nil, &features)
 	if q != "" && features.SmartSearch {
-		body := map[string]any{"query": q, "size": size, "withExif": true}
+		body := map[string]any{"query": q, "size": size, "page": page, "withExif": true}
 		for k, v := range dates {
 			body[k] = v
 		}
 		var out struct {
 			Assets struct {
-				Items []immichAsset `json:"items"`
+				Items    []immichAsset `json:"items"`
+				NextPage *string       `json:"nextPage"`
 			} `json:"assets"`
 		}
 		if err := serviceCall(ctx, p.client, "POST", base+"/api/search/smart", headers, body, &out); err == nil {
@@ -250,9 +270,10 @@ func (p *Photos) find(ctx context.Context, id Identity, q, from, to string, size
 			for _, a := range out.Assets.Items {
 				items = append(items, a.public())
 			}
-			return items, "smart", nil
+			return items, out.Assets.NextPage != nil, "smart", nil
 		}
 	}
+	more := false
 	seen := map[string]bool{}
 	items := []PhotoAsset{}
 	filters := []map[string]any{{}}
@@ -260,26 +281,27 @@ func (p *Photos) find(ctx context.Context, id Identity, q, from, to string, size
 		filters = []map[string]any{{"description": q}, {"originalFileName": q}, {"city": q}}
 	}
 	for _, f := range filters {
-		f["size"], f["order"] = size, "desc"
+		f["size"], f["order"], f["page"] = size, "desc", page
 		for k, v := range dates {
 			f[k] = v
 		}
-		page, err := p.metadata(ctx, id, f)
+		result, err := p.metadata(ctx, id, f)
 		if err != nil {
 			var api *APIError
 			if errors.As(err, &api) && api.Code == "not_found" {
 				continue // e.g. an unknown city is no error for a text query
 			}
-			return nil, "", err
+			return nil, false, "", err
 		}
-		for _, a := range page.Items {
+		more = more || result.NextPage != nil
+		for _, a := range result.Items {
 			if !seen[a.ID] {
 				seen[a.ID] = true
 				items = append(items, a)
 			}
 		}
 	}
-	return items, "metadata", nil
+	return items, more, "metadata", nil
 }
 
 func (p *Photos) albums(w http.ResponseWriter, r *http.Request, id Identity) error {
