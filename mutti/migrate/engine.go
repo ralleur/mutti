@@ -41,6 +41,8 @@ type State struct {
 	Target         string   `json:"target"`
 	Active         string   `json:"active"`
 	ServiceMessage string   `json:"serviceMessage,omitempty"`
+	// Update describes a pending, verified, failed or blocked server update.
+	Update *UpdateState `json:"update,omitempty"`
 }
 type Manager struct {
 	Options          Options
@@ -62,6 +64,9 @@ type Manager struct {
 	closing          bool
 	maintenance      MaintenanceJob
 	recovery         recoveryBudget
+	// unblock wakes a start that waits after a blocked update (rollback).
+	unblock        chan struct{}
+	updateLaunched time.Time
 }
 
 func NewManager(o Options) (*Manager, error) {
@@ -119,7 +124,8 @@ func NewManager(o Options) (*Manager, error) {
 		return nil, e
 	}
 	a.Host = target.Base.Host
-	m := &Manager{Options: o, nativeOwnerToken: nativeOwnerToken, token: randomID(), hubPeer: randomID(), lock: lock, api: a, state: State{Phase: "idle", Target: o.TargetOrigin + "/web/", Active: root}}
+	m := &Manager{Options: o, nativeOwnerToken: nativeOwnerToken, token: randomID(), hubPeer: randomID(), lock: lock, api: a, state: State{Phase: "idle", Target: o.TargetOrigin + "/web/", Active: root},
+		unblock: make(chan struct{}, 1)}
 	if b, e := os.ReadFile(filepath.Join(root, "active-instance.json")); e == nil {
 		var pointer struct{ ID string }
 		if json.Unmarshal(b, &pointer) != nil || !validID(pointer.ID) {
@@ -212,7 +218,24 @@ func (m *Manager) Run(ctx context.Context) error {
 		syscall.Flock(int(m.lock.Fd()), syscall.LOCK_UN)
 		m.lock.Close()
 	}()
-	if e := m.launch(m.state.Active); e != nil {
+	// A different server build only starts after a snapshot; an older build
+	// never starts on data a newer one may have migrated.
+	for {
+		e := m.prepareStart()
+		if e == nil {
+			break
+		}
+		if !errors.Is(e, errUpdateBlocked) {
+			return e
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-m.unblock:
+		}
+	}
+	m.updateLaunched = time.Now()
+	if e := m.launch(m.State().Active); e != nil {
 		return e
 	}
 	for {
@@ -236,7 +259,15 @@ func (m *Manager) Run(ctx context.Context) error {
 		m.state.Ready = ready
 		m.state.SetupComplete = ready && info.StartupWizardCompleted
 		active := m.state.Active
+		update := m.state.Update
 		m.mu.Unlock()
+		if update != nil && update.State == "pending" {
+			if ready {
+				m.verifyUpdate(info.Version, info.StartupWizardCompleted)
+			} else if time.Since(m.updateLaunched) > 20*time.Minute {
+				m.failUpdate(update, "der neue Server ist nach 20 Minuten nicht bereit")
+			}
+		}
 		if !m.child.running() {
 			m.connect.stop()
 			m.connect = nil
@@ -245,6 +276,10 @@ func (m *Manager) Run(ctx context.Context) error {
 				if e := m.launch(active); e == nil {
 					message = "Mutti wird nach einem unerwarteten Ende neu gestartet …"
 				}
+			} else if update != nil && update.State == "pending" {
+				// Repeated crashes right after an update: report it as failed
+				// with the way back instead of retrying silently.
+				m.failUpdate(update, "der neue Server beendet sich wiederholt")
 			}
 			m.mu.Lock()
 			m.state.ServiceMessage = message

@@ -87,6 +87,38 @@ func (m *Manager) Handler() (http.Handler, error) {
 		}
 		w.WriteHeader(http.StatusAccepted)
 	})
+	// Restoring the pre-update data stage needs the native Mac app: in this
+	// state the server does not run, so there is no server owner sign-in.
+	mux.HandleFunc("POST /api/update/rollback", func(w http.ResponseWriter, r *http.Request) {
+		if !m.isNativeOwner(r) {
+			http.Error(w, "Nur die Mutti-App auf diesem Mac darf den Datenstand zurücksetzen.", 403)
+			return
+		}
+		var input struct{ Snapshot string }
+		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		d.DisallowUnknownFields()
+		if d.Decode(&input) != nil {
+			http.Error(w, "Ungültige Anfrage.", 400)
+			return
+		}
+		m.mu.Lock()
+		blocked := m.state.Phase == "update_blocked"
+		m.mu.Unlock()
+		if !blocked {
+			http.Error(w, "Eine Wiederherstellung vor dem Update ist nur bei gesperrtem Start möglich.", 409)
+			return
+		}
+		if err := m.rollbackUpdate(input.Snapshot); err != nil {
+			http.Error(w, err.Error(), 409)
+			return
+		}
+		m.setPhase("idle", "")
+		select {
+		case m.unblock <- struct{}{}:
+		default:
+		}
+		w.WriteHeader(http.StatusAccepted)
+	})
 	mux.HandleFunc("POST /api/cancel", func(w http.ResponseWriter, r *http.Request) {
 		m.mu.Lock()
 		if m.jobCancel != nil {
