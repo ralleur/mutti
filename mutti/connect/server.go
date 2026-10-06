@@ -54,6 +54,9 @@ type Server struct {
 	active                           chan struct{}
 	targetHTTP                       *http.Client
 	policies                         map[string]string
+	// Hub is the fixed loopback module service; HubPeer proves to it that a
+	// request comes from this sidecar with a verified device binding.
+	Hub, HubPeer string
 }
 
 func NewServer(directory, broker, stun, target, host string) (*Server, error) {
@@ -85,6 +88,16 @@ func NewServer(directory, broker, stun, target, host string) (*Server, error) {
 	}
 	s.targetHTTP = &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{Proxy: nil, DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect rejected") }}
 	return s, nil
+}
+
+// SetHub enables module routes towards a fixed loopback service.
+func (s *Server) SetHub(origin, peer string) error {
+	u, e := url.Parse(origin)
+	if e != nil || u.Scheme != "http" || !net.ParseIP(u.Hostname()).IsLoopback() || u.User != nil || u.Path != "" || len(peer) < 32 {
+		return errors.New("module service must be a fixed loopback origin with a peer secret")
+	}
+	s.Hub, s.HubPeer = origin, peer
+	return nil
 }
 func (s *Server) NewInvitation() (Invitation, error) {
 	s.mu.Lock()
@@ -198,7 +211,12 @@ func (s *Server) accept(parent context.Context, o Offer) {
 }
 func (s *Server) remoteRequest(pin string, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
+	limit := int64(2 << 20)
+	if r.Method == "POST" && hubUpload(r.URL.Path) {
+		// Photo/document uploads; the module service enforces exact limits.
+		limit = 8 << 30
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if r.URL.IsAbs() || r.Method == "CONNECT" || r.Host != "mutti.internal" || r.Header.Get("Origin") != "" {
 		http.Error(w, "forbidden", 403)
 		return
@@ -227,6 +245,10 @@ func (s *Server) remoteRequest(pin string, w http.ResponseWriter, r *http.Reques
 		return
 	}
 	lower := strings.ToLower(r.URL.Path)
+	if strings.HasPrefix(r.URL.Path, "/mutti/hub/v1/") && !strings.Contains(r.URL.Path, "/admin/") {
+		s.hubRequest(device, w, r)
+		return
+	}
 	if strings.HasPrefix(lower, "/_mutti") || strings.HasPrefix(lower, "/mutti") || strings.HasPrefix(lower, "/quickconnect") || strings.Contains(lower, "authenticate") || strings.HasPrefix(lower, "/users/new") || strings.HasPrefix(lower, "/startup") || strings.HasPrefix(lower, "/web") || strings.HasPrefix(lower, "/system/shutdown") || strings.HasPrefix(lower, "/system/restart") {
 		http.Error(w, "forbidden", 403)
 		return
@@ -267,6 +289,54 @@ func (s *Server) remoteRequest(pin string, w http.ResponseWriter, r *http.Reques
 	}}
 	proxy.ServeHTTP(w, r)
 }
+func hubUpload(path string) bool {
+	return path == "/mutti/hub/v1/photos/assets" || path == "/mutti/hub/v1/documents" ||
+		(strings.HasPrefix(path, "/mutti/hub/v1/ai/conversations/") && strings.HasSuffix(path, "/attachments"))
+}
+
+// hubRequest forwards a module request of an approved device to the local
+// module service. The client never supplies identity: the device's profile
+// session is inserted here, exactly as for Jellyfin requests.
+func (s *Server) hubRequest(device Device, w http.ResponseWriter, r *http.Request) {
+	if s.Hub == "" {
+		jsonReply(w, 404, map[string]string{"code": "not_configured", "message": "Diese Mutti-Version bietet keine Zusatzfunktionen an."})
+		return
+	}
+	target, e := url.Parse(s.Hub)
+	if e != nil {
+		http.Error(w, "forbidden", 403)
+		return
+	}
+	proxy := &httputil.ReverseProxy{ErrorLog: log.New(io.Discard, "", 0), Rewrite: func(pr *httputil.ProxyRequest) {
+		pr.SetURL(target)
+		pr.Out.Host = target.Host
+		for _, h := range []string{"Origin", "Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Cookie", "Authorization",
+			"X-Emby-Authorization", "X-Emby-Token", "X-MediaBrowser-Token", "X-Mutti-Device", "X-Mutti-Hub-Peer"} {
+			pr.Out.Header.Del(h)
+		}
+		pr.Out.Header.Set("Authorization", `MediaBrowser Client="kurtz via Mutti", Device="Paired device", DeviceId="`+device.Pin+`", Version="0.1", Token="`+device.Token+`"`)
+		pr.Out.Header.Set("X-Mutti-Device", device.Pin)
+		pr.Out.Header.Set("X-Mutti-Hub-Peer", s.HubPeer)
+		q := pr.Out.URL.Query()
+		for k := range q {
+			switch strings.ToLower(k) {
+			case "api_key", "apikey", "token", "access_token":
+				q.Del(k)
+			}
+		}
+		pr.Out.URL.RawQuery = q.Encode()
+	}, Transport: s.targetHTTP.Transport, FlushInterval: -1, ModifyResponse: func(res *http.Response) error {
+		if res.StatusCode >= 300 && res.StatusCode < 400 {
+			return errors.New("redirect blocked")
+		}
+		res.Header.Del("Set-Cookie")
+		return nil
+	}, ErrorHandler: func(w http.ResponseWriter, r *http.Request, e error) {
+		jsonReply(w, 503, map[string]string{"code": "hub_unavailable", "message": "Die Zusatzfunktionen von Mutti sind gerade nicht erreichbar. Filme und Serien bleiben nutzbar."})
+	}}
+	proxy.ServeHTTP(w, r)
+}
+
 func (s *Server) pair(pin string, w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		w.WriteHeader(405)

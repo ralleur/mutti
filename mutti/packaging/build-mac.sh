@@ -14,6 +14,8 @@ BIN="$(swift build --package-path "$ROOT/mutti/apps/macos" -c release --arch "$A
 python3 "$ROOT/mutti/packaging/fetch-ffmpeg.py" "$RID"
 go run "$ROOT/mutti/packaging/fetch-intro-skipper.go" "$ROOT/mutti/components.lock.json" "$ROOT/build/intro-skipper"
 (cd "$ROOT/mutti/connect" && CGO_ENABLED=0 GOOS=darwin GOARCH="$(test "$ARCH" = arm64 && echo arm64 || echo amd64)" go build -trimpath -o "$ROOT/build/connect/$RID/mutti-connect" ./cmd/mutti-connect)
+(cd "$ROOT/mutti/hub" && CGO_ENABLED=0 GOOS=darwin GOARCH="$(test "$ARCH" = arm64 && echo arm64 || echo amd64)" go build -trimpath -o "$ROOT/build/hub/$RID/mutti-hub" ./cmd/mutti-hub)
+python3 "$ROOT/mutti/packaging/fetch-ollama.py" "$RID"
 (cd "$ROOT/mutti/migrate" && CGO_ENABLED=0 GOOS=darwin GOARCH="$(test "$ARCH" = arm64 && echo arm64 || echo amd64)" go build -trimpath -o "$ROOT/build/migrate/$RID/mutti-migrate" ./cmd/mutti-migrate)
 "$DOTNET" build "$ROOT/mutti/export/Mutti.Export.csproj" -c Release -p:JellyfinDir="$ROOT/build/server/$RID" -o "$ROOT/build/export"
 APP="$ROOT/build/macos/$RID/Mutti.app"
@@ -27,6 +29,9 @@ cp "$ROOT/mutti/design/assets/wordmark-light.png" "$ROOT/mutti/design/assets/Sor
 cp -R "$ROOT/mutti/apps/macos/Localization/"*.lproj "$APP/Contents/Resources/"
 mkdir -p "$APP/Contents/Resources/connect"
 cp "$ROOT/build/connect/$RID/mutti-connect" "$APP/Contents/Resources/connect/"
+mkdir -p "$APP/Contents/Resources/hub"
+cp "$ROOT/build/hub/$RID/mutti-hub" "$APP/Contents/Resources/hub/"
+cp -R "$ROOT/build/ollama/$RID" "$APP/Contents/Resources/ai-engine"
 mkdir -p "$APP/Contents/Resources/migrate"
 cp "$ROOT/build/migrate/$RID/mutti-migrate" "$APP/Contents/Resources/migrate/"
 cp -R "$ROOT/build/intro-skipper" "$APP/Contents/Resources/intro-skipper"
@@ -39,6 +44,7 @@ cp "$ROOT/build/ffmpeg/$RID/ffmpeg" "$ROOT/build/ffmpeg/$RID/ffprobe" "$APP/Cont
 cp "$ROOT/LICENSE" "$APP/Contents/Resources/licenses/Jellyfin.txt"
 cp "$WEB/LICENSE" "$APP/Contents/Resources/licenses/Jellyfin-Web.txt"
 cp "$ROOT/mutti/design/assets/Sora-OFL.txt" "$APP/Contents/Resources/licenses/"
+cp "$ROOT/mutti/packaging/licenses/Ollama-MIT.txt" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/THIRD-PARTY.md" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/components.lock.json" "$APP/Contents/Resources/"
 python3 "$ROOT/mutti/packaging/provenance.py" "$WEB" "$APP/Contents/Resources/build-provenance.json"

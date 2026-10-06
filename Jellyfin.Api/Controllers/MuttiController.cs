@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Api.Extensions;
@@ -17,11 +18,17 @@ namespace Jellyfin.Api.Controllers;
 /// <summary>Local server-management integration for the Mutti shell.</summary>
 [Authorize(Policy = Policies.RequiresElevation)]
 [Route("Mutti")]
-public class MuttiController : BaseJellyfinApiController
+public partial class MuttiController : BaseJellyfinApiController
 {
     private static readonly HttpClient ConnectClient = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
     {
         Timeout = TimeSpan.FromSeconds(12)
+    };
+
+    // Starting the local AI engine or verifying a model may take longer.
+    private static readonly HttpClient HubClient = new(new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false })
+    {
+        Timeout = TimeSpan.FromSeconds(70)
     };
 
     /// <summary>Gets package-owned management capabilities.</summary>
@@ -34,7 +41,8 @@ public class MuttiController : BaseJellyfinApiController
             && (origin.Scheme == "http" || origin.Scheme == "https")
             && string.IsNullOrEmpty(origin.UserInfo) && string.IsNullOrEmpty(origin.Query)
             && string.IsNullOrEmpty(origin.Fragment) && origin.AbsolutePath == "/";
-        return new OkObjectResult(new { onboardingUrl = valid ? onboarding!.TrimEnd('/') + "/#import" : null, connectAvailable = ConnectTarget() is not null });
+        var hubAvailable = LocalTarget(onboarding, "MUTTI_HUB_PORT", "/") is not null;
+        return new OkObjectResult(new { onboardingUrl = valid ? onboarding!.TrimEnd('/') + "/#import" : null, connectAvailable = ConnectTarget() is not null, modulesAvailable = hubAvailable });
     }
 
     /// <summary>Forwards an allowlisted owner action to this package's local Connect service.</summary>
@@ -73,7 +81,30 @@ public class MuttiController : BaseJellyfinApiController
         return await Forward(operation, target, origin, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<ActionResult> Forward(string operation, Uri? target, string? origin, CancellationToken cancellationToken)
+    /// <summary>Performs an allowlisted owner action on this package's module service.</summary>
+    /// <param name="operation">A module administration route such as <c>admin/state</c>.</param>
+    /// <param name="cancellationToken">Request cancellation.</param>
+    /// <returns>The module service response.</returns>
+    [HttpPost("Hub/{**operation}")]
+    [Consumes("application/json")]
+    [RequestSizeLimit(16384)]
+    public async Task<ActionResult> Hub(string operation, CancellationToken cancellationToken)
+    {
+        if (!HubOperation().IsMatch(operation ?? string.Empty))
+        {
+            return NotFound();
+        }
+
+        var origin = Environment.GetEnvironmentVariable("MUTTI_MANAGEMENT_ORIGIN");
+        var target = LocalTarget(origin, "MUTTI_HUB_PORT", "/mutti/hub/v1/");
+        var method = operation == "admin/state" ? HttpMethod.Get : HttpMethod.Post;
+        return await Forward(operation!, target, origin, cancellationToken, method, HubClient).ConfigureAwait(false);
+    }
+
+    [GeneratedRegex("^admin/(state|grants|ai/engine|enable/(ai|photos|documents)|(service|link|unlink)/(photos|documents)|ai/models/(pull|adopt|select|remove))$")]
+    private static partial Regex HubOperation();
+
+    private async Task<ActionResult> Forward(string operation, Uri? target, string? origin, CancellationToken cancellationToken, HttpMethod? method = null, HttpClient? client = null)
     {
         if (target is null)
         {
@@ -114,11 +145,14 @@ public class MuttiController : BaseJellyfinApiController
 
             using var body = JsonDocument.Parse(buffer.AsMemory(0, length));
             // The browser can never supply a target address or a route outside this list.
-            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(target, operation));
+            using var request = new HttpRequestMessage(method ?? HttpMethod.Post, new Uri(target, operation));
             request.Headers.Host = new Uri(origin!).Authority;
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            request.Content = new StringContent(body.RootElement.GetRawText(), Encoding.UTF8, "application/json");
-            using var response = await ConnectClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if (request.Method != HttpMethod.Get)
+            {
+                request.Content = new StringContent(body.RootElement.GetRawText(), Encoding.UTF8, "application/json");
+            }
+            using var response = await (client ?? ConnectClient).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             // Small JSON state or a QR PNG only. Do not turn this into an arbitrary proxy.
             await response.Content.LoadIntoBufferAsync(2 * 1024 * 1024, cancellationToken).ConfigureAwait(false);
             var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);

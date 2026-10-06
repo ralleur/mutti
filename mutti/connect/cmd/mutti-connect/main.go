@@ -56,6 +56,7 @@ func main() {
 	target := flag.String("target", "http://127.0.0.1:18596", "fixed Jellyfin loopback origin")
 	targetHost := flag.String("target-host", "127.0.0.1:18596", "Jellyfin boundary Host header")
 	stunListen := flag.String("stun-listen", ":3478", "broker STUN UDP listener")
+	hubTarget := flag.String("hub", "", "fixed loopback module service origin (optional)")
 	flag.Parse()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -84,6 +85,12 @@ func main() {
 		if e != nil {
 			fmt.Fprintln(os.Stderr, e)
 			os.Exit(1)
+		}
+		if *hubTarget != "" {
+			if e = server.SetHub(*hubTarget, os.Getenv("MUTTI_HUB_PEER")); e != nil {
+				fmt.Fprintln(os.Stderr, e)
+				os.Exit(1)
+			}
 		}
 		if *adminOrigin == "" {
 			*adminOrigin = "http://" + *listen

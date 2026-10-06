@@ -65,5 +65,22 @@
     "sourceUrl": "https://codeload.github.com/intro-skipper/intro-skipper/tar.gz/6e0cb179007ac4c16cd9f358e9a617e791e9bf06",
     "sourceSha256": "e767669a6ca94b185658ac91d7f1c8ea5e20b1d217612669b5381c3acaa68ad2",
     "license": "GPL-3.0-only"
+  },
+  "aiEngine": {
+    "name": "ollama",
+    "version": "0.32.13",
+    "license": "MIT",
+    "repository": "https://github.com/ollama/ollama",
+    "assets": {
+      "osx-arm64": {
+        "archive": "ollama-darwin.tgz",
+        "sha256": "71efd44f3b5f2019f42bae17ae58eb3de8bd25ce3ca3bc89aea58e53e5d091d1"
+      },
+      "osx-x64": {
+        "archive": "ollama-darwin.tgz",
+        "sha256": "71efd44f3b5f2019f42bae17ae58eb3de8bd25ce3ca3bc89aea58e53e5d091d1"
+      }
+    },
+    "note": "Bundled only in the Mac package. Docker connects to an owner-provided engine on loopback or the private network. Models are separate artifacts pinned in mutti/hub/catalog.go."
   }
 }

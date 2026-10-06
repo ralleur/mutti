@@ -31,6 +31,7 @@ type storedBackup struct {
 	Info      SystemInfo
 	Libraries []Library
 	Intro     bool
+	Hub       bool
 	Hashes    map[string]string
 	directory string
 }
@@ -86,7 +87,7 @@ func (m *Manager) readBackup(id string) (*storedBackup, error) {
 		return nil, errors.New("Sicherung ist unvollständig oder nicht mit diesem Paket kompatibel.")
 	}
 	for name, expected := range s.Hashes {
-		if name != "library.zip" && name != "intro/snapshot.json" && !(strings.HasPrefix(name, "intro/") && introFiles[strings.TrimPrefix(name, "intro/")]) {
+		if name != "library.zip" && name != "intro/snapshot.json" && !(strings.HasPrefix(name, "intro/") && introFiles[strings.TrimPrefix(name, "intro/")]) && !hubBackupName.MatchString(name) {
 			return nil, errors.New("Unbekannte Datei in der Sicherung.")
 		}
 		// Reject symlinked parent directories as well as symlinked files.
@@ -109,6 +110,9 @@ func (m *Manager) readBackup(id string) (*storedBackup, error) {
 				return nil, errors.New("Die Plugin-Sicherung ist unvollständig.")
 			}
 		}
+	}
+	if s.Hub && s.Hashes["hub/hub.json"] == "" {
+		return nil, errors.New("Die Moduldaten der Sicherung sind unvollständig.")
 	}
 	s.directory = dir
 	return &s, nil
@@ -345,7 +349,12 @@ func (m *Manager) createBackup(ctx context.Context, a *API) (string, error) {
 			paths = append(paths, "intro/"+name)
 		}
 	}
-	backup := storedBackup{Schema: 1, BackupSummary: BackupSummary{ID: id, Created: time.Now().UTC(), Version: s.Info.Version}, Info: s.Info, Libraries: s.Libraries, Intro: intro, Hashes: map[string]string{}}
+	hubFiles, err := m.snapshotHub(filepath.Join(dir, "hub"))
+	if err != nil {
+		return "", errors.New("Die Moduldaten konnten nicht gesichert werden.")
+	}
+	paths = append(paths, hubFiles...)
+	backup := storedBackup{Schema: 1, BackupSummary: BackupSummary{ID: id, Created: time.Now().UTC(), Version: s.Info.Version}, Info: s.Info, Libraries: s.Libraries, Intro: intro, Hub: len(hubFiles) > 0, Hashes: map[string]string{}}
 	for _, name := range paths {
 		h, n, e := fileHash(filepath.Join(dir, name))
 		if e != nil {

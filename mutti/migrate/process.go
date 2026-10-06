@@ -21,6 +21,7 @@ type Options struct {
 	Root, Server, Web, FFmpeg, Connect, Listen, Origin, Backend, TargetOrigin, ConnectListen, ConnectOrigin, Bind string
 	Container                                                                                                     bool
 	IntroSkipper                                                                                                  string
+	Hub, HubListen, Ollama                                                                                        string // optional module service and its local AI engine
 	NativeOwnerToken                                                                                              string `json:"-"` // Private parent pipe, never an HTTP configuration option.
 }
 type process struct {
@@ -178,6 +179,13 @@ func (o Options) startServer(root string, port int, host, archive string, valida
 				return nil, errors.New("Ungültiger lokaler Verwaltungszugang.")
 			}
 			env = append(env, "MUTTI_MANAGER_PORT="+managerPort)
+		}
+		if o.Hub != "" {
+			_, hubPort, err := net.SplitHostPort(o.HubListen)
+			if err != nil {
+				return nil, errors.New("Ungültiger lokaler Modulzugang.")
+			}
+			env = append(env, "MUTTI_HUB_PORT="+hubPort)
 		}
 		if o.Connect != "" {
 			_, connectPort, err := net.SplitHostPort(o.ConnectListen)

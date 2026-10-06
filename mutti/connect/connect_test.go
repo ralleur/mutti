@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -83,6 +84,21 @@ func testDirectPairProxyAndRevoke(t *testing.T, mode string) {
 	defer broker.Close()
 	server, e := NewServer(t.TempDir(), broker.URL, "", jf.URL, target.Host)
 	if e != nil {
+		t.Fatal(e)
+	}
+	var hubSeen atomic.Value
+	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		hubSeen.Store(r.URL.Path + "|" + r.Header.Get("Authorization") + "|" + r.Header.Get("X-Mutti-Device") + "|" + r.Header.Get("X-Mutti-Hub-Peer") + "|" + strconv.Itoa(len(body)))
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "event: done\ndata: {}\n\n")
+	}))
+	defer hub.Close()
+	peer := strings.Repeat("p", 64)
+	if e = server.SetHub("http://example.com", peer); e == nil {
+		t.Fatal("non-loopback module service accepted")
+	}
+	if e = server.SetHub(hub.URL, peer); e != nil {
 		t.Fatal(e)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -172,6 +188,30 @@ func testDirectPairProxyAndRevoke(t *testing.T, mode string) {
 	res.Body.Close()
 	if bytes.Contains(got, []byte("private-upstream-token")) || !bytes.Contains(got, []byte("mutti-device-bound")) {
 		t.Fatal("token escaped or profile missing")
+	}
+	// Module requests carry the device-bound profile session, never client identity.
+	hubReq, _ := http.NewRequest("POST", base+"/mutti/hub/v1/photos/assets", bytes.NewReader(payload[:300000]))
+	hubReq.Header.Set("Authorization", `MediaBrowser Token="forged"`)
+	hubReq.Header.Set("X-Mutti-Device", "forged")
+	hubReq.Header.Set("X-Mutti-Hub-Peer", "forged")
+	res, e = http.DefaultClient.Do(hubReq)
+	if e != nil {
+		t.Fatal(e)
+	}
+	res.Body.Close()
+	seen, _ := hubSeen.Load().(string)
+	want := "/mutti/hub/v1/photos/assets|" + `MediaBrowser Client="kurtz via Mutti", Device="Paired device", DeviceId="` + credentials.Identity.Pin() + `", Version="0.1", Token="private-upstream-token"|` + credentials.Identity.Pin() + "|" + peer + "|300000"
+	if res.StatusCode != 200 || seen != want {
+		t.Fatalf("hub forwarding %d %q", res.StatusCode, seen)
+	}
+	hubSeen.Store("")
+	res, e = http.Get(base + "/mutti/hub/v1/admin/state")
+	if e != nil {
+		t.Fatal(e)
+	}
+	res.Body.Close()
+	if res.StatusCode != 403 || hubSeen.Load() != "" {
+		t.Fatalf("owner module route reachable from device: %d", res.StatusCode)
 	}
 	res, e = http.Get(base + "/hls/master.m3u8")
 	if e != nil {

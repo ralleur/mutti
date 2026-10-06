@@ -20,6 +20,12 @@ WORKDIR /connect
 COPY mutti/connect/ .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath -o /out/mutti-connect ./cmd/mutti-connect
 
+FROM --platform=$BUILDPLATFORM golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS hub-build
+ARG TARGETARCH
+WORKDIR /hub
+COPY mutti/hub/ .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath -o /out/mutti-hub ./cmd/mutti-hub
+
 FROM --platform=$BUILDPLATFORM golang:1.27.1-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS migrate-build
 ARG TARGETARCH
 WORKDIR /migrate
@@ -37,6 +43,7 @@ COPY --from=server-build /out /jellyfin/
 COPY --from=web-build /web/dist /jellyfin/jellyfin-web/
 COPY --from=connect-build /out/mutti-connect /mutti/connect
 COPY --from=migrate-build /out/mutti-migrate /mutti/migrate
+COPY --from=hub-build /out/mutti-hub /mutti/hub
 COPY --from=migrate-build /out/intro-skipper /mutti/intro-skipper
 COPY mutti/packaging/docker/entrypoint.sh /mutti-entrypoint.sh
 COPY mutti/components.lock.json mutti/THIRD-PARTY.md /mutti/

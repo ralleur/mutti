@@ -16,6 +16,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -47,6 +48,9 @@ type Manager struct {
 	change           sync.Mutex
 	state            State
 	child, connect   *process
+	hub              *process
+	hubPeer          string
+	hubStarted       time.Time
 	api              *API
 	cancel           context.CancelFunc
 	jobCancel        context.CancelFunc
@@ -115,7 +119,7 @@ func NewManager(o Options) (*Manager, error) {
 		return nil, e
 	}
 	a.Host = target.Base.Host
-	m := &Manager{Options: o, nativeOwnerToken: nativeOwnerToken, token: randomID(), lock: lock, api: a, state: State{Phase: "idle", Target: o.TargetOrigin + "/web/", Active: root}}
+	m := &Manager{Options: o, nativeOwnerToken: nativeOwnerToken, token: randomID(), hubPeer: randomID(), lock: lock, api: a, state: State{Phase: "idle", Target: o.TargetOrigin + "/web/", Active: root}}
 	if b, e := os.ReadFile(filepath.Join(root, "active-instance.json")); e == nil {
 		var pointer struct{ ID string }
 		if json.Unmarshal(b, &pointer) != nil || !validID(pointer.ID) {
@@ -202,6 +206,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		m.jobs.Wait()
 		m.change.Lock()
 		m.connect.stop()
+		m.hub.stop()
 		m.child.stop()
 		m.change.Unlock()
 		syscall.Flock(int(m.lock.Fd()), syscall.LOCK_UN)
@@ -249,6 +254,15 @@ func (m *Manager) Run(ctx context.Context) error {
 			m.state.ServiceMessage = ""
 			m.mu.Unlock()
 		}
+		if ready && info.StartupWizardCompleted && m.Options.Hub != "" && !m.hub.running() && time.Since(m.hubStarted) > 10*time.Second {
+			// Optional modules run in their own process: a failing module never
+			// stops Jellyfin, Connect or playback and is retried with a pause.
+			m.hubStarted = time.Now()
+			m.hub, e = m.startHub()
+			if e != nil {
+				m.hub = nil
+			}
+		}
 		if ready && info.StartupWizardCompleted && m.Options.Connect != "" {
 			settings, _ := os.ReadFile(filepath.Join(active, "connect-settings.json"))
 			if !m.connect.running() || string(settings) != string(m.connectSettings) {
@@ -257,13 +271,18 @@ func (m *Manager) Run(ctx context.Context) error {
 				var cs struct{ Broker, Stun string }
 				_ = json.Unmarshal(settings, &cs)
 				args := []string{"--state", filepath.Join(active, "connect"), "--listen", m.Options.ConnectListen, "--admin-origin", m.Options.ConnectOrigin, "--target", m.Options.Backend, "--target-host", m.api.Host}
+				env := os.Environ()
+				if m.Options.Hub != "" {
+					args = append(args, "--hub", "http://"+m.Options.HubListen)
+					env = append(env, "MUTTI_HUB_PEER="+m.hubPeer)
+				}
 				if cs.Broker != "" {
 					args = append(args, "--broker", cs.Broker)
 				}
 				if cs.Stun != "" {
 					args = append(args, "--stun", cs.Stun)
 				}
-				m.connect, e = startProcess(m.Options.Connect, args, os.Environ(), filepath.Join(active, "logs", "connect.log"))
+				m.connect, e = startProcess(m.Options.Connect, args, env, filepath.Join(active, "logs", "connect.log"))
 				if e != nil {
 					m.setPhase("error", "Die Geräteverbindung konnte nicht gestartet werden.")
 				}
@@ -273,6 +292,25 @@ func (m *Manager) Run(ctx context.Context) error {
 		m.change.Unlock()
 	}
 }
+
+// hubDirectory is shared by all instances so that an import or restore of the
+// media library does not discard module settings or conversations.
+func (m *Manager) hubDirectory() string { return filepath.Join(m.Options.Root, "hub") }
+
+func (m *Manager) startHub() (*process, error) {
+	args := []string{"--state", m.hubDirectory(), "--listen", m.Options.HubListen, "--jellyfin", m.Options.Backend, "--jellyfin-host", m.api.Host}
+	if m.Options.Ollama != "" {
+		args = append(args, "--ollama", m.Options.Ollama)
+	}
+	env := []string{"MUTTI_HUB_PEER=" + m.hubPeer, "PATH=/usr/bin:/bin:/usr/sbin:/sbin"}
+	for _, v := range os.Environ() {
+		if strings.HasPrefix(v, "HOME=") || strings.HasPrefix(v, "TMPDIR=") || strings.HasPrefix(v, "TZ=") {
+			env = append(env, v)
+		}
+	}
+	return startProcess(m.Options.Hub, args, env, filepath.Join(m.Options.Root, "logs", "hub.log"))
+}
+
 func (m *Manager) StartImport(ctx context.Context, input SourceInput) error {
 	m.mu.Lock()
 	if m.jobCancel != nil || m.closing {
@@ -646,6 +684,13 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	}
 	m.state.NewSetup = false
 	m.mu.Unlock()
+	if input.backup != nil {
+		if err := m.restoreHub(input.backup); err != nil {
+			m.mu.Lock()
+			m.state.Message = "Bibliothek wiederhergestellt. " + err.Error()
+			m.mu.Unlock()
+		}
+	}
 	// Only generated staging artifacts are removed, never the source backup/data.
 	_ = os.Remove(prepared)
 	_ = os.Remove(filepath.Join(instance, "source.zip"))

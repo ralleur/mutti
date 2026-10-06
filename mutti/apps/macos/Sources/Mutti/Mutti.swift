@@ -114,6 +114,14 @@ final class ServerController: ObservableObject {
             try importClient.attach(to: process)
             process.arguments?.append("--native-owner-stdin")
             process.arguments?.append(contentsOf: ["--intro-skipper", resources.appending(path: "intro-skipper").path])
+            // Optional modules: photos, documents and local AI run in their own
+            // process. A missing or failing module never blocks the media server.
+            let hub = resources.appending(path: "hub/mutti-hub")
+            if fm.isExecutableFile(atPath: hub.path) {
+                process.arguments?.append(contentsOf: ["--hub", hub.path])
+                let engine = resources.appending(path: "ai-engine/ollama")
+                if fm.isExecutableFile(atPath: engine.path) { process.arguments?.append(contentsOf: ["--ollama", engine.path]) }
+            }
             nativeImportClient = importClient
             process.standardOutput = log; process.standardError = log
             process.terminationHandler = { [weak self] _ in Task { @MainActor [weak self] in
