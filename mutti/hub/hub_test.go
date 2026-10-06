@@ -163,6 +163,10 @@ type testEnv struct {
 }
 
 func newTestEnv(t *testing.T, state string) *testEnv {
+	return newTestEnvWithQualification(t, state, true)
+}
+
+func newTestEnvWithQualification(t *testing.T, state string, qualified bool) *testEnv {
 	t.Helper()
 	jf := newFakeJellyfin()
 	jfServer := httptest.NewServer(jf)
@@ -173,6 +177,9 @@ func newTestEnv(t *testing.T, state string) *testEnv {
 	h, err := New(Options{State: state, Jellyfin: jfServer.URL, PeerSecret: "peer-secret"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if qualified {
+		h.ai.qualification = syntheticQualificationPolicy()
 	}
 	srv := httptest.NewServer(h.Handler())
 	ctx, cancel := context.WithCancel(context.Background())

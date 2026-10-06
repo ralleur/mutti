@@ -187,6 +187,15 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 	if !allowed {
 		return toolError(name, "Dieses Werkzeug ist nicht verfügbar.")
 	}
+	qualification := ""
+	if t.hub != nil {
+		var err error
+		qualification, err = t.hub.ai.qualify(toolTask(name))
+		if err != nil {
+			return toolError(name, "qualification_required")
+		}
+	}
+	// A nil hub is the isolated synthetic casting fixture, never a product route.
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	switch name {
@@ -252,7 +261,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			return toolError(name, "Unbekannte Quellenmarke.")
 		}
 		p := &Proposal{ID: randomID(), Kind: "favorite", Ref: s.Ref, Favorite: *a.Favorite, State: "pending", Created: time.Now().UTC(),
-			Expires: time.Now().Add(15 * time.Minute).UTC(), Device: t.id.Device}
+			Expires: time.Now().Add(15 * time.Minute).UTC(), Device: t.id.Device, Qualification: qualification}
 		t.proposals = append(t.proposals, p)
 		return ToolResult{Content: toolJSON(map[string]any{"vorschlag": "angelegt", "status": "wartet auf Bestätigung durch den Nutzer; noch nichts geändert", "quelle": s.Ref}),
 			Trace: ToolTrace{Name: name, Status: "done", Summary: "Vorschlag wartet auf Bestätigung"}}

@@ -1,15 +1,29 @@
 # Mutti – Produkt- und Umsetzungsplan
 
-Stand: **5. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**.
+Stand: **6. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**.
 
-Aktueller lokaler Übergabestand: [Testpakete, Grenzen und offene Arbeit](testpakete-2026-10-05.md).
+Bisherige Testpakete (noch ohne P0-Code): [Testpakete, Grenzen und offene Arbeit](testpakete-2026-10-05.md).
 Sicherung/Restore und nativer Widerruf sind weiter implementiert; die Modul- und
 Release-Gates dieses Plans bleiben offen und werden nicht durch Vorversuche ersetzt.
 
-Mutti wird das Server-Gegenstück zu **kurtz**: ein eigenständiges, kuratiertes
-Produkt auf Jellyfin-Basis. Das wichtigste Ziel ist eine einfache Einrichtung
-und Kopplung: Medien auswählen, Gerät bestätigen, schauen. Nutzer benötigen
-dafür kein externes Benutzerkonto und keine Kenntnisse über VPNs, Ports oder DNS.
+**Produktgrundsatz:** Mutti ist der zentrale Speicher für die Inhalte des
+Nutzers; kurtz ist der einzige normale Einstieg zum Ansehen, Finden und
+KI-gestützten Bearbeiten. Jellyfin, Immich, Paperless-ngx und lokale Modelle
+sind interne Bausteine. Mutti richtet sie ein und betreibt sie; deren Oberflächen
+und technische Grenzen bestimmen nicht den normalen Nutzerfluss. Die heutige
+manuelle Dienstanbindung ist ein administrativer Zwischenstand. Bestehender
+Jellyfin-Kompatibilitätsmodus von kurtz und erweiterte Verwaltung bleiben erhalten.
+
+Die Kopplung erfolgt über QR und dauerhafte Geräteidentität, ohne manuelle
+Serveradressen oder Backend-Verbindungen in kurtz. KI-Fähigkeiten werden pro
+Aufgabe und tatsächlicher Modell-/Hardwarekonfiguration geprüft. Ohne passenden
+bestandenen Nachweis erfolgt keine produktive KI-Ausführung; Bestätigung ersetzt
+keine Qualifikation. Normale Inhaltsnutzung bleibt unabhängig davon möglich.
+
+**Aktuelle verbindliche Basis:** [Bestand und Evidenz](baseline-2026-10-06.md),
+[versionierte Verträge](contracts.md), [integrierte Reihenfolge P0–P4](#16-integrierter-ausbauplan-p0p4).
+Die M-Meilensteine und ihre Release-Gates bleiben bestehen. Die P-Reihenfolge
+integriert die bisherigen E-/UX-Arbeiten, ohne historische Nachweise aufzuwerten.
 
 Dieser Plan umfasst die Forks, eigene Repositories, das Designsystem, die Marke,
 Installation, Gerätefreigabe, direkten Fernzugriff, Updates und Release-Prüfung.
@@ -31,6 +45,7 @@ Produktempfehlung für eine verpflichtende externe Tailscale-Einrichtung.
 | Relay | **Day 2. In Day 1 kein Medien-Relay, kein stiller Rückfall auf öffentliche DERP-, TURN- oder Peer-Relays.** |
 | Spätere Anbieterauswahl | Erst zum Start von Day 2 den Markt erneut prüfen, insbesondere kostenlose Angebote und deren reale Grenzen. Heute keine Anbieterbindung und kein dauerhaftes Gratisversprechen. |
 | Netzwerkfehler | Verständliche Meldung und erneuter Versuch; niemals unverschlüsselter oder öffentlich freigeschalteter Ersatzweg. |
+| Lokale KI-Engine (Nutzerentscheidung 06.10.2026) | Auf Apple Silicon werden ab sofort **MLX-Modellvarianten** gemessen und bevorzugt (Begründung: [MLX-Vergleich](evidence/model-mlx-comparison-2026-10-06.md), deutlich niedrigere Latenz). Der Harness darf deshalb keine `system`-Nachricht nach Gesprächsbeginn senden. Docker/NAS unter Linux kann kein MLX nutzen; dort bleiben GGUF-Varianten nötig und werden getrennt qualifiziert. Ob die gebündelte Mac-Engine MLX enthält, ist für das Paket noch zu prüfen. Entwicklungsfokus ab v5: **Qwen3.8 27B (MLX)**; ein vorgeschaltetes Decider-Modell ist vorerst ausgeschlossen. |
 | Aktueller Auftrag | Plan ausführen. Eigene Forks, lokale Implementierung und überprüfbare Builds sind beauftragt. Hosting und öffentliche Release-Freigabe folgen nach den jeweiligen Abnahmen. |
 
 **Plattformentscheidung:** Mac-App und Docker/NAS gehören gemeinsam zu Day 1.
@@ -76,7 +91,8 @@ ein allgemeines VPN, Zugriff auf das gesamte Heimnetz, Exit-Node-Funktionen,
 eine neue Transcoding-Engine oder ein vollständiger Neubau sämtlicher Jellyfin-
 Verwaltungsfunktionen. Die zuvor ausgeschlossene Jellyfin-Übernahme ist durch die
 Owner-Rückmeldung vom 5. Oktober als M2b in den Umfang aufgenommen worden.
-Jellyfin-Wiedergabe im Browser bleibt erhalten; kurtz ist der bevorzugte Client.
+Jellyfin-Wiedergabe im Browser bleibt für Kompatibilität erhalten; der normale
+Mutti-Inhaltsfluss ist in kurtz gebündelt.
 
 ## 3. Forks und eigene Repositories
 
@@ -133,6 +149,14 @@ kopiert. Das Release-Manifest verbindet Mutti-, Jellyfin-, Web-, Transport- und
 FFmpeg-Versionen; Mutti erhält eine eigene Versionsnummer.
 
 ## 4. Architektur und entscheidender Vorversuch
+
+**Einordnung vom 06.10.2026:** Der folgende Vorversuch dokumentiert die
+Foundation-Entscheidungsbasis. Tatsächlich implementiert ist inzwischen Pion mit
+ICE/STUN und zusätzlichem TLS 1.3, siehe [Connect](connect.md). tsnet/Headscale
+sind keine beschlossenen Produktabhängigkeiten. Die aktuelle Inhaltsarchitektur
+mit bestehendem Hub wird in [contracts.md](contracts.md) beschrieben; ihr Ausbau
+steht in Abschnitt 16. Der WAN-Nachweis bleibt offen.
+
 
 Die vorgeschlagene Struktur trennt Medienverarbeitung, Kopplung und Oberfläche:
 
@@ -410,9 +434,9 @@ ausschließlich lokalen Metadaten an.
 ## 7. kurtz-Designsystem und Mutti-Branding
 
 Die vorgefundenen verbindlichen Grundlagen stehen im
-[kurtz-Markenhandbuch](../marketing/brand/README.md), in
-[KurtzBrand.swift](../Shared/Kurtz/KurtzBrand.swift) und im
-[Webstylesheet](../website/style.css). Sie sind derzeit noch kein vollständiges,
+[kurtz-Markenhandbuch](https://github.com/ralleur/kurtz/blob/kurtz/marketing/brand/README.md), in
+[KurtzBrand.swift](https://github.com/ralleur/kurtz/blob/kurtz/Shared/Kurtz/KurtzBrand.swift) und im
+[Webstylesheet](https://github.com/ralleur/kurtz/blob/kurtz/website/style.css). Sie sind derzeit noch kein vollständiges,
 plattformübergreifendes Komponentenpaket.
 
 | Bestehende Grundlage | Übernahme für Mutti |
@@ -434,7 +458,7 @@ Arbeitspakete:
    Produktfamilie über Farben, Typografie und Formensprache herstellen. Das
    charakteristische kurtz-Zeichen und dessen Video-Claim werden nicht schlicht
    umbeschriftet. Eine kleine Ralleur-Signatur folgt der
-   [bestehenden Absenderidentität](../marketing/brand/ralleur/README.md).
+   [bestehenden Absenderidentität](https://github.com/ralleur/kurtz/blob/kurtz/marketing/brand/ralleur/README.md).
 3. Komponenten für Formulare, Ordnerauswahl, Status, Fortschritt, QR-Karte,
    Geräteliste, Dialoge, leere Zustände, Fehler und Wiederherstellung definieren.
    Gelb auf Ivory wird nicht als schlecht lesbare Standardschrift verwendet.
@@ -648,9 +672,10 @@ Die ersten ausführbaren Aufgaben sind:
 7. Dieselbe Strecke über einen direkten Fernzugriff erweitern und die
    Fehlerstrecke ohne möglichen Direktweg gleichwertig fertigstellen.
 
-Der konkrete Fortschritt wird ab Umsetzung in den Mutti-Repositories gepflegt.
-Dieses Dokument wandert dann in deren Produktdokumentation; hier bleibt ein
-Verweis, damit Client- und Serverplanung verbunden bleiben.
+Der konkrete Fortschritt wird in diesem Mutti-Repository unter [status.md](status.md)
+gepflegt. Dieses Dokument ist der kanonische Gesamtplan. Der bestehende
+[kurtz-Ausbauplan](https://github.com/ralleur/kurtz/blob/kurtz/docs/mutti-expansion/README.md)
+liefert die E-/UX-Arbeitspakete; deren aktuelle Integrationsreihenfolge steht unten.
 
 
 ## 15. Autonomer Ausbauauftrag vom 5. Oktober 2026
@@ -667,3 +692,83 @@ serverseitige Rechteänderungen während laufender Streams. Externe Sicherungszi
 versionsübergreifende Updates und die vollständige Mac-/NAS-/WAN-/Geräteabnahme
 bleiben eigene offene Ergebnisse. Der laufende [Status](status.md) trennt
 implementierte Funktionen, tatsächliche Laufzeitnachweise und verbleibende Arbeit.
+
+
+## 16. Integrierter Ausbauplan P0–P4
+
+Owner-Auftrag 06.10.2026: zuerst P0 umsetzen, danach den Referenzarchitektur-
+Entwurf mit dem bestehenden Plan zusammenführen. Dieser Abschnitt ist die
+aktuelle Arbeitsreihenfolge. M0–M6 bleiben Foundation-/Release-Gates; E0–E8 und
+UX0–UX4 bleiben fachliche Kennungen. P0 ist keine Freigabe der Folgephasen.
+Die Planung verwendet keine Umbrel-Implementierung oder App-Store-Produktlogik.
+
+### Zuständigkeiten und Inhaltsarchitektur
+
+- **kurtz:** ein zentraler Inhaltszugang, gemeinsame Suche, Quellenöffnung,
+  laufende Aufträge und konkrete Aktionsbestätigungen. Inhaltsarten sind Filter,
+  keine Backend-Auswahl. Ohne freigegebene KI bleiben manuelle Wege verfügbar.
+- **Mutti-Inhaltskern:** bestehender Hub plus Connect, stabile Inhaltsreferenzen,
+  Identitäts-/Rechteabbildung, föderierte Suche und Herkunft abgeleiteter Ergebnisse.
+  APIs der Backends bleiben maßgeblich; keine direkten Fremddatenbank-Schreibwege.
+- **Interne Dienstverwaltung:** Einrichtung, minimale Rechte/Netze/Mounts,
+  Ressourcen, Updates und gemeinsame Wiederherstellung. Backend-Namen erscheinen
+  nur bei Einrichtung, Diagnose oder bewusster administrativer Wahl.
+- **KI:** lokale Ausführung mit begrenzten Werkzeugen; Qualifikation plus
+  Nutzerbestätigung bei Änderungen. Keine Besitzer-, Shell- oder Dienstverwaltung
+  aus der normalen Inhalts-KI. Ein späterer Admin-Agent ist gesonderter Umfang.
+
+| Priorität | Bestehende Arbeitspakete | Ergebnis und Abnahmekriterium |
+| --- | --- | --- |
+| **P0 — Verträge und belastbare Ausgangsbasis** | E0, UX0/UX1; Sicherheitsbasis M3/M5 | Bestand/Evidenz abgeglichen; englischer Content-/Rechte-/Quellen-/Aktions-/Qualifikationsvertrag; fail-closed Prüfung an Anfrage, Run, Werkzeug und Bestätigung. Synthetische positive/negative Tests. [P0-Beleg](evidence/p0-2026-10-06.md). Keine Modellpromotion. |
+| **P1 — Kleiner gemeinsamer Inhaltsweg** | E3/E4, E6/E8, UX3/UX4; M3 | Gemeinsame Inhaltsreferenz und föderierte Suche über vorhandene Adapter; berechtigte Quellen mit Revision/Fundstelle; Auftragszustände; Aktionsjournal und Idempotenz. Privater/entzogener Inhalt erscheint weder in Treffern noch alten Chatkontexten. Native Ende-zu-Ende-Bedienung. Keine zweite Kopplung, zunächst kein gemeinsamer Volltext-/Vektorindex. |
+| **P2 — Verwalteter Betrieb und qualifizierte KI** | E1/E2/E5/E7/E8; M1/M2/M5 | Mac-Laufzeitentscheidung, gepinnte Dienste samt Kontenanlage, isolierte Netze, Mount-/Kapazitätsprüfung und Sicherungsverträge. Echte Runtime-Attestation und vertrauenswürdiges Freigaberegister implementieren; englischen Produktionsharness versionieren und pro Hardware/Aufgabe mit echten Adaptern messen. Externe oder unbekannte Engine-Identität bleibt gesperrt. Wiedergabe unter KI-/OCR-Last prüfen. |
+| **P3 — Wiederherstellbare Updates** | E5/E7/E8; M5 | Signierte/verifizierte Komponentensätze, konsistente Sicherung vor Migration, Rechte-/Datenprüfung danach. Abbruch und Vollverlust auf leerem Ziel prüfen. Kein Rückfall allein durch altes Binary auf bereits migrierter DB; Identitäts-/Widerrufsverhalten ausdrücklich festlegen. |
+| **P4 — Gemeinsame Produktabnahme** | UX4; M0/M3/M4/M5/M6 | Mac und echtes Docker/NAS, native Apple-Geräte, Bedienbarkeit/DE/EN/Accessibility, Speicher- und Langzeitlast, reale WAN-Matrix und Netzwechsel. Quellen-/Lizenzinventar, Signierung und Paketnachweise. Keine öffentliche Auslieferung ohne gesonderte Freigabe. |
+
+Abhängigkeiten: P0 vor P1. P1 kann ohne freigegebenes Modell über manuelle Suche
+und gesperrten KI-Zweig abgenommen werden. Die positive KI-Strecke verlangt
+zusätzlich E1/E2 und P2-Qualifikation; danach P1-E2E erneut mit echtem Modell.
+Dienstplanung in P2 darf nach P0 parallel fachlich vorbereitet werden, ohne
+Foundation-Gates zu umgehen. P3 benötigt den verwalteten Daten-/Dienstvertrag.
+P4 bündelt alle einschlägigen M-/E-/UX-Gates. Haussteuerung, iOS-Fotohintergrund-
+backup und ein allgemeiner Agent bleiben ausdrücklich spätere eigene Inkremente.
+
+Der bisherige Harness-Vergleich E2 ist nicht durch seine ursprüngliche LibreChat-
+Präferenz entschieden: heute existiert ein eigener Go-Harness. Vergleich und
+Qualifikation müssen diesen tatsächlichen Bestand bewerten. Pydantic AI ist
+bisher Paketprüfung, keine belegte Funktionsalternative. Keine neue Abhängigkeit
+wird allein aus einer alten Kandidatenliste eingeführt.
+
+### Drei Risikogates
+
+| Risiko | Überprüfbarer Test / harte Grenze |
+| --- | --- |
+| Rechteverlust durch Zusammenführung | Zwei Profile, private/geteilte Testinhalte; Rechte während Suche, Download und KI-Ausgabe entziehen. Keine fremden Treffer, Zählwerte, Ausschnitte oder wiederverwendeten Kontexte. Neue Zugriffe verweigern, laufende Arbeit spätestens nach fünf Sekunden abbrechen. Mac und NAS. |
+| Inkonsistenz bei Update/Import/Restore | Synthetische Installation an jeder Phase abbrechen; Mount entziehen und Speicher erschöpfen; auf zweitem leerem Ziel wiederherstellen. Original-Hashes, ACLs und Zuordnungen erhalten; alter oder neuer konsistenter Zustand, keine leere Ersatzbibliothek. |
+| Falsche KI-Freigabe | Direkte API, alte Vorschläge, unbekanntes Modell, geänderte Engine/Hardware/Prompts/Adapter und abgelaufener Test müssen vor Wirkung sperren. Echte Adapter mit Fremdanweisungen, erfundenen Quellen und Medienlast: null kritische Fehler; vorab definierte Qualitäts-, RAM- und p95-Grenzen. |
+
+### Kleines Ende-zu-Ende-Szenario
+
+1. Leere Mutti-Installation, zwei Profile und synthetische Medien; benötigte
+   Inhaltsdienste intern einrichten. Frisches kurtz per QR koppeln, Profil A
+   durch Besitzer freigeben. Keine Backend-Adresse im Client eingeben.
+2. A importiert eine synthetische Rechnung und ein Foto; gemeinsame Suche findet
+   beides und öffnet Original/Fundstelle. B sieht weder private Treffer noch Zähler.
+3. Ohne passende Qualifikation: KI-Aufruf und alte Bestätigung liefern die
+   verständliche Sperre, manuelle Suche bleibt nutzbar. Erst mit echtem Nachweis:
+   Rechnungsantwort mit Quelle, begrenzter Favoritenvorschlag, authentifizierte
+   Bestätigung und überprüfte Wirkung. Wiederholung erzeugt keine zweite Wirkung.
+4. Dokumentfreigabe und Gerät entziehen; Quellen, laufende Arbeit und spätere
+   Chatkontexte prüfen. Sichern und auf leerem Ziel wiederherstellen; entzogene
+   Geräte werden nicht durch alte Sicherungen reaktiviert.
+5. Identischer Nachweis auf Mac und NAS. Separater WAN-Durchgang mit zwei
+   Anschlüssen, CGNAT/IPv6, UDP-Sperre und Netzwechsel; Paketmitschnitt zeigt
+   keinen DERP/TURN/Peer-Relay-/Klartext-Ausweichweg. Direkter Fehlschlag ist ein
+   zulässiger, begrenzt wartender Fehler, kein scheinbarer Verbindungserfolg.
+
+### Offene Entscheidungen vor jeweiliger Umsetzung
+
+Mac-Laufzeit für Linux-Dienste; allgemeine Dateien; Haushalts-/Sammlungsrechte;
+Identitätswiederherstellung; Betreiber der Vermittlung; messbare Hardwareklassen
+und Budget für parallele Wiedergabe/OCR/KI. Details und Zustandsverträge:
+[contracts.md](contracts.md). P0 löst diese Fragen nicht durch stille Annahmen.

@@ -1,11 +1,54 @@
 # Umsetzungsstand
 
-Stand: 5. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
+Stand: 6. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
 
 Die Forks `ralleur/mutti` und `ralleur/mutti-web` behalten ihre vollständige
 Jellyfin-Historie. Die Produktbranches beginnen beim zusammenpassenden stabilen
 Stand v12.1. Die Umsetzung liegt zunächst auf `codex/mutti-foundation`; `main`
 ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
+
+## Aktuelle Übergabe und nächste Schritte
+
+Stand 06.10.2026: P0 ist als sichere Ausgangsbasis implementiert und geprüft;
+der integrierte P0–P4-Plan liegt vor. Die Änderungen liegen noch uncommittet auf
+`codex/mutti-foundation` (Basis-HEAD `f98bab2be48f326741cec1a8dbef9959ec306bdf`).
+Kein neues Paket ausgeliefert, kein Modell produktiv qualifiziert.
+
+Nächster Umsetzungsschritt bei einem entsprechenden Fortsetzungsauftrag:
+**P1 — gemeinsamer Inhaltsweg**. Zuerst bestehende Adapter-DTOs gegen ContentRef-,
+Rechte- und Quellenvertrag abgleichen und das kleinste additive Such-/Referenz-
+Inkrement festlegen; anschließend mit zwei synthetischen Profilen prüfen.
+Manuelle Suche bleibt unabhängig von KI. Positive KI-E2E benötigt zusätzlich
+P2-Qualifikation; Runtime-Attestation und vertrauenswürdige Evidenzübernahme
+bleiben offen. Vollständige Paket-, native Geräte-, NAS- und WAN-Abnahmen fehlen.
+
+**Modellfreigabe v4, 06.10.2026 (P2-Vorarbeit, abgeschlossen als Messung):**
+Nutzerauftrag „Werkzeuge/Harness verbessern, dann mit neuem ungesehenem Satz
+messen“. Entwickler-Holdout (44 Fälle) **vor** Code-Änderungen eingefroren.
+Implementiert (uncommittet): `search_movies` mit Jahr, `watched`/`unwatched`,
+„unter“/„höchstens“-Laufzeit, `runtime_desc`; Harness-Korrekturen und Prompt
+`mutti-assistant-v4`; Korrekturen als markierte `user`-Nachricht (MLX lehnt
+späte `system`-Nachrichten ab); Bewerter vergleicht Filterbedeutung und prüft
+`german`. Betroffen: `mutti/hub/{harness,tools,cast}.go`, `harness_test.go`,
+`hub_test.go`, `cmd/mutti-cast`, `mutti/tests/casting-v4-{dev,holdout}.py`,
+`casting-summary.py`, Fixtures v4. `go test ./...` grün.
+Nutzerentscheidung: auf Apple Silicon ab sofort MLX (im [Plan](plan.md#1-verbindliche-entscheidungen-und-planannahmen)
+festgehalten; Docker/NAS braucht weiter GGUF).
+Ergebnis synthetisch geprüft, Holdout MLX: 9B 123/132, 27B 126/132; **keine
+Freigabe** (Nichtwissen 9/12 bei beiden). 27B MLX erfüllt erstmals die
+Latenzgrenzen. Bekannte v4-Harness-Mängel (Archivsuche ohne Frage,
+Zitier-Korrektur bei „nichts gefunden“) und v5-Schritte:
+[Nachweis](evidence/model-comparison-v4-2026-10-06.md),
+[Protokoll](evidence/casting-v4-rubric.md). Nächster Schritt dazu: v5 mit diesen
+zwei Korrekturen und einem nicht vom Entwickler verfassten Holdout-Satz;
+außerdem prüfen, ob die gebündelte Mac-Engine MLX kann.
+
+**Session-Vorgaben, 06.10.2026:** [AGENTS.md](../../AGENTS.md) definiert jetzt
+Plan-/Statussichtung am Anfang und nachvollziehbare Umsetzung/Übergabe.
+[CLAUDE.md](../../CLAUDE.md) importiert dieselbe Quelle für Claude Code; damit
+entstehen keine getrennten Arbeitsregeln. Nur Dokumentation geändert.
+Importpfad, lokale Dokumentverweise und `git diff --check` geprüft; kein neuer
+Agentenprozess gestartet, keine erneute Produktprüfung für diese Textänderung.
 
 | Etappe | Ergebnis | Noch offen |
 | --- | --- | --- |
@@ -18,7 +61,27 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 | M5 | Lokale Sicherheits-/Integrationstests, konsistente Sicherung, isolierte Probe, Restore auf demselben Paket und begrenzter Wiederanlauf bestehen. | Externe Sicherung/Vollverlust-Restore, Upgrade, Langzeittests, reale Geräte, NAS und zwei echte Anschlüsse. |
 | M6 | Lokale Mac-App und Docker-Image verfügbar. | Gemeinsame vollständige Abnahme, Developer-ID/Notarisierung, Quellpakete und freigegebenes Release. |
 
-## Autonomer Ausbau vom 5. Oktober 2026
+## Aktuelle Ausgangsbasis und P0, 6. Oktober 2026
+
+[Bestandsabgleich](baseline-2026-10-06.md), [Verträge v1](contracts.md) und
+[integrierter Plan P0–P4](plan.md#16-integrierter-ausbauplan-p0p4) sind maßgeblich.
+Ältere Tagesabschnitte unten sind historische Prüfstufen, keine widersprüchlichen
+aktuellen Funktionszusagen. Insbesondere sind Hub/Adapter und native Modulquellen
+vorhanden; deren vollständige Laufzeit-/Paketabnahme bleibt offen.
+
+P0 ergänzt eine standardmäßig sperrende Aufgabenqualifikation. Installierte
+Modelle und Besitzerbestätigung reichen nicht zur produktiven KI-Ausführung.
+Ohne passenden Nachweis werden Nachrichten/Retry, Run-Start, Werkzeuge und
+Bestätigung verweigert. Kein aktuelles Modell ist freigegeben; keine produktiven
+Nachweise werden durch Testfixtures ersetzt. [Prüfstand und Grenzen](evidence/p0-2026-10-06.md).
+
+Offen bleiben vor erster Promotion: tatsächliche Engine-/Hardware-Attestation,
+vertrauenswürdiger Evidenzimport, englischer Produktionsharness und reale
+Aufgabenmessungen. P0 ist eine geprüfte sichere Basis, keine KI- oder Releasefreigabe.
+Neue Pakete wurden in P0 nicht ausgeliefert; bestehende laufende Pakete enthalten
+noch ihren bisherigen Code. Manuelle Inhalte/Adapter bleiben eigenständige Wege.
+
+## Historischer Ausbau- und Prüfstand vom 5. Oktober 2026
 
 **Aktueller Übergabestand:** [Testpakete und Startanleitung](testpakete-2026-10-05.md),
 [gesammelter Foundation-Beleg](evidence/foundation-2026-10-05.md).
@@ -56,15 +119,15 @@ Wiederholungen, separate native Engine mit OS-Netzsperre und deaktivierter
 Cloud. Der bestehende Ollama-Dienst und dessen Modellbestand bleiben unverändert.
 Der zusätzliche 4B-Kandidat wurde begrenzt in ein eigenes Testverzeichnis geladen.
 Die Ergebnisse zeigen insbesondere unzuverlässige Quellenzuordnung und rechtfertigen
-noch keine Modellfreigabe. KI/Fotos/Dokumente bleiben ohne fertiges Modulbackend;
-die Vorschau ist keine Integration. [Casting-Nachweis](evidence/model-casting-2026-10-05.md).
+noch keine Modellfreigabe. Zu diesem damaligen Zeitpunkt waren KI/Fotos/Dokumente noch ohne fertiges
+Modulbackend; für den späteren Stand gilt der Abschnitt vom 6. Oktober. [Casting-Nachweis](evidence/model-casting-2026-10-05.md).
 
 Immich 2.7.5 und Paperless-ngx 2.20.15 wurden als echte, gepinnte lokale Dienste
 ohne Internetzugriff mit synthetischen Daten geprüft: Import/Originale/Suche,
 Nutzertrennung, gesperrte Fremdzugriffe und Neustartpersistenz. Paperless-Export
 und Restore in eine zweite leere Instanz erhalten Original, Text und Rechte.
-Das ist eine Dienstqualifikation, noch kein Mutti-Adapter oder nativer Foto-/
-Dokumentenbereich. [Ergebnis, Lizenzen und Grenzen](modules-qualification.md).
+Diese Prüfung allein ist eine Dienstqualifikation, kein Nachweis für die später
+ergänzten Mutti-Adapter oder nativen Foto-/Dokumentenbereiche. [Ergebnis, Lizenzen und Grenzen](modules-qualification.md).
 
 ## Zwischenstand Module, 6. Oktober 2026 (unterbrochen durch Nutzungslimit)
 
@@ -83,8 +146,19 @@ Fremdanweisungen 24/30, Dialog Ø 3,4. v3 mit Werkzeug-zuerst-Wächter läuft/li
 unter `build/model-casting/2026-10-06-v3`; Auswertung offen. Pydantic AI: nur
 Paketprüfung (27 Pakete, versteckte Netzpfade `tiktoken`/`genai-prices`), Funktionsvergleich offen.
 
+Nachtrag 6. Oktober: [Freigabetests für die vier Modellachsen](evidence/model-release-tests-2026-10-06.md)
+und [neue Messung](evidence/model-comparison-2026-10-06.md) für Qwen3.8 27B
+und Qwen3.5 9B liegen vor. Im vorhandenen synthetischen v3-Harness erreicht
+27B 177/180, 9B 150/180 automatische Fälle. 27B verfehlt die Latenzgrenzen,
+9B die Qualitätsgrenzen; beide bleiben ohne Produktfreigabe. Das gewünschte
+Vertrags-Dashboard, der englische Backend-Vertrag und reale Adapter-End-to-End-
+Fälle sind als offene Freigabeblöcke erfasst. Die frühere Zeile „v3-Auswertung
+offen“ beschreibt den damaligen Zwischenstand.
+
 Offen: Mac-E2E `mutti/tests/module-package-smoke.py`, native Laufzeitprüfung,
-Docker-KI-Teil, Casting-v3-Auswertung/Modellfreigabe, Testpakete und Belegdokumente.
+Docker-KI-Teil, Produktqualifikation (v3-Vergleich liegt inzwischen vor),
+Testpakete und Belegdokumente. Der bisherige positive KI-Pakettest setzt einen
+produktiven Pass voraus und ist mit P0 korrekt gesperrt, nicht bestanden.
 
 ## Tatsächlich geprüft
 
@@ -379,8 +453,9 @@ wird wiederverwendet. Mac, Anmeldung und Setup-/Importabschluss führen zur
 Serverübersicht. Das native Fenster zeigt keine zusätzliche Medienclient-
 Werkzeugleiste. Erweiterte Medien- und Nutzerverwaltung bleiben verlinkt.
 
-Fotos/Immich, Dokumente/Paperless-ngx, lokale KI/Ollama und Zuhause sind
-bedienbare, klar bezeichnete **Vorschauen ohne Backend-Anbindung**. Entwürfe
+Zum damaligen UX3-Prüfstand waren Fotos/Immich, Dokumente/Paperless-ngx,
+lokale KI/Ollama und Zuhause **Vorschauen ohne Backend-Anbindung**;
+den späteren Hub-Stand beschreibt der Abschnitt vom 6. Oktober. Entwürfe
 werden nicht gespeichert und starten keine Dienste. Gemeinsame Modulfreigaben,
 Sicherungen und Updates bleiben Ausbauaufgaben. Umfang und Architektur:
 [management.md](management.md). Keine neuen externen Dienste oder Abhängigkeiten.

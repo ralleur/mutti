@@ -1,8 +1,11 @@
 # Mutti-Module: lokale KI, Fotos und Dokumente
 
-Stand: 6. Oktober 2026. **Implementiert und lokal Ende-zu-Ende geprüft; kein Release.**
-Prüfnachweise: [Module E2E](evidence/modules-2026-10-06.md),
-[Casting v2](evidence/model-casting-2026-10-06.md).
+Stand: 6. Oktober 2026. **Adapter und Clientquellen implementiert; keine
+vollständige native/Paket-/Release-Abnahme.** Maßgeblich:
+[Bestand und Evidenz](baseline-2026-10-06.md), [Status](status.md),
+[P0-Verträge](contracts.md) und [P0-Prüfungen](evidence/p0-2026-10-06.md).
+Die zuvor verlinkten Modul-E2E-/Casting-v2-Dokumente vom 6. Oktober lagen nicht
+vor; daraus wird kein bestandener Nachweis abgeleitet.
 
 ## Architektur
 
@@ -50,17 +53,31 @@ mutti-hub ── Profilkonto ──> Immich        (Fotos, private Videos)
 ## Lokale KI
 
 - **Harness:** eigener schlanker Werkzeugkreis in Go (`harness.go`) mit
-  versioniertem Promptvertrag `mutti-assistant-v2`. Begründung und Vergleich
-  mit Pydantic AI: [Casting v2](evidence/model-casting-2026-10-06.md#d02-harness).
-- **Werkzeuge serverseitig:** `search_movies`, `get_movie`, `propose_favorite`
+  versioniertem, derzeit deutschem Promptvertrag `mutti-assistant-v4`.
+  Begrenzte Korrekturen, je höchstens einmal pro Run und für den Nutzer nur als
+  zurückgezogener Entwurf (`reset`) sichtbar: Werkzeug zuerst (auch bei
+  Ausweichen wie „soll ich suchen?“), eigene Archivsuche, wenn das Modell zu
+  eigenen Daten weiter nicht sucht, fehlender Favoritenvorschlag, behauptete
+  Änderung (danach fester ehrlicher Bestätigungssatz), nicht-deutsche Antwort,
+  fehlende Quellenmarke trotz Treffern. Auslöser sind nur Nutzerfrage und
+  Modellentwurf, nie Werkzeugdaten oder Anhangstext.
+  Pydantic AI ist bisher nur paketgeprüft, ein Funktionsvergleich bleibt offen.
+  Englischer Produktionsvertrag erfordert neue Version und neue Messung.
+- **Werkzeuge serverseitig:** `search_movies` (Stichwort, Genre, Jahr,
+  gesehen/ungesehen, Laufzeit „unter“ oder „höchstens“, Sortierung inkl. längste
+  zuerst), `get_movie`, `propose_favorite`
   (Jellyfin mit Profilsitzung), `search_documents`, `read_document` (Paperless),
   `search_photos` (Immich). Nur Werkzeuge freigegebener Module werden angeboten.
 - **Quellen:** Der Server vergibt pro Gespräch Marken `Q1…`; das Modell sieht
-  keine Objekt-IDs. Nicht vergebene Marken werden entfernt, `(Q1)` normalisiert.
+  keine Objekt-IDs. Nicht vergebene Marken werden entfernt, `(Q1)` und
+  `(Quelle Q1)` normalisiert.
   Quellen werden vor dem Öffnen erneut berechtigt (`GET ai/sources/{gespräch}/{marke}`).
 - **Änderungen:** Das Modell kann nur vorschlagen. Bestätigung/Ablehnung ist eine
-  eigene authentifizierte Aktion; Ausführung genau einmal, Ergebnis wird
-  zurückgelesen (`confirmed`, `failed`, `outcome_unknown`).
+  eigene authentifizierte Aktion; Wiederholungen entschiedener Vorschläge liefern das gespeicherte Ergebnis;
+  dieses wird nach der Aktion zurückgelesen (`confirmed`, `failed`, `outcome_unknown`). Ein dauerhaftes Ausführungsjournal
+  für Abstürze zwischen Seiteneffekt und Speicherung bleibt P1; keine allgemeine
+  Exactly-once-Garantie. P0 prüft Aufgabenqualifikation und Vorschlagsherkunft
+  erneut vor der Wirkung; alte Vorschläge ohne Nachweis sind gesperrt.
 - **Gespräche:** pro Profil als private Dateien, Runs mit Zuständen
   `queued/running/completed/cancelled/failed/interrupted`, Idempotenzschlüssel
   für Nachricht und Retry, SSE mit Cursor-Wiederaufnahme, nach Neustart
@@ -77,6 +94,12 @@ mutti-hub ── Profilkonto ──> Immich        (Fotos, private Videos)
 - **Modelle:** nur Katalogeinträge mit Manifest-Digest (`catalog.go`), Eignung
   nach Arbeitsspeicher, Qualifikationsstatus aus dem Casting.
   Vorhandene Mac-Ollama-Modelle können digestgeprüft übernommen werden.
+  **Installation ist keine Qualifikation:** Nachrichten/Retry/Run-Start,
+  Werkzeugangebot/Dispatch und Bestätigung prüfen den passenden Nachweis.
+  Es existiert kein produktiver Pass; die KI-Ausführung bleibt derzeit mit
+  `qualification_required` gesperrt. Synthetisches Casting bleibt getrennt möglich.
+  Runtime-Attestation und vertrauenswürdige Evidenzübernahme vor erster Promotion
+  sind P2; unbekannte Engine/Hardware wird nicht aus einer RAM-Empfehlung abgeleitet.
 
 ## Fotos (Immich 2.7.5) und Dokumente (Paperless-ngx 2.20.15)
 

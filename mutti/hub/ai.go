@@ -55,15 +55,16 @@ type RunRecord struct {
 }
 
 type Proposal struct {
-	ID       string    `json:"id"`
-	Kind     string    `json:"kind"`
-	Ref      string    `json:"ref"`
-	Favorite bool      `json:"favorite"`
-	State    string    `json:"state"`
-	Created  time.Time `json:"created"`
-	Expires  time.Time `json:"expires"`
-	Device   string    `json:"-"`
-	Result   string    `json:"result,omitempty"`
+	Qualification string    `json:"qualification,omitempty"`
+	ID            string    `json:"id"`
+	Kind          string    `json:"kind"`
+	Ref           string    `json:"ref"`
+	Favorite      bool      `json:"favorite"`
+	State         string    `json:"state"`
+	Created       time.Time `json:"created"`
+	Expires       time.Time `json:"expires"`
+	Device        string    `json:"-"`
+	Result        string    `json:"result,omitempty"`
 }
 
 type Attachment struct {
@@ -125,16 +126,17 @@ func (r *liveRun) emit(kind string, data any) {
 }
 
 type AI struct {
-	hub     *Hub
-	engine  *engine
-	dir     string
-	mu      sync.Mutex
-	locks   map[string]*sync.Mutex
-	live    map[string]*liveRun
-	queue   []*liveRun
-	wake    chan struct{}
-	show    map[string]bool
-	stopped bool
+	qualification qualificationPolicy
+	hub           *Hub
+	engine        *engine
+	dir           string
+	mu            sync.Mutex
+	locks         map[string]*sync.Mutex
+	live          map[string]*liveRun
+	queue         []*liveRun
+	wake          chan struct{}
+	show          map[string]bool
+	stopped       bool
 }
 
 func newAI(h *Hub) (*AI, error) {
@@ -425,6 +427,9 @@ func (a *AI) postMessage(w http.ResponseWriter, r *http.Request, id Identity) er
 	if err := a.access(id); err != nil {
 		return err
 	}
+	if _, err := a.qualify(assistantTask); err != nil {
+		return err
+	}
 	var req struct {
 		Text        string   `json:"text"`
 		Idempotency string   `json:"idempotencyKey"`
@@ -524,6 +529,9 @@ func (a *AI) enqueue(c *Conversation, keys map[string]string, user *Message, id 
 
 func (a *AI) retryRun(w http.ResponseWriter, r *http.Request, id Identity) error {
 	if err := a.access(id); err != nil {
+		return err
+	}
+	if _, err := a.qualify(assistantTask); err != nil {
 		return err
 	}
 	var req struct {
@@ -721,6 +729,10 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 		a.finish(l, "failed", "unauthorized", HarnessResult{}, nil, err)
 		return
 	}
+	if _, err := a.qualify(assistantTask); err != nil {
+		a.finish(l, "failed", "qualification_required", HarnessResult{}, nil, err)
+		return
+	}
 	a.setRunState(l, "running")
 	l.emit("state", map[string]any{"state": "starting"})
 	if err := a.engine.ensure(ctx); err != nil {
@@ -834,6 +846,14 @@ func (a *AI) toolsFor(id Identity, c *Conversation) *profileTools {
 	if _, err := a.hub.allowed(id, ModulePhotos); err == nil {
 		t.defs = append(t.defs, photoTools()...)
 	}
+	// Product tools are filtered for this deployment. Dispatch checks again.
+	qualified := t.defs[:0]
+	for _, def := range t.defs {
+		if _, err := a.qualify(toolTask(def.Function.Name)); err == nil {
+			qualified = append(qualified, def)
+		}
+	}
+	t.defs = qualified
 	return t
 }
 
@@ -1104,6 +1124,14 @@ func (a *AI) decideProposal(w http.ResponseWriter, r *http.Request, id Identity)
 			return err
 		}
 		return writeOK(w, p)
+	}
+	// Legacy proposals and model/configuration changes cannot inherit a grant.
+	qualification, err := a.qualify("media.favorite")
+	if err != nil {
+		return err
+	}
+	if p.Kind != "favorite" || p.Qualification == "" || p.Qualification != qualification {
+		return qualificationError()
 	}
 	s := c.Sources.Items[p.Ref]
 	if s == nil || s.Service != "media" {

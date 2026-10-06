@@ -1,7 +1,9 @@
 # Lokale Entwicklungsvorschau
 
 Die Vorschau benutzt ausschließlich neue Testdaten. Keine vorhandene Jellyfin-
-Datenbank übernehmen. Noch keine automatische Kopplung oder Fernverbindung.
+Datenbank übernehmen. Sichere QR-Kopplung und direkter Transport sind inzwischen
+als Teststand implementiert: [Connect](connect.md). Reale WAN-Abnahme bleibt offen.
+Aktueller Bestand und Qualifikationssperre: [Ausgangsbasis](baseline-2026-10-06.md).
 
 ## Quellen
 

@@ -272,6 +272,11 @@ func (h *Hub) capabilities(w http.ResponseWriter, r *http.Request, id Identity) 
 		if name == ModuleAI && c.State == "ready" {
 			model := m.Model
 			c.Model = &model
+			if _, err := h.ai.qualify(assistantTask); err != nil {
+				c.State, c.Message, c.Actions = "qualification_required", err.(*APIError).Message, []string{"sources"}
+			} else if _, err := h.ai.qualify("media.favorite"); err != nil {
+				c.Actions = []string{"chat", "sources"}
+			}
 		}
 		modules[name] = c
 	}

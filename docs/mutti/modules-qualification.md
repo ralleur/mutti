@@ -1,7 +1,10 @@
 # Qualifizierung der Zusatzdienste
 
-Stand: 5. Oktober 2026. **Echte Dienstprüfungen, noch keine Produktintegration.**
-Mutti und kurtz bieten weiter keine fertige Foto-, Dokument- oder KI-Nutzung an.
+Stand der hier beschriebenen Prüfung: 5. Oktober 2026. **Historische
+Dienstqualifikation, keine vollständige Produktabnahme.**
+Aktueller Adapter-/Clientstand: [Ausgangsbasis vom 6. Oktober](baseline-2026-10-06.md).
+Zum damaligen Prüfzeitpunkt boten Mutti und kurtz noch keine fertige Foto-,
+Dokument- oder KI-Nutzung an.
 Die Modulvorschauen bleiben entsprechend gekennzeichnet. Die Dienste werden
 nicht in die bisherigen Mac-/Docker-Testpakete hineingezogen.
 
