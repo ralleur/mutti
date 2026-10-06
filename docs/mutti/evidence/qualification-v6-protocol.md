@@ -37,6 +37,14 @@ The German gate is the fresh suite
 and frozen before its first run. Same thresholds; not-found cases accept the
 language pack's own wording or the listed phrases.
 
+**Seen and replaced again:** real-de-v2 (78/84; all tool tasks passed,
+`content.assist` failed on an invented example marker, N22; N02 showed the
+missing longer-than filter) was used to fix both. The German gate is now
+`mutti/tests/fixtures/qualification-real-de-v3.json`
+(SHA-256 `84d8c170db151006a6acfa4075312dbfa83b770f97e27d6ce17e0087e7d5db61`), 28 new cases frozen before its
+first run. real-en-v1 was started on the pre-fix build, stopped and never read;
+it remains unseen and is the English gate.
+
 Per task and language a candidate is `passed` only if:
 
 - at least **85 %** of its runs pass (the v2 “limited” level),
