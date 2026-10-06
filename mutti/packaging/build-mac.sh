@@ -14,7 +14,9 @@ BIN="$(swift build --package-path "$ROOT/mutti/apps/macos" -c release --arch "$A
 python3 "$ROOT/mutti/packaging/fetch-ffmpeg.py" "$RID"
 go run "$ROOT/mutti/packaging/fetch-intro-skipper.go" "$ROOT/mutti/components.lock.json" "$ROOT/build/intro-skipper"
 (cd "$ROOT/mutti/connect" && CGO_ENABLED=0 GOOS=darwin GOARCH="$(test "$ARCH" = arm64 && echo arm64 || echo amd64)" go build -trimpath -o "$ROOT/build/connect/$RID/mutti-connect" ./cmd/mutti-connect)
-(cd "$ROOT/mutti/hub" && CGO_ENABLED=0 GOOS=darwin GOARCH="$(test "$ARCH" = arm64 && echo arm64 || echo amd64)" go build -trimpath -o "$ROOT/build/hub/$RID/mutti-hub" ./cmd/mutti-hub)
+# Reproducible hub: qualification binds the executable digest, so it must not
+# change with unrelated commits (no VCS stamp; provenance is recorded below).
+(cd "$ROOT/mutti/hub" && CGO_ENABLED=0 GOOS=darwin GOARCH="$(test "$ARCH" = arm64 && echo arm64 || echo amd64)" go build -trimpath -buildvcs=false -o "$ROOT/build/hub/$RID/mutti-hub" ./cmd/mutti-hub)
 python3 "$ROOT/mutti/packaging/fetch-ollama.py" "$RID"
 (cd "$ROOT/mutti/migrate" && CGO_ENABLED=0 GOOS=darwin GOARCH="$(test "$ARCH" = arm64 && echo arm64 || echo amd64)" go build -trimpath -o "$ROOT/build/migrate/$RID/mutti-migrate" ./cmd/mutti-migrate)
 "$DOTNET" build "$ROOT/mutti/export/Mutti.Export.csproj" -c Release -p:JellyfinDir="$ROOT/build/server/$RID" -o "$ROOT/build/export"
@@ -31,6 +33,12 @@ mkdir -p "$APP/Contents/Resources/connect"
 cp "$ROOT/build/connect/$RID/mutti-connect" "$APP/Contents/Resources/connect/"
 mkdir -p "$APP/Contents/Resources/hub"
 cp "$ROOT/build/hub/$RID/mutti-hub" "$APP/Contents/Resources/hub/"
+# Reviewed, signed qualification evidence for exactly this hub, engine and
+# Mac class. Without it the app keeps every AI task locked.
+if [ -f "$ROOT/mutti/packaging/qualification/records.json" ]; then
+  mkdir -p "$APP/Contents/Resources/hub/qualification"
+  cp "$ROOT/mutti/packaging/qualification/records.json" "$APP/Contents/Resources/hub/qualification/"
+fi
 cp -R "$ROOT/build/ollama/$RID" "$APP/Contents/Resources/ai-engine"
 mkdir -p "$APP/Contents/Resources/migrate"
 cp "$ROOT/build/migrate/$RID/mutti-migrate" "$APP/Contents/Resources/migrate/"

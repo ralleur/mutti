@@ -38,6 +38,7 @@ parser.add_argument('--model', help='also install and select this pinned model')
 parser.add_argument('--expect-qualified', action='store_true', help='run the positive AI path (requires real qualification)')
 parser.add_argument('--model-source', choices=('pull', 'adopt'), default='pull')
 parser.add_argument('--keep', action='store_true', help='keep the instance running for native client checks')
+parser.add_argument('--setup-only', action='store_true', help='set up the synthetic instance, write fixture.json for qualification and keep it running')
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[2]
 root = args.root.resolve()
@@ -53,6 +54,12 @@ for port in PORTS.values():
         probe.bind(('127.0.0.1', port))
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 report = {'started': time.time(), 'checks': [], 'model': args.model, 'app': str(args.app)}
+if args.setup_only:
+    args.keep = True
+
+
+class SetupDone(Exception):
+    pass
 processes, logs = [], []
 
 
@@ -215,9 +222,10 @@ try:
     ok(jf('POST', '/Startup/Complete', {}, owner), 'complete')
     (root / 'owner.json').write_text(json.dumps({'username': 'Testbesitzer', 'password': password}))
     (root / 'owner.json').chmod(0o600)
-    users = {}
+    users, passwords = {}, {}
     for name in ('Alpha', 'Beta'):
-        users[name] = ok(jf('POST', '/Users/New', {'Name': name, 'Password': secrets.token_urlsafe(24)}, owner), 'profile')['Id']
+        passwords[name] = secrets.token_urlsafe(24)
+        users[name] = ok(jf('POST', '/Users/New', {'Name': name, 'Password': passwords[name]}, owner), 'profile')['Id']
     options = {'LibraryOptions': {'EnableRealtimeMonitor': False, 'EnableInternetProviders': False, 'SaveLocalMetadata': False,
                                   'TypeOptions': [{'Type': 'Movie', 'MetadataFetchers': [], 'ImageFetchers': []}]}}
     for name, path in (('Filme', media), ('Privat', private)):
@@ -270,6 +278,20 @@ try:
     ok(hub_admin('admin/enable/documents', {'enabled': True}), 'enable documents')
     state = ok(hub_admin('admin/state'), 'state')
     check('Owner state contains no service secrets or passwords', 'secret' not in json.dumps(state) and env_data['accounts']['photos']['alpha']['password'] not in json.dumps(state))
+    if args.setup_only:
+        # Synthetic credentials and object IDs for mutti-hub qualify (0600).
+        norm = lambda i: i.replace('-', '').lower()
+        objects = {f'movie:{name}': norm(i) for name, i in movie.items()}
+        objects.update({f'document:{k}': str(v) for k, v in env_data['documents_fixture'].items()})
+        objects.update({f'photo:{k}': v for k, v in env_data['photos_fixture'].items()})
+        fixture = {'jellyfin': f'http://127.0.0.1:{PORTS["jellyfin"]}', 'hubState': str(root / 'server' / 'hub'),
+                   'profiles': {'alpha': {'name': 'Alpha', 'password': passwords['Alpha']}, 'beta': {'name': 'Beta', 'password': passwords['Beta']}},
+                   'objects': objects}
+        (root / 'fixture.json').write_text(json.dumps(fixture, indent=1))
+        (root / 'fixture.json').chmod(0o600)
+        report['passed'] = True
+        print('Setup ready:', root / 'fixture.json', flush=True)
+        raise SetupDone()
 
     # Local AI: managed engine with OS network lock and a digest-pinned model.
     if args.expect_qualified and not args.model:
@@ -493,6 +515,8 @@ try:
         # Native checks continue with the kept instance; restore Alpha's grant.
         ok(hub_admin('admin/grants', {'module': 'photos', 'userId': users['Alpha'], 'allowed': True}), 'restore grant')
     report['passed'] = True
+except SetupDone:
+    pass
 except Exception as error:
     report['passed'] = False
     report['error'] = str(error)

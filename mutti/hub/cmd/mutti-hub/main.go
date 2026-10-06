@@ -16,6 +16,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "qualify" {
+		qualify(os.Args[2:])
+		return
+	}
 	var o hub.Options
 	listen := flag.String("listen", "127.0.0.1:18593", "Loopback listener for Connect and the Jellyfin bridge")
 	flag.StringVar(&o.State, "state", "", "Private hub data directory")
@@ -58,4 +62,27 @@ func main() {
 	defer done()
 	_ = server.Shutdown(stop)
 	time.Sleep(200 * time.Millisecond)
+}
+
+// qualify measures this binary with its bundled engine against a synthetic
+// instance and writes evidence plus unsigned candidates. It grants nothing.
+func qualify(args []string) {
+	fs := flag.NewFlagSet("qualify", flag.ExitOnError)
+	var o hub.QualifyOptions
+	fs.StringVar(&o.State, "state", "", "hub state directory of the synthetic instance")
+	fs.StringVar(&o.Jellyfin, "jellyfin", "", "loopback Jellyfin origin of the instance")
+	fs.StringVar(&o.JellyfinHost, "jellyfin-host", "", "Host header Jellyfin expects")
+	fs.StringVar(&o.Ollama, "ollama", "", "bundled engine executable")
+	fs.StringVar(&o.Models, "models", "", "verified model store")
+	fs.StringVar(&o.Model, "model", "", "catalog model ID")
+	fs.StringVar(&o.Suite, "suite", "", "frozen qualification suite")
+	fs.StringVar(&o.Profiles, "profiles", "", "JSON file with test profile tokens")
+	fs.StringVar(&o.Objects, "objects", "", "JSON file with fixture object IDs")
+	fs.StringVar(&o.Output, "out", "", "new result directory")
+	fs.IntVar(&o.Repetitions, "repetitions", 3, "repetitions per case")
+	_ = fs.Parse(args)
+	if err := hub.RunQualification(o); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
