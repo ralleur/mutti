@@ -266,6 +266,11 @@ type moduleCapability struct {
 }
 
 func (h *Hub) capabilities(w http.ResponseWriter, r *http.Request, id Identity) error {
+	// AI readiness is reported for the client's answer language.
+	lang, err := requestLanguage(r.URL.Query().Get("language"), r)
+	if err != nil {
+		return err
+	}
 	cfg := h.store.Read()
 	modules := map[string]any{"media": moduleCapability{Configured: true, Enabled: true, Allowed: true, State: "ready", Health: "ok", Actions: []string{"browse", "play"}},
 		// Shared content access works without any model: search, open, jobs.
@@ -292,15 +297,16 @@ func (h *Hub) capabilities(w http.ResponseWriter, r *http.Request, id Identity) 
 		if name == ModuleAI && c.State == "ready" {
 			model := m.Model
 			c.Model = &model
-			if _, err := h.ai.qualify(assistantTask); err != nil {
+			if _, err := h.ai.qualify(assistantTask, lang); err != nil {
 				c.State, c.Message, c.Actions = "qualification_required", err.(*APIError).Message, []string{"sources"}
-			} else if _, err := h.ai.qualify("media.favorite"); err != nil {
+			} else if _, err := h.ai.qualify("media.favorite", lang); err != nil {
 				c.Actions = []string{"chat", "sources"}
 			}
 		}
 		modules[name] = c
 	}
-	return writeOK(w, map[string]any{"api": 1, "version": Version, "user": map[string]string{"id": id.UserID, "name": id.Name}, "modules": modules})
+	return writeOK(w, map[string]any{"api": 1, "version": Version, "user": map[string]string{"id": id.UserID, "name": id.Name}, "modules": modules,
+		"language": lang.Code})
 }
 
 func writeOK(w http.ResponseWriter, v any) error {

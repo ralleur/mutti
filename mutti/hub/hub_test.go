@@ -140,7 +140,7 @@ func (e *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case last.Role == "user" && strings.Contains(last.Content, "ungesehenen Filme"):
 			call("search_movies", `{"runtime_below_seconds":100,"unwatched":true,"sort":"runtime"}`)
 		case last.Role == "user" && strings.Contains(last.Content, "Favorit"):
-			call("propose_favorite", `{"quelle":"Q1","favorite":true}`)
+			call("propose_favorite", `{"source":"Q1","favorite":true}`)
 		case last.Role == "tool" && last.ToolName == "search_movies":
 			words("Gefunden: Nordlicht [Q1] und Sommer am See [Q2]. Erfunden [Q9].")
 		case last.Role == "tool":
@@ -579,7 +579,7 @@ type guardTools struct{ calls int }
 func (g *guardTools) Definitions() []toolDef { return movieTools() }
 func (g *guardTools) Call(context.Context, string, json.RawMessage) ToolResult {
 	g.calls++
-	return ToolResult{Content: `{"anzahl":0,"treffer":[]}`, Trace: ToolTrace{Name: "search_movies", Status: "done"}}
+	return ToolResult{Content: `{"count":0,"hits":[]}`, Trace: ToolTrace{Name: "search_movies", Status: "done"}}
 }
 
 func TestGuardWithdrawsClaimWithoutTool(t *testing.T) {
@@ -601,7 +601,7 @@ func TestGuardWithdrawsClaimWithoutTool(t *testing.T) {
 	defer engine.Close()
 	tools := &guardTools{}
 	resets := 0
-	h := &Harness{Client: http.DefaultClient, Base: engine.URL, Model: "m"}
+	h := &Harness{Client: http.DefaultClient, Base: engine.URL, Model: "m", Lang: languagePacks["de"]}
 	res, err := h.Run(context.Background(), []chatMessage{{Role: "user", Content: "Gibt es den Mondmann?"}}, tools, func(ev HarnessEvent) {
 		if ev.Type == "reset" {
 			resets++

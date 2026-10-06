@@ -13,17 +13,27 @@ const assistantTask = "content.assist"
 // qualificationBinding describes an exact deployment, not a model family or a
 // RAM recommendation. Empty runtime attestations must never match a grant.
 type qualificationBinding struct {
-	ModelDigest, EngineDigest, HardwareProfile, OSBuild string
-	ContractDigest, AdapterDigest                       string
-	ContextTokens                                       int
-	Temperature                                         float64
-	Thinking                                            string
+	ModelDigest     string  `json:"modelDigest"`
+	EngineDigest    string  `json:"engineDigest"`
+	HardwareProfile string  `json:"hardwareProfile"`
+	OSBuild         string  `json:"osBuild"`
+	ContractDigest  string  `json:"contractDigest"`
+	AdapterDigest   string  `json:"adapterDigest"`
+	ContextTokens   int     `json:"contextTokens"`
+	Temperature     float64 `json:"temperature"`
+	Thinking        string  `json:"thinking"`
+	// Language is the answer language; quality is measured per language.
+	Language string `json:"language"`
 }
 
 type qualificationRecord struct {
-	ID, Task, Status, EvidenceDigest, SuiteDigest string
-	Binding                                       qualificationBinding
-	Expires                                       time.Time
+	ID             string               `json:"id"`
+	Task           string               `json:"task"`
+	Status         string               `json:"status"`
+	EvidenceDigest string               `json:"evidenceDigest"`
+	SuiteDigest    string               `json:"suiteDigest"`
+	Binding        qualificationBinding `json:"binding"`
+	Expires        time.Time            `json:"expires"`
 }
 
 // Immutable after construction. Neither hub.json, an HTTP request nor an
@@ -39,7 +49,7 @@ type qualificationPolicy struct {
 func (b qualificationBinding) complete() bool {
 	return b.ModelDigest != "" && b.EngineDigest != "" && b.HardwareProfile != "" &&
 		b.OSBuild != "" && b.ContractDigest != "" && b.AdapterDigest != "" &&
-		b.ContextTokens > 0 && (b.Thinking == "off" || b.Thinking == "on")
+		b.ContextTokens > 0 && (b.Thinking == "off" || b.Thinking == "on") && b.Language != ""
 }
 
 func qualificationError() error {
@@ -62,15 +72,18 @@ func (p qualificationPolicy) evaluate(task string, binding qualificationBinding,
 	return "", qualificationError()
 }
 
-func assistantContractDigest() string {
+func assistantContractDigest(lang *languagePack) string {
 	defs := append(append(movieTools(), documentTools()...), photoTools()...)
 	// Freeze variable prompt inputs so text/schema edits invalidate evidence.
-	b, _ := json.Marshal([]any{PromptVersion, SystemPrompt("qualification", time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), defs), defs})
+	b, _ := json.Marshal([]any{PromptVersion, lang.Code, SystemPrompt("qualification", time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), defs, lang), defs})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
 
-func (a *AI) qualify(task string) (string, error) {
+func (a *AI) qualify(task string, lang *languagePack) (string, error) {
+	if lang == nil {
+		return "", qualificationError()
+	}
 	model, ok := catalogModel(a.hub.store.Read().Modules[ModuleAI].Model)
 	if !ok || a.qualification.runtime == nil {
 		return "", qualificationError()
@@ -80,7 +93,8 @@ func (a *AI) qualify(task string) (string, error) {
 	binding.ContextTokens = model.ContextTokens
 	binding.Temperature = model.Temperature
 	binding.Thinking = "off"
-	binding.ContractDigest = assistantContractDigest()
+	binding.ContractDigest = assistantContractDigest(lang)
+	binding.Language = lang.Code
 	return a.qualification.evaluate(task, binding, time.Now())
 }
 

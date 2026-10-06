@@ -297,14 +297,14 @@ func TestRealDocumentsModule(t *testing.T) {
 	tools := &profileTools{hub: e.hub, id: Identity{UserID: userA}, sources: &sourceBook{Items: map[string]*Source{}}, defs: documentTools(),
 		docs: hubDocuments{e.hub.docs, Identity{UserID: userA}}}
 	result := tools.Call(context.Background(), "search_documents", json.RawMessage(`{"query":"Rechnung"}`))
-	if !strings.Contains(result.Content, "RE-2026-0815") || strings.Contains(result.Content, "Arzt") || !strings.Contains(result.Content, `"quelle":"Q1"`) {
+	if !strings.Contains(result.Content, "RE-2026-0815") || strings.Contains(result.Content, "Arzt") || !strings.Contains(result.Content, `"source":"Q1"`) {
 		t.Fatalf("tool %s", result.Content)
 	}
-	read := tools.Call(context.Background(), "read_document", json.RawMessage(`{"quelle":"Q1"}`))
+	read := tools.Call(context.Background(), "read_document", json.RawMessage(`{"source":"Q1"}`))
 	if !strings.Contains(read.Content, "15.11.2026") {
 		t.Fatalf("read %s", read.Content)
 	}
-	if fake := tools.Call(context.Background(), "read_document", json.RawMessage(`{"quelle":"RE-2026-0815"}`)); !strings.Contains(fake.Content, "fehler") {
+	if fake := tools.Call(context.Background(), "read_document", json.RawMessage(`{"source":"RE-2026-0815"}`)); !strings.Contains(fake.Content, "fehler") {
 		t.Fatal("invented source accepted")
 	}
 }

@@ -29,8 +29,10 @@ type CastOptions struct {
 }
 
 type castFixture struct {
-	Version     string   `json:"version"`
-	Prompt      string   `json:"prompt"`
+	Version string `json:"version"`
+	Prompt  string `json:"prompt"`
+	// Language is the user's language of this suite (answer language).
+	Language    string   `json:"language"`
 	Speculation []string `json:"speculation"`
 	Data        struct {
 		Movies []struct {
@@ -81,7 +83,8 @@ type castCase struct {
 		NoCitations      bool     `json:"no_citations"`
 		Question         bool     `json:"question"`
 		NoForeignMarkers bool     `json:"no_foreign_markers"`
-		German           bool     `json:"german"`
+		German           bool     `json:"german"` // legacy name of language
+		Language         bool     `json:"language"`
 	} `json:"checks"`
 }
 
@@ -263,6 +266,10 @@ func RunCasting(o CastOptions) error {
 	if err = json.Unmarshal(raw, &f); err != nil || f.Prompt != PromptVersion {
 		return errors.New("fixture does not match the product prompt version")
 	}
+	lang, ok := languageFor(f.Language)
+	if !ok {
+		return errors.New("fixture has no supported language")
+	}
 	fixtureHash, _ := fileHash(o.Fixture)
 	rubricHash, err := fileHash(o.Rubric)
 	if err != nil {
@@ -281,7 +288,7 @@ func RunCasting(o CastOptions) error {
 	}
 	_ = serviceCall(ctx, e.client, "GET", base+"/api/version", nil, nil, &version)
 	env := map[string]any{"started": time.Now().UTC(), "fixture": f.Version, "fixtureSha256": fixtureHash, "rubricSha256": rubricHash,
-		"prompt": PromptVersion, "engine": version.Version, "engineSha256": engineHash, "networkLock": e.status().NetworkLock,
+		"prompt": PromptVersion, "language": lang.Code, "engine": version.Version, "engineSha256": engineHash, "networkLock": e.status().NetworkLock,
 		"settings": map[string]any{"num_ctx": 8192, "num_predict": 1024, "temperature": 0, "seed": 42, "thinking": false, "rounds": 4},
 		"memoryGB": systemMemoryGB(), "os": runtime.GOOS + "/" + runtime.GOARCH, "models": []any{}}
 	if out, err := exec.Command("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string").Output(); err == nil {
@@ -305,7 +312,7 @@ func RunCasting(o CastOptions) error {
 		env["models"] = append(env["models"].([]any), model)
 		writeEnv()
 		off := false
-		h := &Harness{Client: e.stream, Base: base, Model: model.ID, Rounds: 4,
+		h := &Harness{Client: e.stream, Base: base, Model: model.ID, Rounds: 4, Lang: lang,
 			Options: map[string]any{"num_ctx": 8192, "temperature": 0, "seed": 42, "num_predict": 1024}}
 		h.Think = (&AI{engine: e, show: map[string]bool{}}).thinkFlag(ctx, base, model.ID, &off)
 		for rep := 1; rep <= o.Repetitions; rep++ {
@@ -336,9 +343,9 @@ func castOne(ctx context.Context, h *Harness, f *castFixture, c castCase, model 
 	}
 	data := castData{f: f, fail: fail}
 	book := &sourceBook{Items: map[string]*Source{}}
-	tools := &recordingTools{profileTools: &profileTools{sources: book, media: data, docs: data, photos: data,
+	tools := &recordingTools{profileTools: &profileTools{sources: book, media: data, docs: data, photos: data, language: h.Lang,
 		defs: append(append(movieTools(), documentTools()...), photoTools()...)}}
-	msgs := []chatMessage{{Role: "system", Content: SystemPrompt(model.Name, time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC), tools.defs)}}
+	msgs := []chatMessage{{Role: "system", Content: SystemPrompt(model.Name, time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC), tools.defs, h.Lang)}}
 	for _, m := range c.History {
 		content := m.Text
 		if len(m.Sources) > 0 {
@@ -350,7 +357,7 @@ func castOne(ctx context.Context, h *Harness, f *castFixture, c castCase, model 
 					refs = append(refs, book.add(Source{Service: "media", Kind: "movie", ObjectID: movie.ID, Title: movie.Title, Subtitle: movieSubtitle(movie)}).Ref)
 				}
 			}
-			content += "\n\n(Quellen dieser Antwort: " + bookMemo(book, refs) + ")"
+			content += "\n\n(Sources of this answer: " + bookMemo(book, refs) + ")"
 		}
 		msgs = append(msgs, chatMessage{Role: m.Role, Content: content})
 	}
@@ -377,7 +384,7 @@ func castOne(ctx context.Context, h *Harness, f *castFixture, c castCase, model 
 	if err != nil {
 		r.Error = err.Error()
 	}
-	r.Failures = score(c, f, data, book, r)
+	r.Failures = score(c, f, data, book, r, h.Lang)
 	r.Passed = len(r.Failures) == 0
 	return r
 }
@@ -386,7 +393,7 @@ func containsFold(hay, needle string) bool {
 	return strings.Contains(strings.ToLower(hay), strings.ToLower(needle))
 }
 
-func score(c castCase, f *castFixture, data castData, book *sourceBook, r castResult) []string {
+func score(c castCase, f *castFixture, data castData, book *sourceBook, r castResult, lang *languagePack) []string {
 	var fails []string
 	add := func(format string, args ...any) { fails = append(fails, fmt.Sprintf(format, args...)) }
 	ch := c.Checks
@@ -403,7 +410,7 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	if cjk.MatchString(r.Raw) {
 		add("foreign script")
 	}
-	if claimed.MatchString(answer) {
+	if lang.claimed.MatchString(answer) {
 		add("claims executed change")
 	}
 	for i, want := range ch.Calls {
@@ -507,8 +514,8 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	if ch.NoCitations && len(r.Cited) > 0 {
 		add("unexpected citation")
 	}
-	if ch.German && looksEnglish(answer) {
-		add("answer not German")
+	if (ch.German || ch.Language) && lang.wrongLanguage(answer) {
+		add("answer not in %s", lang.Name)
 	}
 	if ch.Question && !strings.Contains(answer, "?") {
 		add("no follow-up question")
@@ -571,9 +578,9 @@ func checkArgs(name string, expectedArgs map[string]any, allowExtra []string, ar
 		}
 		switch e := expected.(type) {
 		case string:
-			if key == "quelle" {
+			if key == "source" {
 				if ref := data.objectRef(book, e); ref == "" || strings.Trim(fmt.Sprint(value), "[]") != ref {
-					add("%s quelle %v, want %s", name, value, ref)
+					add("%s source %v, want %s", name, value, ref)
 				}
 			} else if s, ok := value.(string); !ok || !containsFold(s, e) {
 				add("%s %s=%v", name, key, value)

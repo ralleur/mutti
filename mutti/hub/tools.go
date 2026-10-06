@@ -71,6 +71,14 @@ type profileTools struct {
 	media     mediaBackend
 	docs      documentBackend
 	photos    photoBackend
+	language  *languagePack
+}
+
+func (t *profileTools) lang() *languagePack {
+	if t.language == nil {
+		return languagePacks[defaultLanguage]
+	}
+	return t.language
 }
 
 type documentBackend interface {
@@ -128,46 +136,46 @@ type Movie struct {
 
 func movieTools() []toolDef {
 	return []toolDef{
-		newTool("search_movies", "Durchsucht die für dieses Profil freigegebene Filmbibliothek. Liefert Titel, Jahr, Laufzeit, Genres und Quellenmarke im Feld quelle, aber keine Inhaltsbeschreibung; dafür danach get_movie aufrufen. Alle Filter sind optional und werden kombiniert.", map[string]any{
-			"query":                   map[string]any{"type": "string", "description": "Titel oder Stichwort aus Titel oder Beschreibung. Weglassen, um alle Filme zu filtern. Jahreszahlen, Laufzeiten und Genres gehören in die eigenen Filter."},
-			"genre":                   map[string]any{"type": "string", "description": "Genre, z. B. Komödie."},
-			"year":                    map[string]any{"type": "integer", "description": "Nur Filme aus diesem Erscheinungsjahr, z. B. 2021."},
-			"unwatched":               map[string]any{"type": "boolean", "description": "true = nur noch nicht gesehene Filme. Weglassen, wenn egal."},
-			"watched":                 map[string]any{"type": "boolean", "description": "true = nur schon gesehene Filme. Weglassen, wenn egal."},
-			"runtime_under_minutes":   map[string]any{"type": "integer", "description": "Für „unter N Minuten“ oder „kürzer als N Minuten“: nur Filme, die kürzer als N Minuten sind. Zwei Stunden = 120."},
-			"runtime_under_seconds":   map[string]any{"type": "integer", "description": "Wie runtime_under_minutes, aber für Angaben in Sekunden."},
-			"runtime_at_most_minutes": map[string]any{"type": "integer", "description": "Nur für „höchstens/maximal/bis zu N Minuten“ oder „N Minuten oder weniger“: Filme bis einschließlich N Minuten."},
-			"runtime_at_most_seconds": map[string]any{"type": "integer", "description": "Wie runtime_at_most_minutes, aber für Angaben in Sekunden."},
-			"sort":                    map[string]any{"type": "string", "enum": []string{"runtime", "runtime_desc", "title", "year", "added"}, "description": "runtime = kürzeste zuerst, runtime_desc = längste zuerst, title = alphabetisch, year = neueste Erscheinung zuerst, added = zuletzt hinzugefügt zuerst."},
-			"limit":                   map[string]any{"type": "integer", "description": "Maximale Trefferzahl, 1 bis 10."},
+		newTool("search_movies", "Searches the movie library this profile may use. Returns title, year, runtime, genres and the source marker in the field source, but no plot description; call get_movie for that. All filters are optional and combined.", map[string]any{
+			"query":                   map[string]any{"type": "string", "description": "Title or keyword from the title or description, in the user's language. Omit it to filter all movies. Years, runtimes and genres belong in their own filters."},
+			"genre":                   map[string]any{"type": "string", "description": "Genre as named in the library, e.g. Komödie or Comedy."},
+			"year":                    map[string]any{"type": "integer", "description": "Only movies released in this year, e.g. 2021."},
+			"unwatched":               map[string]any{"type": "boolean", "description": "true = only movies not watched yet. Omit if it does not matter."},
+			"watched":                 map[string]any{"type": "boolean", "description": "true = only movies already watched. Omit if it does not matter."},
+			"runtime_under_minutes":   map[string]any{"type": "integer", "description": "For \"under N minutes\" or \"shorter than N minutes\": only movies shorter than N minutes. Two hours = 120."},
+			"runtime_under_seconds":   map[string]any{"type": "integer", "description": "Like runtime_under_minutes, but for values in seconds."},
+			"runtime_at_most_minutes": map[string]any{"type": "integer", "description": "Only for \"at most/no more than/up to N minutes\" or \"N minutes or less\": movies up to and including N minutes."},
+			"runtime_at_most_seconds": map[string]any{"type": "integer", "description": "Like runtime_at_most_minutes, but for values in seconds."},
+			"sort":                    map[string]any{"type": "string", "enum": []string{"runtime", "runtime_desc", "title", "year", "added"}, "description": "runtime = shortest first, runtime_desc = longest first, title = alphabetical, year = newest release first, added = most recently added first."},
+			"limit":                   map[string]any{"type": "integer", "description": "Maximum number of hits, 1 to 10."},
 		}),
-		newTool("get_movie", "Liest Details (Beschreibung, Jahr, Laufzeit, Genres) eines Films aus einem früheren Ergebnis.", map[string]any{
-			"quelle": map[string]any{"type": "string", "description": "Quellenmarke wie Q1 aus einem Ergebnis."},
-		}, "quelle"),
-		newTool("propose_favorite", "Schlägt vor, einen Film als Favorit zu markieren oder die Markierung zu entfernen. Ändert nichts; der Nutzer bestätigt selbst.", map[string]any{
-			"quelle":   map[string]any{"type": "string", "description": "Quellenmarke des Films, z. B. Q1."},
-			"favorite": map[string]any{"type": "boolean", "description": "true = als Favorit markieren, false = Markierung entfernen."},
-		}, "quelle", "favorite"),
+		newTool("get_movie", "Reads details (description, year, runtime, genres) of a movie from an earlier result.", map[string]any{
+			"source": map[string]any{"type": "string", "description": "Source marker such as Q1 from a result."},
+		}, "source"),
+		newTool("propose_favorite", "Proposes to mark a movie as favourite or to remove the mark. Changes nothing; the user confirms it.", map[string]any{
+			"source":   map[string]any{"type": "string", "description": "Source marker of the movie, e.g. Q1."},
+			"favorite": map[string]any{"type": "boolean", "description": "true = mark as favourite, false = remove the mark."},
+		}, "source", "favorite"),
 	}
 }
 
 func documentTools() []toolDef {
 	return []toolDef{
-		newTool("search_documents", "Volltextsuche im Dokumentenarchiv dieses Profils. Liefert Titel, Datum, einen gekürzten Textauszug und Quellenmarke. Steht die Antwort nicht im Auszug, lies das Dokument mit read_document.", map[string]any{
-			"query": map[string]any{"type": "string", "description": "Suchbegriffe, z. B. Stadtwerke Rechnung."},
+		newTool("search_documents", "Full-text search in this profile's document archive. Returns title, date, a shortened text excerpt and the source marker. If the excerpt does not contain the answer, read the document with read_document.", map[string]any{
+			"query": map[string]any{"type": "string", "description": "Search terms in the language of the documents, usually the user's language, e.g. Stadtwerke Rechnung."},
 		}, "query"),
-		newTool("read_document", "Liest den erkannten Text eines Dokuments aus einem früheren Suchergebnis.", map[string]any{
-			"quelle": map[string]any{"type": "string", "description": "Quellenmarke wie Q2."},
-		}, "quelle"),
+		newTool("read_document", "Reads the recognised text of a document from an earlier search result.", map[string]any{
+			"source": map[string]any{"type": "string", "description": "Source marker such as Q2."},
+		}, "source"),
 	}
 }
 
 func photoTools() []toolDef {
 	return []toolDef{
-		newTool("search_photos", "Sucht Fotos und private Videos dieses Profils nach Beschreibung, Dateiname, Ort und Zeitraum.", map[string]any{
-			"query": map[string]any{"type": "string", "description": "Suchbegriff, z. B. See oder Garten. Leer lassen für nur Zeitraum."},
-			"from":  map[string]any{"type": "string", "description": "Frühestes Aufnahmedatum JJJJ-MM-TT, optional."},
-			"to":    map[string]any{"type": "string", "description": "Spätestes Aufnahmedatum JJJJ-MM-TT, optional."},
+		newTool("search_photos", "Searches this profile's photos and private videos by description, file name, place and period.", map[string]any{
+			"query": map[string]any{"type": "string", "description": "Search term in the user's language, e.g. See or Garten. Leave empty to search by period only."},
+			"from":  map[string]any{"type": "string", "description": "Earliest capture date YYYY-MM-DD, optional."},
+			"to":    map[string]any{"type": "string", "description": "Latest capture date YYYY-MM-DD, optional."},
 		}),
 	}
 }
@@ -180,7 +188,7 @@ func toolJSON(v any) string {
 }
 
 func toolError(name, message string) ToolResult {
-	return ToolResult{Content: toolJSON(map[string]string{"fehler": message}), Trace: ToolTrace{Name: name, Status: "failed", Summary: message}}
+	return ToolResult{Content: toolJSON(map[string]string{"error": message}), Trace: ToolTrace{Name: name, Status: "failed", Summary: message}}
 }
 
 func formatRuntime(seconds int) string {
@@ -208,12 +216,12 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		}
 	}
 	if !allowed {
-		return toolError(name, "Dieses Werkzeug ist nicht verfügbar.")
+		return toolError(name, "This tool is not available.")
 	}
 	qualification := ""
 	if t.hub != nil {
 		var err error
-		qualification, err = t.hub.ai.qualify(toolTask(name))
+		qualification, err = t.hub.ai.qualify(toolTask(name), t.lang())
 		if err != nil {
 			return toolError(name, "qualification_required")
 		}
@@ -242,11 +250,11 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			Limit        float64 `json:"limit"`
 		}
 		if json.Unmarshal(raw, &a) != nil {
-			return toolError(name, "Ungültige Argumente.")
+			return toolError(name, "Invalid arguments.")
 		}
 		movies, err := t.media.Movies(ctx)
 		if err != nil {
-			return toolError(name, "Die Filmbibliothek ist gerade nicht verfügbar.")
+			return toolError(name, "The movie library is currently unavailable.")
 		}
 		f := movieFilter{Query: a.Query, Genre: a.Genre, Year: int(a.Year), Watched: a.Watched, Sort: a.Sort, Limit: int(a.Limit)}
 		// An explicit false means the opposite filter, as in the v3 contract.
@@ -261,83 +269,84 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		for _, m := range hits {
 			s := t.sources.add(Source{Service: "media", Kind: "movie", ObjectID: m.ID, Title: m.Title, Subtitle: movieSubtitle(m),
 				Facts: map[string]any{"seconds": m.Seconds}, Revision: m.Revision})
-			out = append(out, map[string]any{"quelle": s.Ref, "titel": m.Title, "jahr": m.Year, "laufzeit": formatRuntime(m.Seconds),
-				"laufzeit_sekunden": m.Seconds, "gesehen": m.Watched, "genres": m.Genres})
+			out = append(out, map[string]any{"source": s.Ref, "title": m.Title, "year": m.Year, "runtime": formatRuntime(m.Seconds),
+				"runtime_seconds": m.Seconds, "watched": m.Watched, "genres": m.Genres})
 		}
-		return ToolResult{Content: toolJSON(map[string]any{"anzahl": len(out), "treffer": out}),
-			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf("%d Filme gefunden", len(out))}}
+		return ToolResult{Content: toolJSON(map[string]any{"count": len(out), "hits": out}),
+			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["movies"], len(out))}}
 	case "get_movie":
 		var a struct {
-			Quelle string `json:"quelle"`
+			Quelle string `json:"source"`
 		}
 		_ = json.Unmarshal(raw, &a)
 		s := t.source(a.Quelle)
 		if s == nil || s.Service != "media" {
-			return toolError(name, "Unbekannte Quellenmarke.")
+			return toolError(name, "Unknown source marker.")
 		}
 		m, err := t.media.Movie(ctx, s.ObjectID)
 		if err != nil {
-			return toolError(name, "Der Film ist nicht mehr verfügbar.")
+			return toolError(name, "The movie is no longer available.")
 		}
 		overview := m.Overview
 		if len(overview) > 800 {
 			overview = overview[:800]
 		}
-		return ToolResult{Content: toolJSON(map[string]any{"quelle": s.Ref, "titel": m.Title, "jahr": m.Year, "laufzeit": formatRuntime(m.Seconds),
-			"laufzeit_sekunden": m.Seconds, "gesehen": m.Watched, "genres": m.Genres, "beschreibung_daten": overview}),
+		return ToolResult{Content: toolJSON(map[string]any{"source": s.Ref, "title": m.Title, "year": m.Year, "runtime": formatRuntime(m.Seconds),
+			"runtime_seconds": m.Seconds, "watched": m.Watched, "genres": m.Genres, "description_data": overview}),
 			Trace: ToolTrace{Name: name, Status: "done", Summary: m.Title}}
 	case "propose_favorite":
 		var a struct {
-			Quelle   string `json:"quelle"`
+			Quelle   string `json:"source"`
 			Favorite *bool  `json:"favorite"`
 		}
 		_ = json.Unmarshal(raw, &a)
 		s := t.source(a.Quelle)
 		if s == nil || s.Service != "media" || a.Favorite == nil {
-			return toolError(name, "Unbekannte Quellenmarke.")
+			return toolError(name, "Unknown source marker.")
 		}
 		p := &Proposal{ID: randomID(), Kind: "favorite", Ref: s.Ref, Favorite: *a.Favorite, State: "pending", Created: time.Now().UTC(),
-			Expires: time.Now().Add(15 * time.Minute).UTC(), Device: t.id.Device, Qualification: qualification}
+			Expires: time.Now().Add(15 * time.Minute).UTC(), Device: t.id.Device, Qualification: qualification,
+			Language: t.lang().Code}
 		t.proposals = append(t.proposals, p)
-		return ToolResult{Content: toolJSON(map[string]any{"vorschlag": "angelegt", "status": "wartet auf Bestätigung durch den Nutzer; noch nichts geändert", "quelle": s.Ref}),
-			Trace: ToolTrace{Name: name, Status: "done", Summary: "Vorschlag wartet auf Bestätigung"}}
+		return ToolResult{Content: toolJSON(map[string]any{"proposal": "created", "status": "waiting for the user's confirmation; nothing has changed yet", "source": s.Ref}),
+			Trace: ToolTrace{Name: name, Status: "done", Summary: t.lang().found["proposal"]}}
 	case "search_documents":
 		var a struct {
 			Query string `json:"query"`
 		}
 		if json.Unmarshal(raw, &a) != nil || strings.TrimSpace(a.Query) == "" || len(a.Query) > 200 {
-			return toolError(name, "Bitte einen Suchbegriff angeben.")
+			return toolError(name, "Please provide a search term.")
 		}
 		items, err := t.docs.Search(ctx, a.Query)
 		if err != nil {
-			return toolError(name, "Das Dokumentenarchiv ist gerade nicht verfügbar.")
+			return toolError(name, "The document archive is currently unavailable.")
 		}
 		out := []map[string]any{}
 		for _, d := range items {
 			s := t.sources.add(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created, Revision: d.revision})
-			out = append(out, map[string]any{"quelle": s.Ref, "titel": d.Title, "datum": d.Created, "auszug_daten": d.Snippet})
+			out = append(out, map[string]any{"source": s.Ref, "title": d.Title, "date": d.Created, "excerpt_data": d.Snippet})
 		}
-		return ToolResult{Content: toolJSON(map[string]any{"anzahl": len(out), "treffer": out}),
-			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf("%d Dokumente gefunden", len(out))}}
+		return ToolResult{Content: toolJSON(map[string]any{"count": len(out), "hits": out}),
+			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["documents"], len(out))}}
 	case "read_document":
 		var a struct {
-			Quelle string `json:"quelle"`
+			Quelle string `json:"source"`
 		}
 		_ = json.Unmarshal(raw, &a)
 		s := t.source(a.Quelle)
 		if s == nil || s.Service != "documents" {
-			return toolError(name, "Unbekannte Quellenmarke.")
+			return toolError(name, "Unknown source marker.")
 		}
 		n, _ := strconv.Atoi(s.ObjectID)
 		d, err := t.docs.Read(ctx, n)
 		if err != nil {
-			return toolError(name, "Das Dokument ist nicht verfügbar.")
+			return toolError(name, "The document is not available.")
 		}
 		text := *d.Content
 		if len(text) > 6000 {
 			text = text[:6000] + " …"
 		}
-		return ToolResult{Content: toolJSON(map[string]any{"quelle": s.Ref, "titel": d.Title, "datum": d.Created, "text_daten": text}),
+		return ToolResult{Content: toolJSON(map[string]any{"source": s.Ref, "title": d.Title, "date": d.Created, "text_data": text}),
 			Trace: ToolTrace{Name: name, Status: "done", Summary: d.Title}}
 	case "search_photos":
 		var a struct {
@@ -346,11 +355,11 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			To    string `json:"to"`
 		}
 		if json.Unmarshal(raw, &a) != nil || len(a.Query) > 200 || (a.From != "" && !dateParam.MatchString(a.From)) || (a.To != "" && !dateParam.MatchString(a.To)) {
-			return toolError(name, "Ungültige Argumente.")
+			return toolError(name, "Invalid arguments.")
 		}
 		items, err := t.photos.Find(ctx, a.Query, a.From, a.To)
 		if err != nil {
-			return toolError(name, "Die Fotobibliothek ist gerade nicht verfügbar.")
+			return toolError(name, "The photo library is currently unavailable.")
 		}
 		out := []map[string]any{}
 		for _, p := range items {
@@ -359,12 +368,12 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 				title = p.FileName
 			}
 			s := t.sources.add(Source{Service: "photos", Kind: p.Type, ObjectID: p.ID, Title: title, Subtitle: dateOnly(p.Taken), Revision: p.revision})
-			out = append(out, map[string]any{"quelle": s.Ref, "art": p.Type, "aufgenommen": dateOnly(p.Taken), "beschreibung_daten": p.Description, "ort": p.City})
+			out = append(out, map[string]any{"source": s.Ref, "kind": p.Type, "taken": dateOnly(p.Taken), "description_data": p.Description, "place": p.City})
 		}
-		return ToolResult{Content: toolJSON(map[string]any{"anzahl": len(out), "treffer": out}),
-			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf("%d Fotos/Videos gefunden", len(out))}}
+		return ToolResult{Content: toolJSON(map[string]any{"count": len(out), "hits": out}),
+			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["photos"], len(out))}}
 	}
-	return toolError(name, "Unbekanntes Werkzeug.")
+	return toolError(name, "Unknown tool.")
 }
 
 // firstSeconds picks the first given bound from (seconds, minutes) pairs.

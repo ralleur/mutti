@@ -17,7 +17,7 @@ func TestDumpContract(t *testing.T) {
 	}
 	defs := append(append(movieTools(), documentTools()...), photoTools()...)
 	b, _ := json.MarshalIndent(map[string]any{"prompt": PromptVersion, "tools": defs,
-		"system": SystemPrompt("Qwen 3.5 4B", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC), defs)}, "", " ")
+		"system": SystemPrompt("Qwen 3.5 4B", time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC), defs, languagePacks["en"])}, "", " ")
 	if err := os.WriteFile(path, b, 0600); err != nil {
 		t.Fatal(err)
 	}
