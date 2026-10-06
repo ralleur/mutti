@@ -41,7 +41,38 @@ cp "$ROOT/mutti/design/assets/Sora-OFL.txt" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/THIRD-PARTY.md" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/components.lock.json" "$APP/Contents/Resources/"
 python3 "$ROOT/mutti/packaging/provenance.py" "$WEB" "$APP/Contents/Resources/build-provenance.json"
-# Local development signature only. Release signing/notarization is a separate gate.
-codesign --force --deep --sign - "$APP"
-codesign --verify --deep --strict "$APP"
+# Local development signature by default. Release signing is a separate gate: with
+# MUTTI_SIGN_IDENTITY set (a "Developer ID Application" identity in an unlocked keychain)
+# the bundle is signed inside-out with the hardened runtime and secure timestamps, which
+# notarization requires. --deep is not used there because it would sign nested code with
+# the outer entitlements instead of per-executable ones.
+if [ -z "${MUTTI_SIGN_IDENTITY:-}" ]; then
+  codesign --force --deep --sign - "$APP"
+  codesign --verify --deep --strict "$APP"
+else
+  RESOURCES="$APP/Contents/Resources"
+  RUNTIME_ENTITLEMENTS="$ROOT/mutti/packaging/macos/runtime.entitlements"
+  APP_ENTITLEMENTS="$ROOT/mutti/apps/macos/Mutti.entitlements"
+  sign_hardened() { codesign --force --options runtime --timestamp --sign "$MUTTI_SIGN_IDENTITY" "$@"; }
+  # 1. Every Mach-O file under Contents/Resources first (.dylib by name, everything else by
+  #    magic), so a native library dropped into any payload directory is signed too. Only the
+  #    .NET host gets the JIT entitlements; ffmpeg, ffprobe, mutti-connect and mutti-migrate
+  #    run with the plain hardened runtime. Managed .dll files and web assets are not Mach-O.
+  while IFS= read -r -d '' candidate; do
+    case "$candidate" in
+      *.dylib) ;;
+      *) case "$(file -b "$candidate")" in Mach-O*) ;; *) continue;; esac ;;
+    esac
+    if [ "$candidate" = "$RESOURCES/server/jellyfin" ]; then
+      sign_hardened --entitlements "$RUNTIME_ENTITLEMENTS" "$candidate"
+    else
+      sign_hardened "$candidate"
+    fi
+  done < <(find "$RESOURCES" -type f -print0)
+  # 2. The bundle last: this signs the main executable Contents/MacOS/Mutti with the shell's
+  #    entitlements and seals Contents/Resources (including the signatures written above).
+  sign_hardened --entitlements "$APP_ENTITLEMENTS" "$APP"
+  # spctl --assess only passes after notarization; the release workflow staples the ticket.
+  codesign --verify --deep --strict "$APP"
+fi
 echo "$APP"

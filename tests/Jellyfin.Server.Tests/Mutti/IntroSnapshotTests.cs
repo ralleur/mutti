@@ -24,13 +24,13 @@ public sealed class IntroSnapshotTests : IDisposable
         command.CommandText = "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE Segments(Id TEXT, StartTicks INTEGER, Fingerprint BLOB); INSERT INTO Segments VALUES('intro', 20, X'00112233');";
         command.ExecuteNonQuery();
         Assert.True(File.Exists(path + "-wal"));
-        var before = File.ReadAllBytes(path);
+        var before = ReadShared(path);
         var config = Path.Combine(_root, "source", "plugins", "configurations");
         Directory.CreateDirectory(config);
         File.WriteAllText(Path.Combine(config, "IntroSkipper.xml"), "<PluginConfiguration><SkipFirstEpisode>true</SkipFirstEpisode></PluginConfiguration>");
         var first = Path.Combine(_root, "first");
         global::Mutti.IntroSkipper.IntroSnapshot.Create(Path.Combine(_root, "source"), first);
-        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Equal(before, ReadShared(path));
         Assert.Empty(Directory.GetFiles(first, "*-wal"));
         Assert.Empty(Directory.GetFiles(first, "*-shm"));
         using var snapshot = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path.Combine(first, "introskipper-v2.db"), Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
@@ -67,5 +67,17 @@ public sealed class IntroSnapshotTests : IDisposable
         {
             Directory.Delete(_root, recursive: true);
         }
+    }
+
+    // The writer connection stays open on purpose: closing it would checkpoint the WAL into the
+    // main file and the test would no longer prove that committed WAL pages are captured. SQLite
+    // keeps that file open with write access, and on Windows File.ReadAllBytes (FileShare.Read)
+    // then fails with a sharing violation, so read it with FileShare.ReadWrite instead.
+    private static byte[] ReadShared(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
     }
 }
