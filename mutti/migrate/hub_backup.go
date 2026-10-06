@@ -13,9 +13,11 @@ import (
 )
 
 // Module data in a backup: owner configuration with profile-scoped service
-// credentials, conversations, chat attachments and upload task ownership.
+// credentials, conversations, chat attachments, upload task ownership, the
+// content ID index and the action journal (so references and recorded
+// outcomes survive a restore and an unknown outcome is never repeated).
 // Engine models are re-downloadable artifacts and are deliberately excluded.
-var hubBackupName = regexp.MustCompile(`^hub/(hub\.json|document-tasks\.json|ai/conversations/[0-9a-f]{32}/[0-9a-f]{32}\.json|ai/attachments/[0-9a-f]{32}/[0-9a-f]{32}/[0-9a-f]{32}(\.txt)?)$`)
+var hubBackupName = regexp.MustCompile(`^hub/(hub\.json|document-tasks\.json|content-ids\.json|actions\.json|ai/conversations/[0-9a-f]{32}/[0-9a-f]{32}\.json|ai/attachments/[0-9a-f]{32}/[0-9a-f]{32}/[0-9a-f]{32}(\.txt)?)$`)
 
 func (m *Manager) snapshotHub(target string) ([]string, error) {
 	source := m.hubDirectory()
@@ -77,7 +79,7 @@ func (m *Manager) restoreHub(b *storedBackup) error {
 	m.hub = nil
 	current := m.hubDirectory()
 	keep := filepath.Join(m.Options.Root, "hub-before-restore-"+time.Now().UTC().Format("20060102-150405"))
-	for _, rel := range []string{"hub.json", "document-tasks.json", "ai/conversations", "ai/attachments"} {
+	for _, rel := range []string{"hub.json", "document-tasks.json", "content-ids.json", "actions.json", "ai/conversations", "ai/attachments"} {
 		from := filepath.Join(current, filepath.FromSlash(rel))
 		if _, err := os.Lstat(from); err == nil {
 			to := filepath.Join(keep, filepath.FromSlash(rel))

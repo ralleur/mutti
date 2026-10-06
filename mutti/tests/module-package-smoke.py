@@ -9,7 +9,12 @@ Owner actions use the Jellyfin bridge exactly like the web management.
 
   module-package-smoke.py --app build/macos/osx-arm64/Mutti.app \
       --root build/module-e2e-NEW --testenv build/module-testenv/private.json \
-      --model qwen3.5:4b
+      [--model qwen3.5:4b [--expect-qualified]]
+
+Since P0 no deployment is qualified, so by default the AI must stay locked
+(qualification_required) while manual content access keeps working (P1).
+--expect-qualified runs the positive AI checks AT-03..AT-12; it can only pass
+once a trusted qualification for exactly this deployment exists (P2).
 """
 import argparse
 import json
@@ -29,7 +34,8 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 parser.add_argument('--app', type=Path, required=True)
 parser.add_argument('--root', type=Path, required=True)
 parser.add_argument('--testenv', type=Path, required=True)
-parser.add_argument('--model', required=True)
+parser.add_argument('--model', help='also install and select this pinned model')
+parser.add_argument('--expect-qualified', action='store_true', help='run the positive AI path (requires real qualification)')
 parser.add_argument('--model-source', choices=('pull', 'adopt'), default='pull')
 parser.add_argument('--keep', action='store_true', help='keep the instance running for native client checks')
 args = parser.parse_args()
@@ -187,10 +193,17 @@ try:
                                 '--listen', f'127.0.0.1:{PORTS["manager"]}', '--origin', f'http://127.0.0.1:{PORTS["manager"]}',
                                 '--backend', f'http://127.0.0.1:{PORTS["jellyfin"]}', '--target-origin', f'http://127.0.0.1:{PORTS["jellyfin"]}',
                                 '--connect-listen', f'127.0.0.1:{PORTS["connect"]}', '--connect-origin', f'http://127.0.0.1:{PORTS["connect"]}'],
-                    dict(os.environ, MUTTI_SIGNAL_URL=f'http://127.0.0.1:{PORTS["broker"]}', MUTTI_STUN_URL='', MUTTI_ICE_INTERFACES='lo0'))
+                    dict(os.environ, MUTTI_SIGNAL_URL=f'http://127.0.0.1:{PORTS["broker"]}', MUTTI_STUN_URL='',
+                         # Native checks with --keep may add the LAN interface (e.g. lo0,en0) for a simulator client.
+                         MUTTI_ICE_INTERFACES=os.environ.get('MUTTI_E2E_ICE', 'lo0')))
     for _ in range(120):
-        if jf('GET', '/Startup/User')[0] == 200:
-            break
+        if manager.poll() is not None:
+            raise AssertionError(f'manager exited with {manager.returncode}; see manager.log')
+        try:
+            if jf('GET', '/Startup/User')[0] == 200:
+                break
+        except urllib.error.URLError:
+            pass  # still starting
         time.sleep(1)
     else:
         raise AssertionError('server did not start')
@@ -256,37 +269,48 @@ try:
     check('Owner state contains no service secrets or passwords', 'secret' not in json.dumps(state) and env_data['accounts']['photos']['alpha']['password'] not in json.dumps(state))
 
     # Local AI: managed engine with OS network lock and a digest-pinned model.
-    ok(hub_admin(f'admin/ai/models/{args.model_source}', {'model': args.model}), 'model download')
-    t0 = time.time()
-    while True:
+    if args.expect_qualified and not args.model:
+        raise SystemExit('--expect-qualified needs --model')
+    if args.model:
+        ok(hub_admin(f'admin/ai/models/{args.model_source}', {'model': args.model}), 'model download')
+        t0 = time.time()
+        while True:
+            engine = ok(hub_admin('admin/state'), 'state')['modules']['ai']['ai']['engine']
+            download = engine.get('download') or {}
+            if download.get('status') in ('done', 'failed'):
+                break
+            if time.time() - t0 > 3600:
+                raise AssertionError('model download timeout')
+            time.sleep(5)
+        check('Model download verified against the pinned digest', download.get('status') == 'done', download)
+        report['modelSeconds'] = round(time.time() - t0, 1)
+        for _ in range(60):
+            status, body = hub_admin('admin/ai/models/select', {'model': args.model})
+            if status == 200:
+                break
+            time.sleep(2)
+        check('Pinned model selected', status == 200, body)
+        ok(hub_admin('admin/enable/ai', {'enabled': True}), 'enable ai')
         engine = ok(hub_admin('admin/state'), 'state')['modules']['ai']['ai']['engine']
-        download = engine.get('download') or {}
-        if download.get('status') in ('done', 'failed'):
-            break
-        if time.time() - t0 > 3600:
-            raise AssertionError('model download timeout')
-        time.sleep(5)
-    check('Model download verified against the pinned digest', download.get('status') == 'done', download)
-    report['modelSeconds'] = round(time.time() - t0, 1)
-    for _ in range(60):
-        status, body = hub_admin('admin/ai/models/select', {'model': args.model})
-        if status == 200:
-            break
-        time.sleep(2)
-    check('Pinned model selected', status == 200, body)
-    ok(hub_admin('admin/enable/ai', {'enabled': True}), 'enable ai')
-    engine = ok(hub_admin('admin/state'), 'state')['modules']['ai']['ai']['engine']
-    check('Managed engine is confined by the macOS network sandbox', engine['networkLock'] == 'verified' and engine['state'] == 'ready', engine)
+        check('Managed engine is confined by the macOS network sandbox', engine['networkLock'] == 'verified' and engine['state'] == 'ready', engine)
 
     # Two paired devices through the real encrypted tunnel.
     alpha = Device('Alpha-Testgeraet', users['Alpha']).pair()
     beta = Device('Beta-Testgeraet', users['Beta']).pair()
+    ai_ready = 'ready' if args.expect_qualified else None
     for _ in range(30):
         caps = alpha.call('GET', 'capabilities')[1]
-        if all(caps['modules'][m]['state'] == 'ready' for m in ('ai', 'photos', 'documents')):
+        if all(caps['modules'][m]['state'] == 'ready' for m in ('photos', 'documents', 'content')) and (ai_ready is None or caps['modules']['ai']['state'] == 'ready'):
             break
         time.sleep(2)
-    check('AT-02 Paired profile sees exactly its allowed modules', all(caps['modules'][m]['state'] == 'ready' for m in ('ai', 'photos', 'documents')), caps)
+    check('AT-02 Paired profile sees exactly its allowed modules', all(caps['modules'][m]['state'] == 'ready' for m in ('photos', 'documents', 'content')), caps)
+    if not args.expect_qualified:
+        expected = 'qualification_required' if args.model else 'not_configured'
+        check(f'P0 AI stays locked without qualification ({expected})', caps['modules']['ai']['state'] == expected and 'chat' not in caps['modules']['ai']['actions'], caps['modules']['ai'])
+        if args.model:
+            status, conv = alpha.call('POST', 'ai/conversations', {'title': ''})
+            status, body = alpha.call('POST', f'ai/conversations/{conv["id"]}/messages', {'text': 'Hallo', 'idempotencyKey': 'locked-1'})
+            check('P0 Direct message API is refused before inference', status == 409 and body.get('code') == 'qualification_required', (status, body))
     status, _ = alpha.call('POST', 'admin/state', {})
     check('Owner module routes are unreachable from a device', status == 403, status)
 
@@ -310,60 +334,91 @@ try:
     status, body = alpha.call('GET', f'documents/{env_data["documents_fixture"]["invoice"]}/preview', raw=True)
     check('DO-01 Preview PDF through the tunnel', status == 200 and body[:4] == b'%PDF')
 
-    # AI path AT-03 .. AT-11 with the real model.
-    status, conv = alpha.call('POST', 'ai/conversations', {'title': ''})
-    cid = conv['id']
-    run, events, done = alpha.ask(cid, 'Suche alle ungesehenen Filme unter 100 Sekunden und sortiere nach Laufzeit.')
-    report['at04'] = {'answer': done['message']['text'], 'sources': [s['title'] for s in done.get('sources', [])], 'events': len(events)}
-    titles = [s['title'] for s in done.get('sources', [])]
-    check('AT-04 Real Jellyfin tool call over profile rights returns the two expected movies', titles[:2] == ['Nordlicht', 'Sommer am See'] and 'Privater Film B' not in json.dumps(done), titles)
-    check('AT-03 Streaming deltas and tool status before completion', any(e['type'] == 'delta' for e in events) and any(e['type'] == 'tool' for e in events))
-    run2, _, done2 = alpha.ask(cid, 'Wie lange dauert der zweite Treffer?')
-    report['at06'] = done2['message']['text']
-    check('AT-06 Follow-up refers to the second hit (95 seconds)', '95' in done2['message']['text'], done2['message']['text'])
-    pdf = (repo / 'build/module-testenv').glob('*.pdf')
-    invoice = subprocess.check_output([sys.executable, '-c', 'import importlib.util,sys;spec=importlib.util.spec_from_file_location("t",sys.argv[1]);t=importlib.util.module_from_spec(spec);spec.loader.exec_module(t);sys.stdout.buffer.write(t.pdf([["Stadtwerke Musterstadt","Rechnung RE-2026-0815","Rechnungsbetrag: 128,40 EUR","Faellig am 15.11.2026"]]))', str(repo / 'mutti/tests/module-testenv.py')])
-    status, attachment = alpha.call('POST', f'ai/conversations/{cid}/attachments', invoice, {'Content-Type': 'application/pdf', 'X-Filename': 'rechnung.pdf'})
-    check('AT-07 PDF attachment text extracted locally', status == 201 and attachment['extraction'] == 'ok', attachment)
-    status, started = alpha.call('POST', f'ai/conversations/{cid}/messages', {'text': 'Wie hoch ist der Betrag dieser Rechnung und wann ist sie fällig?', 'idempotencyKey': 'att-1', 'attachments': [attachment['id']]})
-    done3 = alpha.events(started['run']['id'], cid)[-1]['data']
-    report['at07'] = done3['message']['text']
-    check('AT-07 Amount and due date from the attachment with a valid source', '128,40' in done3['message']['text'] and '15.11.2026' in done3['message']['text'], done3['message']['text'])
-    # AT-09 cancel and explicit retry.
-    status, started = alpha.call('POST', f'ai/conversations/{cid}/messages', {'text': 'Erkläre ausführlich in mindestens zehn Absätzen, was eine Datensicherung ist.', 'idempotencyKey': 'long-1'})
-    rid = started['run']['id']
-    t_cancel = {}
-    def cancel_on_delta(ev):
-        if ev['type'] == 'delta' and 't' not in t_cancel:
-            t_cancel['t'] = time.time()
-            alpha.call('POST', f'ai/runs/{rid}/cancel', {})
-        return False
-    ev = alpha.events(rid, cid, stop=cancel_on_delta)
-    cancelled_after = time.time() - t_cancel.get('t', time.time())
-    report['cancelSeconds'] = round(cancelled_after, 2)
-    check('AT-09 Cancel ends generation within the budget', ev[-1]['data']['state'] == 'cancelled' and cancelled_after < 5, (ev[-1]['data']['state'], cancelled_after))
-    status, retry = alpha.call('POST', f'ai/runs/{rid}/retry', {'conversation': cid, 'idempotencyKey': 'retry-1'})
-    status2, retry2 = alpha.call('POST', f'ai/runs/{rid}/retry', {'conversation': cid, 'idempotencyKey': 'retry-1'})
-    check('AT-09 Retry starts exactly one new run', status == 202 and status2 == 200 and retry['run']['id'] == retry2['run']['id'])
-    alpha.call('POST', f'ai/runs/{retry["run"]["id"]}/cancel', {})
-    alpha.events(retry['run']['id'], cid)
-    # AT-10 isolation across profiles over separate devices.
-    for path in (f'ai/conversations/{cid}', f'ai/sources/{cid}/Q1', f'ai/conversations/{cid}/attachments/{attachment["id"]}', f'ai/runs/{run}/events?conversation={cid}'):
-        status, _ = beta.call('GET', path)
-        check(f'AT-10 Beta cannot read Alpha data ({path.split("/")[1]})', status in (403, 404), status)
-    status, lst = beta.call('GET', 'ai/conversations')
-    check('AT-10 Beta sees no foreign conversations', status == 200 and lst['items'] == [])
-    # AT-11 confirmation register.
-    _, _, proposal_done = alpha.ask(cid, 'Markiere Nordlicht als Favorit.')
-    props = proposal_done.get('proposals') or []
-    report['at11'] = proposal_done['message']['text']
-    check('AT-11 Favorite is only proposed', len(props) == 1 and props[0]['state'] == 'pending', proposal_done)
-    fav = lambda: ok(jf('GET', f'/Items/{movie["Nordlicht"]}?userId={users["Alpha"]}', None, owner), 'item')['UserData']['IsFavorite']
-    check('AT-11 Nothing changed before confirmation', fav() is False)
-    status, p = beta.call('POST', f'ai/proposals/{props[0]["id"]}/confirm', {'conversation': cid})
-    check('AT-16 Foreign confirmation rejected', status in (403, 404), status)
-    status, p = alpha.call('POST', f'ai/proposals/{props[0]["id"]}/confirm', {'conversation': cid})
-    check('AT-11 Confirmed action applied and verified by reading back', p['state'] == 'confirmed' and fav() is True, p)
+    # P1 shared content access over the tunnel, without any model.
+    def search(device, **params):
+        return device.call('GET', 'content/search?' + urllib.parse.urlencode(params))
+    status, everything = search(alpha, size=50)
+    raw_alpha = json.dumps(everything, ensure_ascii=False)
+    kinds = {i['kind'] for i in everything['items']}
+    check('CO-01 One search returns movies, photos, videos and documents', status == 200 and everything['completeness'] == 'complete' and {'movie', 'photo', 'video', 'document'} <= kinds, (status, kinds))
+    check('CO-01 Areas are grouped media, photos, documents', [a['area'] for a in everything['areas']] == ['media', 'photos', 'documents'], everything['areas'])
+    for secret in ('Privater Film B', env_data['photos_fixture']['private_b'], 'Arztrechnung', '999,99'):
+        check(f'CO-02 Alpha sees nothing private of Beta ({secret[:12]})', secret not in raw_alpha)
+    status, beta_all = search(beta, size=50)
+    raw_beta = json.dumps(beta_all, ensure_ascii=False)
+    check('CO-02 Beta sees its own private movie and photo', 'Privater Film B' in raw_beta and env_data['photos_fixture']['private_b'] in raw_beta)
+    check('CO-02 Beta sees no Alpha photo or invoice', env_data['photos_fixture']['see'] not in raw_beta and 'RE-2026-0815' not in raw_beta)
+    status, found = search(alpha, q='Rechnung', kinds='document')
+    invoice = next((i for i in found['items'] if i['document']['id'] == env_data['documents_fixture']['invoice']), None)
+    check('CO-03 Filtered full-text search finds the invoice with a revision', invoice is not None and invoice['ref']['revision'], found)
+    cid_invoice = invoice['ref']['contentId']
+    status, opened = alpha.call('GET', f'content/items/{cid_invoice}?revision={invoice["ref"]["revision"]}')
+    check('CO-03 Opening re-authorizes and reports the revision as current', status == 200 and opened['revisionStatus'] == 'current', opened)
+    status, body = alpha.call('GET', f'content/items/{cid_invoice}/thumbnail', raw=True)
+    check('CO-03 Document preview through the content route', status == 200 and len(body) > 100)
+    for path in (f'content/items/{cid_invoice}', f'content/items/{cid_invoice}/original'):
+        status, _ = beta.call('GET', path, raw=True)
+        check(f'CO-03 Beta cannot open Alpha content ({path.count("/")})', status == 404, status)
+    status, page1 = search(alpha, size=1)
+    status2, _ = beta.call('GET', 'content/search?cursor=' + urllib.parse.quote(page1['next']))
+    status3, page2 = alpha.call('GET', 'content/search?cursor=' + urllib.parse.quote(page1['next']))
+    check('CO-04 Cursor continues for its profile only', status2 == 409 and status3 == 200 and not ({i['ref']['contentId'] for i in page1['items']} & {i['ref']['contentId'] for i in page2['items']}), (status2, status3))
+    status, jobs = alpha.call('GET', 'content/jobs')
+    check('CO-05 Jobs list is available', status == 200 and isinstance(jobs['items'], list), jobs)
+    photo_item = next(i for i in everything['items'] if i['kind'] == 'photo')
+
+    if args.expect_qualified:
+        # AI path AT-03 .. AT-11 with the real model.
+        status, conv = alpha.call('POST', 'ai/conversations', {'title': ''})
+        cid = conv['id']
+        run, events, done = alpha.ask(cid, 'Suche alle ungesehenen Filme unter 100 Sekunden und sortiere nach Laufzeit.')
+        report['at04'] = {'answer': done['message']['text'], 'sources': [s['title'] for s in done.get('sources', [])], 'events': len(events)}
+        titles = [s['title'] for s in done.get('sources', [])]
+        check('AT-04 Real Jellyfin tool call over profile rights returns the two expected movies', titles[:2] == ['Nordlicht', 'Sommer am See'] and 'Privater Film B' not in json.dumps(done), titles)
+        check('AT-03 Streaming deltas and tool status before completion', any(e['type'] == 'delta' for e in events) and any(e['type'] == 'tool' for e in events))
+        run2, _, done2 = alpha.ask(cid, 'Wie lange dauert der zweite Treffer?')
+        report['at06'] = done2['message']['text']
+        check('AT-06 Follow-up refers to the second hit (95 seconds)', '95' in done2['message']['text'], done2['message']['text'])
+        invoice_pdf = subprocess.check_output([sys.executable, '-c', 'import importlib.util,sys;spec=importlib.util.spec_from_file_location("t",sys.argv[1]);t=importlib.util.module_from_spec(spec);spec.loader.exec_module(t);sys.stdout.buffer.write(t.pdf([["Stadtwerke Musterstadt","Rechnung RE-2026-0815","Rechnungsbetrag: 128,40 EUR","Faellig am 15.11.2026"]]))', str(repo / 'mutti/tests/module-testenv.py')])
+        status, attachment = alpha.call('POST', f'ai/conversations/{cid}/attachments', invoice_pdf, {'Content-Type': 'application/pdf', 'X-Filename': 'rechnung.pdf'})
+        check('AT-07 PDF attachment text extracted locally', status == 201 and attachment['extraction'] == 'ok', attachment)
+        status, started = alpha.call('POST', f'ai/conversations/{cid}/messages', {'text': 'Wie hoch ist der Betrag dieser Rechnung und wann ist sie fällig?', 'idempotencyKey': 'att-1', 'attachments': [attachment['id']]})
+        done3 = alpha.events(started['run']['id'], cid)[-1]['data']
+        report['at07'] = done3['message']['text']
+        check('AT-07 Amount and due date from the attachment with a valid source', '128,40' in done3['message']['text'] and '15.11.2026' in done3['message']['text'], done3['message']['text'])
+        status, started = alpha.call('POST', f'ai/conversations/{cid}/messages', {'text': 'Erkläre ausführlich in mindestens zehn Absätzen, was eine Datensicherung ist.', 'idempotencyKey': 'long-1'})
+        rid = started['run']['id']
+        t_cancel = {}
+        def cancel_on_delta(ev):
+            if ev['type'] == 'delta' and 't' not in t_cancel:
+                t_cancel['t'] = time.time()
+                alpha.call('POST', f'ai/runs/{rid}/cancel', {})
+            return False
+        ev = alpha.events(rid, cid, stop=cancel_on_delta)
+        cancelled_after = time.time() - t_cancel.get('t', time.time())
+        report['cancelSeconds'] = round(cancelled_after, 2)
+        check('AT-09 Cancel ends generation within the budget', ev[-1]['data']['state'] == 'cancelled' and cancelled_after < 5, (ev[-1]['data']['state'], cancelled_after))
+        status, retry = alpha.call('POST', f'ai/runs/{rid}/retry', {'conversation': cid, 'idempotencyKey': 'retry-1'})
+        status2, retry2 = alpha.call('POST', f'ai/runs/{rid}/retry', {'conversation': cid, 'idempotencyKey': 'retry-1'})
+        check('AT-09 Retry starts exactly one new run', status == 202 and status2 == 200 and retry['run']['id'] == retry2['run']['id'])
+        alpha.call('POST', f'ai/runs/{retry["run"]["id"]}/cancel', {})
+        alpha.events(retry['run']['id'], cid)
+        for path in (f'ai/conversations/{cid}', f'ai/sources/{cid}/Q1', f'ai/conversations/{cid}/attachments/{attachment["id"]}', f'ai/runs/{run}/events?conversation={cid}'):
+            status, _ = beta.call('GET', path)
+            check(f'AT-10 Beta cannot read Alpha data ({path.split("/")[1]})', status in (403, 404), status)
+        status, lst = beta.call('GET', 'ai/conversations')
+        check('AT-10 Beta sees no foreign conversations', status == 200 and lst['items'] == [])
+        _, _, proposal_done = alpha.ask(cid, 'Markiere Nordlicht als Favorit.')
+        props = proposal_done.get('proposals') or []
+        report['at11'] = proposal_done['message']['text']
+        check('AT-11 Favorite is only proposed', len(props) == 1 and props[0]['state'] == 'pending', proposal_done)
+        fav = lambda: ok(jf('GET', f'/Items/{movie["Nordlicht"]}?userId={users["Alpha"]}', None, owner), 'item')['UserData']['IsFavorite']
+        check('AT-11 Nothing changed before confirmation', fav() is False)
+        status, p = beta.call('POST', f'ai/proposals/{props[0]["id"]}/confirm', {'conversation': cid})
+        check('AT-16 Foreign confirmation rejected', status in (403, 404), status)
+        status, p = alpha.call('POST', f'ai/proposals/{props[0]["id"]}/confirm', {'conversation': cid})
+        check('AT-11 Confirmed action applied and verified by reading back', p['state'] == 'confirmed' and fav() is True, p)
+
     # Backups include module data (without models); the probe restores it.
     ok(jf('POST', '/Mutti/Maintenance/backup', {}, owner), 'backup')
     for _ in range(180):
@@ -375,8 +430,10 @@ try:
     backup_dir = Path(m['directory']) / m['backups'][0]['id']
     stored = json.loads((backup_dir / 'backup.json').read_text())
     hub_files = [k for k in stored['Hashes'] if k.startswith('hub/')]
-    check('Backup contains module settings and conversations but no model files',
-          stored.get('Hub') is True and 'hub/hub.json' in hub_files and any('/conversations/' in k for k in hub_files) and not any('models' in k for k in hub_files), hub_files)
+    check('Backup contains module settings and content references but no model files',
+          stored.get('Hub') is True and 'hub/hub.json' in hub_files and 'hub/content-ids.json' in hub_files and not any('models' in k for k in hub_files), hub_files)
+    if args.expect_qualified:
+        check('Backup contains conversations', any('/conversations/' in k for k in hub_files), hub_files)
     ok(jf('POST', '/Mutti/Maintenance/verify', {'ID': m['backups'][0]['id'], 'Username': 'Testbesitzer', 'Password': password, 'Confirm': True}, owner), 'verify')
     for _ in range(300):
         m = ok(jf('POST', '/Mutti/Maintenance/state', {}, owner), 'maintenance')
@@ -384,11 +441,19 @@ try:
             break
         time.sleep(2)
     check('Restore probe of the backup passes', m['job']['state'] == 'completed' and m['backups'][0].get('verifiedAt'), m['job'])
-    # Rights changes apply immediately, also for modules.
+    # Rights changes apply immediately, also for modules and shared search.
+    status, before = search(alpha, size=1)
     ok(hub_admin('admin/grants', {'module': 'photos', 'userId': users['Alpha'], 'allowed': False}), 'revoke grant')
     status, _ = alpha.call('GET', 'photos/assets')
     check('Revoked photo grant applies immediately over the tunnel', status == 403, status)
-    # Module failure does not affect media.
+    status, after = search(alpha, size=50)
+    photos_area = next(a for a in after['areas'] if a['area'] == 'photos')
+    check('CO-06 Revoked area leaves shared search without photo hits', photos_area['state'] == 'not_available' and not any(i['area'] == 'photos' for i in after['items']), after['areas'])
+    status, _ = alpha.call('GET', f'content/items/{photo_item["ref"]["contentId"]}')
+    check('CO-06 Earlier photo reference no longer opens', status == 404, status)
+    status, _ = alpha.call('GET', 'content/search?cursor=' + urllib.parse.quote(before['next']))
+    check('CO-06 Cursor from before the rights change is refused', status == 409, status)
+    # Module failure does not affect media and is not reported as zero results.
     project = json.loads(args.testenv.read_text())['project']
     subprocess.run(['docker', 'compose', '-p', project, '-f', str(args.testenv.parent / 'compose.json'), 'stop', 'paperless'], check=True, capture_output=True)
     try:
@@ -396,25 +461,34 @@ try:
         caps = alpha.call('GET', 'capabilities')[1]
         status, body = alpha.media(f'/Users/{users["Alpha"]}/Items?IncludeItemTypes=Movie&Recursive=true')
         check('Documents outage is reported while movies keep working', caps['modules']['documents']['state'] == 'unavailable' and status == 200, caps['modules']['documents'])
+        status, partial = search(alpha, size=50)
+        docs_area = next(a for a in partial['areas'] if a['area'] == 'documents')
+        check('CO-07 Outage makes the search partial, movies still found', partial['completeness'] == 'partial' and docs_area['state'] == 'unavailable'
+              and any(i['kind'] == 'movie' for i in partial['items']), partial['areas'])
     finally:
         subprocess.run(['docker', 'compose', '-p', project, '-f', str(args.testenv.parent / 'compose.json'), 'start', 'paperless'], check=True, capture_output=True)
-    # AT-12 revoking the device ends a running stream and further access.
-    status, started = alpha.call('POST', f'ai/conversations/{cid}/messages', {'text': 'Erzähle ausführlich die Geschichte des Kinos.', 'idempotencyKey': 'revoke-1'})
-    rid = started['run']['id']
-    seen = {}
-    def revoke_on_delta(ev):
-        if ev['type'] == 'delta' and 't' not in seen:
-            seen['t'] = time.time()
+    if not args.keep:
+        # AT-12 revoking the device ends further access (and a running answer when AI is qualified).
+        if args.expect_qualified:
+            status, started = alpha.call('POST', f'ai/conversations/{cid}/messages', {'text': 'Erzähle ausführlich die Geschichte des Kinos.', 'idempotencyKey': 'revoke-1'})
+            rid = started['run']['id']
+            seen = {}
+            def revoke_on_delta(ev):
+                if ev['type'] == 'delta' and 't' not in seen:
+                    seen['t'] = time.time()
+                    ok(jf('POST', '/Mutti/Connect/revoke', {'pin': alpha.pin}, owner), 'revoke')
+                return False
+            try:
+                alpha.events(rid, cid, stop=revoke_on_delta, timeout=30)
+            except Exception:
+                pass
+        else:
             ok(jf('POST', '/Mutti/Connect/revoke', {'pin': alpha.pin}, owner), 'revoke')
-        return False
-    try:
-        alpha.events(rid, cid, stop=revoke_on_delta, timeout=30)
-        ended = True
-    except Exception:
-        ended = True
-    status, _ = alpha.call('GET', 'capabilities', timeout=20)
-    check('AT-12 Revoked device loses module access', status in (403, 502), status)
-    status, _ = jf('GET', '/Users/Me', None, None)
+        status, _ = alpha.call('GET', 'content/search', timeout=20)
+        check('AT-12 Revoked device loses content access', status in (403, 502), status)
+    else:
+        # Native checks continue with the kept instance; restore Alpha's grant.
+        ok(hub_admin('admin/grants', {'module': 'photos', 'userId': users['Alpha'], 'allowed': True}), 'restore grant')
     report['passed'] = True
 except Exception as error:
     report['passed'] = False
