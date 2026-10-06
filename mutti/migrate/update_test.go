@@ -304,3 +304,21 @@ func TestRollbackRouteNeedsNativeAppAndBlockedStart(t *testing.T) {
 		t.Fatal("not restored")
 	}
 }
+
+func TestInterruptedSnapshotIsDiscardedOnNextStart(t *testing.T) {
+	f := newUpdateFixture(t)
+	f.populate()
+	_ = f.m.prepareStart()
+	f.m.verifyUpdate("12.1.0", true)
+	f.write("update-snapshots/.incomplete-crashed/instance/data/jellyfin.db", "partial")
+	f.packageBuild("12.1", "commit-b")
+	if err := f.m.prepareStart(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(f.m.snapshotDir(), ".incomplete-crashed")); !os.IsNotExist(err) {
+		t.Fatal("interrupted snapshot kept")
+	}
+	if _, _, err := f.m.readSnapshot(f.m.State().Update.Snapshot); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -167,6 +167,7 @@ func (m *Manager) prepareStart() error {
 		return nil
 	}
 	active := m.State().Active
+	m.removeIncompleteSnapshots()
 	update, err := m.readUpdate()
 	if err != nil {
 		return m.blockUpdate(&UpdateState{State: "blocked", To: current, Started: time.Now().UTC()}, err.Error())
@@ -530,6 +531,17 @@ func (m *Manager) findSnapshot(v dataVersion) string {
 		}
 	}
 	return best
+}
+
+// removeIncompleteSnapshots deletes copies an interrupted start left behind;
+// they were never published and no state refers to them.
+func (m *Manager) removeIncompleteSnapshots() {
+	entries, _ := os.ReadDir(m.snapshotDir())
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".incomplete-") {
+			_ = os.RemoveAll(filepath.Join(m.snapshotDir(), e.Name()))
+		}
+	}
 }
 
 // pruneSnapshots keeps the newest n complete snapshots and removes
