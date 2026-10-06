@@ -223,7 +223,7 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 	sourced := attachmentRef.MatchString(question)
 	called := map[string]bool{}
 	done := map[string]bool{}
-	// emptySearch: a search in this run returned no hits.
+	// emptySearch: a photo or movie search in this run returned no hits.
 	emptySearch := false
 	var text strings.Builder
 	execute := func(call toolCall) {
@@ -235,7 +235,9 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 		r.Trace.Args = trace.Args
 		result.Tools = append(result.Tools, r.Trace)
 		called[call.Function.Name] = true
-		if strings.HasPrefix(call.Function.Name, "search_") && strings.Contains(r.Content, `"count":0`) {
+		// Documents already fall back to any term in the tool; a broader
+		// model-driven retry there tends to list unrelated documents.
+		if (call.Function.Name == "search_photos" || call.Function.Name == "search_movies") && strings.Contains(r.Content, `"count":0`) {
 			emptySearch = true
 		}
 		if call.Function.Name != "propose_favorite" && strings.Contains(r.Content, `"source":"Q`) {
