@@ -44,12 +44,29 @@ Paketlauf deckte fehlende Sicherung von `content-ids.json`/`actions.json` auf
 Vertrag: [contracts.md](contracts.md); Owner-Entscheidungen:
 [plan.md](plan.md#offene-entscheidungen-vor-jeweiliger-umsetzung).
 
-Nächste Schritte: Kritischer
-Pfad zur nutzbaren KI ist P0-Freigabe für genau die Mac/MLX-Konfiguration
-(P2-Anteil): echte Runtime-Attestation (Engine-/Runner-Digest inkl. MLX, Hardware,
-OS-Build, Adapter, Inferenzparameter) und vertrauenswürdiges Laden der
-Freigabeeinträge mit Widerruf; danach Messung mit Prompt `mutti-assistant-v5`
-pro Aufgabe gegen die Freigabekriterien und P1-E2E mit `--expect-qualified`.
+**P2 – Laufzeit-Bestätigung, Freigabeeinträge und Harness v6 (06.10.2026,
+abends):** Branch `codex/mutti-p2-qualification` (Worktree `mutti-p1`).
+Implementiert und mit Unit-Tests geprüft: Attestation der laufenden Bereitstellung
+(Engine-Verzeichnis inkl. MLX, Hub-Binary, exaktes Mac-Modell, OS-Build;
+externe oder nicht abgeschottete Engine nie freigegeben), signierte
+Freigabeeinträge (Ed25519, Schlüssel außerhalb des Repos unter
+`~/Library/Application Support/Mutti/release-keys/`, Widerruf), Werkzeug
+`mutti-release`, Messbefehl `mutti-hub qualify` auf echten Adaptern,
+reproduzierbarer Hub-Build. Owner-Entscheidung: Harness Englisch (v6) mit
+Sprachpaketen de/en, Freigabe je Antwortsprache; kurtz sendet die App-Sprache
+(`d1f2d6c7`). Englischer synthetischer Korpus in der Testumgebung ergänzt.
+Messungen: v6-dev 60/60; Produktsätze real-de-v1 69/84 und real-de-v2 78/84
+(jeweils danach gesehen, Lücken behoben); aktuell eingefroren und offen:
+real-de-v3 und real-en-v1. **Nichts signiert, keine KI freigeschaltet.**
+[Protokoll](evidence/qualification-v6-protocol.md),
+[Messungen](evidence/qualification-v6-2026-10-06.md),
+[Entscheidungsvorlage Mac-Laufzeit](decision-mac-service-runtime.md).
+
+Nächste Schritte (Inferenz nur tagsüber, Lüfter im Schlafzimmer): Paket aus
+aktuellem Stand bauen, real-de-v3 und real-en-v1 messen, v6-Holdout und
+Wiedergabe unter KI-Last; danach Review/Signatur durch Ralf, Produkt-E2E mit
+`--expect-qualified`, native Bedienung der KI in kurtz. Offene Owner-Entscheidungen:
+Signatur/Review, Mac-Laufzeit für verwaltete Dienste, Bindung an exaktes Mac-Modell.
 
 **Modellfreigabe v4, 06.10.2026 (P2-Vorarbeit, abgeschlossen als Messung):**
 Nutzerauftrag „Werkzeuge/Harness verbessern, dann mit neuem ungesehenem Satz
