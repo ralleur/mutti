@@ -11,11 +11,18 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestDirectPairProxyAndRevoke(t *testing.T) {
+	for _, mode := range []string{"device", "profile", "libraries", "reconnect"} {
+		t.Run(mode, func(t *testing.T) { testDirectPairProxyAndRevoke(t, mode) })
+	}
+}
+func testDirectPairProxyAndRevoke(t *testing.T, mode string) {
+	var disabled atomic.Bool
 	t.Setenv("MUTTI_ICE_INTERFACES", "lo0,lo")
 	payload := bytes.Repeat([]byte("mutti-synthetic-media\n"), 32000)
 	jf := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +41,7 @@ func TestDirectPairProxyAndRevoke(t *testing.T) {
 			if !strings.Contains(r.Header.Get("Authorization"), `Token="private-upstream-token"`) {
 				t.Error("wrong upstream token")
 			}
-			jsonReply(w, 200, map[string]string{"Id": "profile", "Name": "Family"})
+			jsonReply(w, 200, map[string]any{"Id": "profile", "Name": "Family", "Policy": map[string]bool{"IsDisabled": mode == "profile" && disabled.Load(), "EnableAllFolders": !disabled.Load()}})
 		case "/video":
 			if !strings.Contains(r.Header.Get("Authorization"), `Token="private-upstream-token"`) {
 				t.Error("missing bound token")
@@ -190,6 +197,20 @@ func TestDirectPairProxyAndRevoke(t *testing.T) {
 			t.Fatalf("boundary %s status %d", kind, res.StatusCode)
 		}
 	}
+	if mode == "reconnect" {
+		// Drop the transport without the HTTP/yamux graceful client teardown,
+		// then reconnect the same saved device while old sessions may remain.
+		client.peer.Close()
+		returning, err := NewClient(client.Credentials())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer returning.Close()
+		base, e = returning.Gateway()
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
 	res, e = http.Get(base + "/slow")
 	if e != nil {
 		t.Fatal(e)
@@ -198,14 +219,25 @@ func TestDirectPairProxyAndRevoke(t *testing.T) {
 	if _, e = io.ReadFull(res.Body, one); e != nil {
 		t.Fatal(e)
 	}
-	if e = server.Revoke(credentials.Identity.Pin()); e != nil {
-		t.Fatal(e)
+	if mode == "profile" || mode == "libraries" {
+		disabled.Store(true)
+	} else {
+		revoked := make(chan error, 1)
+		go func() { revoked <- server.Revoke(credentials.Identity.Pin()) }()
+		select {
+		case e = <-revoked:
+			if e != nil {
+				t.Fatal(e)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("revocation waits for a stale transport")
+		}
 	}
 	ended := make(chan struct{})
 	go func() { _, _ = io.Copy(io.Discard, res.Body); res.Body.Close(); close(ended) }()
 	select {
 	case <-ended:
-	case <-time.After(3 * time.Second):
+	case <-time.After(6 * time.Second):
 		t.Fatal("revoked stream remains open")
 	}
 	// Reconnect after server-side revocation also fails authorization.
@@ -224,8 +256,12 @@ func TestDirectPairProxyAndRevoke(t *testing.T) {
 		t.Fatal(e)
 	}
 	res.Body.Close()
-	if res.StatusCode != 403 {
-		t.Fatalf("reconnect after revoke %d", res.StatusCode)
+	expected := 403
+	if mode == "libraries" {
+		expected = 200
+	}
+	if res.StatusCode != expected {
+		t.Fatalf("reconnect after policy/revoke %d", res.StatusCode)
 	}
 }
 func TestInvitationAndServerIdentity(t *testing.T) {

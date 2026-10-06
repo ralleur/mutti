@@ -27,7 +27,7 @@ Dashboard-Konzept mit kompakter Mutti-Marke, Sora und gelben Hauptaktionen.
   (Ollama-Kandidat) und Zuhause (Dienst offen) als eigene, bedienbare Vorschauen.
   Sie sind ausdrücklich **noch nicht angebunden**. Entwürfe gelten nur in der
   aktuellen Ansicht, werden nicht gespeichert und starten keine Dienste.
-  Modulfreigaben, gemeinsamer Backup- und Updatebetrieb bleiben gekennzeichnete
+  Modulfreigaben und gemeinsamer Updatebetrieb bleiben gekennzeichnete
   Ausbauaufgaben. Dies liefert kein neues Modulbackend aus.
 
 ## Architektur und Grenzen
@@ -65,3 +65,23 @@ Grenzen, Importfreigabe, Datentrennung und Day-1-Regeln bleiben in Kraft.
 
 Der konkrete Abnahmestand wird in `status.md` ergänzt. Reale NAS-Hardware,
 WAN-Netze und vollständige VoiceOver-Abnahme bleiben eigene Gates.
+
+
+## Erweiterung: Rechte und lokale Wiederherstellung
+
+„Geräte“ öffnet für jedes nicht administrative Profil einen echten Rechtedialog:
+Wiedergabe, alle Bibliotheken einschließlich künftiger oder ausdrücklich gewählte
+Bibliotheken. Keine Auswahl bedeutet keinen Bibliothekszugriff. Vor dem Speichern
+wird die aktuelle Policy erneut geladen; Altersregeln, Zeitpläne und andere
+bestehende Felder bleiben erhalten. Die Serverantwort wird danach geprüft.
+
+„Speicher“ enthält echte lokale Sicherungen mit Größe, Erstellungszeit und
+Zeitpunkt einer bestandenen Wiederherstellungsprobe. Erstellen, Prüfen und
+Wiederherstellen sind serverseitige Aufträge; die Ansicht kann geschlossen werden.
+Fehler und nach Neustart unterbrochene Aufträge erhalten eigene Zustände.
+
+`POST /Mutti/Maintenance/{action}` lässt ausschließlich `state`, `backup`,
+`verify`, `restore` zu. Dieselbe lokale, begrenzte Bridge verlangt Besitzerrechte;
+der Manager kontrolliert sie zusätzlich und vor tatsächlicher Umschaltung erneut.
+Kennwörter werden nur für die Anmeldung in der isolierten Sicherung verwendet,
+nicht gespeichert. [Umfang, Aufbewahrung und Grenzen](maintenance.md).

@@ -13,10 +13,58 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 | M1 | Eigene Forks, Komponenten-Pins, Mac- und Docker-Builds, Entwicklungsanleitung, Sicherheitsregeln und CI implementiert. Lokale API-/Videodatenstrecke auf beiden Paketen bestanden. | Vollständiges Quell-/Lizenzinventar für Distribution, weitere Architekturen und vollständige Wiedergabeabnahme. |
 | M2 | Eigene Mutti-Vektormarke, Sora, kurtz-Farben, Web-Assistent; native Mac-Hülle mit Serverstart, Status, Ordnerdialog-Brücke und getrennten Daten; nicht privilegiertes Docker-Paket mit schreibgeschützten Medien. | Native Ordnerauswahl durch alle Dialogschritte, Screenreader/Hellmodus vollständig, echte NAS-Installation; einfache sichere Verwaltung von einem zweiten Gerät. Der derzeitige NAS-SSH-Tunnel ist nur ein Entwicklerweg. |
 | M2b | Automatisierter Jellyfin-12.1-Import: Erstwahl, lokale Erkennung, Admin-Anmeldung, interne Online-Sicherung, isolierte Wiederherstellung, Daten-/Dateiprüfung und atomarer Wechsel. Exporthelfer mit einmaligem Transferzugriff vorhanden. | Owner-Test mit echter Bibliothek; große Datenmengen, reale NAS-Mounts, weitere Versionen, externe Plugins/Logins. Automatische Helferinstallation/-entfernung und manueller Archiv-Ausweichweg offen. Siehe [import.md](import.md). |
-| M3 | QR-Einladung, TLS-Geräteidentität, bestätigte Profilfreigabe, Keychain-Integration und laufender Widerruf implementiert und lokal geprüft. | Wiederherstellung, reale Geräte und vollständige Ablauf-/Bedienabnahme. |
+| M3 | QR-Einladung, TLS-Geräteidentität, bestätigte Profilfreigabe, Keychain-Integration und laufender Widerruf implementiert und lokal geprüft; nativer Neustart/Widerruf besteht in Build 78. | Reale Geräte und vollständige Ablauf-/Bedienabnahme; nach Restore bewusst neu koppeln. |
 | M4 | Direkter verschlüsselter Transport und Vermittlungsdienst als Teststand implementiert; siehe unten. Kein Relay. | Öffentlicher Testbetrieb, WAN-Matrix und Wiedergabe bei Netzwechseln. |
-| M5 | Lokale Sicherheits- und Integrationstests vorhanden. | Backup/Restore, Upgrade, Langzeittests, reale iOS-/tvOS-Geräte, NAS und zwei echte Anschlüsse. |
+| M5 | Lokale Sicherheits-/Integrationstests, konsistente Sicherung, isolierte Probe, Restore auf demselben Paket und begrenzter Wiederanlauf bestehen. | Externe Sicherung/Vollverlust-Restore, Upgrade, Langzeittests, reale Geräte, NAS und zwei echte Anschlüsse. |
 | M6 | Lokale Mac-App und Docker-Image verfügbar. | Gemeinsame vollständige Abnahme, Developer-ID/Notarisierung, Quellpakete und freigegebenes Release. |
+
+## Autonomer Ausbau vom 5. Oktober 2026
+
+**Aktueller Übergabestand:** [Testpakete und Startanleitung](testpakete-2026-10-05.md),
+[gesammelter Foundation-Beleg](evidence/foundation-2026-10-05.md).
+Die umfangreiche weitere Implementierung ist dort ausdrücklich von tatsächlich
+fehlender Owner-Mitwirkung getrennt. Dieser Stand schließt den Gesamtauftrag nicht ab.
+
+Der neue Auftrag erweitert den bestehenden Produktstand; keine separate Demo.
+Aktuell umgesetzt: lokale konsistente Sicherung, Wiederherstellungsprobe und
+Wiederherstellung im eigenen Verwaltungsbereich, Profilrechte für Bibliotheken
+und Wiedergabe, begrenzter Wiederanlauf nach Serverabsturz. Gerätewiderruf,
+Profilsperre und Änderungen an Bibliotheksrechten beenden auch laufende
+Transportverbindungen. [Betrieb und Grenzen](maintenance.md).
+
+Mac: vollständiger synthetischer Import einschließlich Intro Skipper, Sicherung,
+fehlgeschlagener Zugang ohne Umschaltung, isolierte Probe und echte
+Wiederherstellung bestanden. Docker: dieselben Verwaltungsaktionen über die
+Produkt-API sowie Neustart nach gezieltem Absturz des eigenen Testservers
+bestanden. Die abschließenden Mac-/Docker-Pakete sind nach den letzten Rechteänderungen
+erneut gebaut und geprüft; frühere Testpakete enthalten diese Ergänzungen nicht.
+
+Die bestehende kurtz-App (Mac-Build 76) lässt sich inzwischen bedienen; der
+früher dokumentierte macOS-Dialog blockiert diesen Lauf nicht mehr. Mit neuer,
+rein synthetischer Mutti-Instanz: verschlüsselte Kopplung, Besitzerfreigabe,
+Profilanmeldung, Filmansicht, Wiedergabe und 15-Sekunden-Sprung sichtbar geprüft.
+Kein WAN- oder physischer iOS-Nachweis. Im neuen Mac-Build 77 führt die Kopplung nach Besitzerfreigabe direkt in das
+zugewiesene Profil. Dieser Übergang und die tatsächliche Wiedergabe bestehen.
+Die Meldung bei HTTP 403 nennt Profil-/Gerätefreigaben statt technischen Text.
+Finaler Build **78** enthält zusätzlich die Reparatur des verwaisten Datenkanals:
+Neustart, erneuter Bibliotheksabruf und serverseitiger Widerruf in 19 ms bestanden;
+anschließend ist die verständliche 403-Meldung in der nativen Library sichtbar.
+Der neue Transporttest weckt blockierte Lese-/Schreibvorgänge ohne Peer auf.
+
+Lokales Modellcasting: drei Kandidaten, je 60 synthetische Fälle mit drei
+Wiederholungen, separate native Engine mit OS-Netzsperre und deaktivierter
+Cloud. Der bestehende Ollama-Dienst und dessen Modellbestand bleiben unverändert.
+Der zusätzliche 4B-Kandidat wurde begrenzt in ein eigenes Testverzeichnis geladen.
+Die Ergebnisse zeigen insbesondere unzuverlässige Quellenzuordnung und rechtfertigen
+noch keine Modellfreigabe. KI/Fotos/Dokumente bleiben ohne fertiges Modulbackend;
+die Vorschau ist keine Integration. [Casting-Nachweis](evidence/model-casting-2026-10-05.md).
+
+Immich 2.7.5 und Paperless-ngx 2.20.15 wurden als echte, gepinnte lokale Dienste
+ohne Internetzugriff mit synthetischen Daten geprüft: Import/Originale/Suche,
+Nutzertrennung, gesperrte Fremdzugriffe und Neustartpersistenz. Paperless-Export
+und Restore in eine zweite leere Instanz erhalten Original, Text und Rechte.
+Das ist eine Dienstqualifikation, noch kein Mutti-Adapter oder nativer Foto-/
+Dokumentenbereich. [Ergebnis, Lizenzen und Grenzen](modules-qualification.md).
 
 ## Tatsächlich geprüft
 
@@ -361,3 +409,13 @@ Reale NAS-Hardware, WAN-Matrix, vollständige VoiceOver-Abnahme und produktive
 Auslieferung bleiben gesonderte Gates. Die neue Rechteprüfung im separaten
 kurtz-Repo wurde gelesen/ausgeführt; deren laufende Register-/Releasearbeiten
 sind keine Freigabe von kurtz-Artefakten durch diese lokale Mutti-Änderung.
+
+
+### Qualifizierung von Fotos und Dokumenten
+
+Immich 2.7.5 und Paperless-ngx 2.20.15 in eigenen, netzisolierten Testprojekten
+mit echten APIs geprüft. Nutzertrennung, Originaldownload und Neustart bestehen;
+Paperless zusätzlich Importauftrag, Volltext und separater Export/Restore unter
+Erhalt der Eigentümerrechte. [Nachweis und noch fehlende Integration](/Users/ai/workspace/mutti/docs/mutti/modules-qualification.md).
+Dies sind keine fertigen Mutti-/kurtz-Module; laufende Originalinstallationen
+wurden nicht verändert.

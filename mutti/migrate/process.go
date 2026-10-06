@@ -172,6 +172,13 @@ func (o Options) startServer(root string, port int, host, archive string, valida
 		env = append(env, "MUTTI_IMPORT_VALIDATION=1")
 	} else {
 		env = append(env, "MUTTI_MANAGEMENT_ORIGIN="+o.Origin)
+		if o.Listen != "" {
+			_, managerPort, err := net.SplitHostPort(o.Listen)
+			if err != nil {
+				return nil, errors.New("Ungültiger lokaler Verwaltungszugang.")
+			}
+			env = append(env, "MUTTI_MANAGER_PORT="+managerPort)
+		}
 		if o.Connect != "" {
 			_, connectPort, err := net.SplitHostPort(o.ConnectListen)
 			if err != nil {

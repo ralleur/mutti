@@ -30,15 +30,16 @@ type Report struct {
 	Finished                          time.Time `json:"finished"`
 }
 type State struct {
-	Progress      Progress `json:"progress"`
-	Ready         bool     `json:"ready"`
-	SetupComplete bool     `json:"setupComplete"`
-	NewSetup      bool     `json:"newSetup"`
-	Phase         string   `json:"phase"`
-	Message       string   `json:"message"`
-	Report        *Report  `json:"report,omitempty"`
-	Target        string   `json:"target"`
-	Active        string   `json:"active"`
+	Progress       Progress `json:"progress"`
+	Ready          bool     `json:"ready"`
+	SetupComplete  bool     `json:"setupComplete"`
+	NewSetup       bool     `json:"newSetup"`
+	Phase          string   `json:"phase"`
+	Message        string   `json:"message"`
+	Report         *Report  `json:"report,omitempty"`
+	Target         string   `json:"target"`
+	Active         string   `json:"active"`
+	ServiceMessage string   `json:"serviceMessage,omitempty"`
 }
 type Manager struct {
 	Options          Options
@@ -55,6 +56,8 @@ type Manager struct {
 	lock             *os.File
 	connectSettings  []byte
 	closing          bool
+	maintenance      MaintenanceJob
+	recovery         recoveryBudget
 }
 
 func NewManager(o Options) (*Manager, error) {
@@ -129,6 +132,13 @@ func NewManager(o Options) (*Manager, error) {
 	}
 	if _, e := os.Stat(filepath.Join(m.state.Active, "setup-new")); e == nil {
 		m.state.NewSetup = true
+	}
+	if b, err := os.ReadFile(filepath.Join(root, "maintenance-job.json")); err == nil {
+		_ = json.Unmarshal(b, &m.maintenance)
+		if m.maintenance.State == "running" {
+			m.maintenance.State = "interrupted"
+			m.maintenance.Message = "Der letzte Wartungsvorgang wurde durch einen Neustart unterbrochen. Bitte den aktiven Datenstand prüfen, bevor du erneut startest."
+		}
 	}
 	success = true
 	return m, nil
@@ -223,9 +233,21 @@ func (m *Manager) Run(ctx context.Context) error {
 		active := m.state.Active
 		m.mu.Unlock()
 		if !m.child.running() {
-			m.setPhase("error", "Mutti wurde beendet. Bitte die App erneut starten.")
 			m.connect.stop()
 			m.connect = nil
+			message := "Mutti wurde unerwartet beendet. Automatischer Wiederanlauf wartet; bei wiederholtem Fehler bitte das Paket und freien Speicher prüfen."
+			if m.recovery.allow(time.Now()) {
+				if e := m.launch(active); e == nil {
+					message = "Mutti wird nach einem unerwarteten Ende neu gestartet …"
+				}
+			}
+			m.mu.Lock()
+			m.state.ServiceMessage = message
+			m.mu.Unlock()
+		} else if ready {
+			m.mu.Lock()
+			m.state.ServiceMessage = ""
+			m.mu.Unlock()
 		}
 		if ready && info.StartupWizardCompleted && m.Options.Connect != "" {
 			settings, _ := os.ReadFile(filepath.Join(active, "connect-settings.json"))
@@ -299,7 +321,7 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 		// The Mac app already owns this private data directory and child process.
 		// Its per-launch capability authorizes a retained-data switch after a native
 		// confirmation. Browser/Docker requests still require the existing admin.
-		if !input.nativeOwner {
+		if !input.nativeOwner && !input.targetAuthorized {
 			owner, _ := NewAPI(m.Options.Backend)
 			owner.Host = m.api.Host
 			_, e := login(ctx, owner, input.TargetUsername, input.TargetPassword)
@@ -309,9 +331,16 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 			}
 		}
 	}
-	s, e := m.openImportSource(ctx, input, current.Id)
-	if e != nil {
-		return e
+	var s *Source
+	var e error
+	if input.backup != nil {
+		a, _ := NewAPI(m.Options.Backend)
+		s = &Source{API: a, Info: input.backup.Info, Libraries: input.backup.Libraries, Username: input.Username, Password: input.Password}
+	} else {
+		s, e = m.openImportSource(ctx, input, current.Id)
+		if e != nil {
+			return e
+		}
 	}
 	defer s.API.logout()
 	if s.Local {
@@ -322,10 +351,15 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 		}
 	}
 	var plugins []PluginInfo
-	if e = s.API.call(ctx, "GET", "/Plugins", nil, &plugins); e != nil {
-		return e
+	if input.backup == nil {
+		if e = s.API.call(ctx, "GET", "/Plugins", nil, &plugins); e != nil {
+			return e
+		}
 	}
 	hasIntro, e := qualifyPlugins(plugins)
+	if input.backup != nil {
+		hasIntro = input.backup.Intro
+	}
 	if e != nil {
 		return e
 	}
@@ -346,19 +380,34 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if e = os.MkdirAll(instance, 0700); e != nil {
 		return e
 	}
+	if input.backup != nil {
+		defer func() {
+			if m.State().Active != instance {
+				_ = os.RemoveAll(instance)
+			}
+		}()
+	}
 	m.setStep("backup", 2, "Jellyfin sichert Benutzer, Bibliotheken und Metadaten …")
 	var archive string
 	if input.Archive != "" {
 		return errors.New("Bitte den automatischen Import verwenden. Archivdateien werden nur nach Quellenprüfung angenommen.")
 	}
-	archive, e = m.sourceBackup(ctx, s, instance)
+	if input.backup != nil {
+		archive = filepath.Join(input.backup.directory, "library.zip")
+	} else {
+		archive, e = m.sourceBackup(ctx, s, instance)
+	}
 	if e != nil {
 		return e
 	}
 	var intro introSnapshot
 	if hasIntro {
 		m.setStep("importing", 3, "Intro-Skipper-Einstellungen und Analysedaten werden gesichert …")
-		intro, e = m.Options.sourceIntro(ctx, s, archive, filepath.Join(instance, "intro-source"))
+		if input.backup != nil {
+			intro, e = readIntroSnapshot(filepath.Join(input.backup.directory, "intro"))
+		} else {
+			intro, e = m.Options.sourceIntro(ctx, s, archive, filepath.Join(instance, "intro-source"))
+		}
 		if e != nil {
 			return e
 		}
@@ -473,55 +522,59 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 			return e
 		}
 	}
-	// Refuse activation if the source changed while the snapshot was checked.
-	// This catches new playback, favorites, settings and library changes.
-	m.setStep("verifying", 6, "Jellyfin erstellt eine zweite Sicherung zur Abschlussprüfung …")
-	var finalArchive string
-	if s.Local && locallyReadable(s.Info.ProgramDataPath) {
-		finalArchive, e = m.sourceBackup(ctx, s, instance)
-	} else {
-		_ = os.Remove(filepath.Join(instance, "source.zip"))
-		finalArchive, e = m.sourceBackup(ctx, s, instance)
-	}
-	if e != nil {
-		return e
-	}
-	if hasIntro {
-		latestIntro, err := m.Options.sourceIntro(ctx, s, finalArchive, filepath.Join(instance, "intro-final"))
-		if err != nil {
-			return err
+	if input.backup == nil {
+		// Refuse activation if the source changed while the snapshot was checked.
+		// This catches new playback, favorites, settings and library changes.
+		m.setStep("verifying", 6, "Jellyfin erstellt eine zweite Sicherung zur Abschlussprüfung …")
+		var finalArchive string
+		if s.Local && locallyReadable(s.Info.ProgramDataPath) {
+			finalArchive, e = m.sourceBackup(ctx, s, instance)
+		} else {
+			_ = os.Remove(filepath.Join(instance, "source.zip"))
+			finalArchive, e = m.sourceBackup(ctx, s, instance)
 		}
-		if e = compareIntro(intro.Hashes, latestIntro.Hashes, true); e != nil {
+		if e != nil {
 			return e
 		}
-	}
-	finalPrepared := filepath.Join(instance, "source-final.zip")
-	m.setStep("verifying", 6, "Die Abschlussprüfung sucht nach Änderungen während des Umzugs …")
-	stopProgress = m.watchFiles(ctx, fixedFile(finalPrepared), "Abschließend geprüfte Sicherung")
-	latest, e := TransformArchive(finalArchive, finalPrepared, instance, port, s.Info, input.Mappings, m.Options.FFmpeg)
-	stopProgress()
-	if e != nil {
-		return e
-	}
-	_ = os.Remove(finalPrepared)
-	if e = CompareAudit(audit, latest); e != nil {
-		return errors.New("Jellyfin wurde während des Umzugs verändert. Bitte die Wiedergabe pausieren und die Übernahme erneut starten. Es wurde nicht umgeschaltet.")
-	}
-	if len(audit.Files) != len(latest.Files) {
-		return errors.New("Die Quelldateien haben sich während des Umzugs geändert. Bitte erneut versuchen.")
-	}
-	if len(audit.Settings) != len(latest.Settings) {
-		return errors.New("Die Quelleinstellungen wurden während des Imports verändert. Bitte erneut versuchen.")
-	}
-	for name, hash := range audit.Settings {
-		if latest.Settings[name] != hash {
-			return errors.New("Die Quelleinstellungen wurden während des Imports verändert. Bitte erneut versuchen.")
+		if hasIntro {
+			latestIntro, err := m.Options.sourceIntro(ctx, s, finalArchive, filepath.Join(instance, "intro-final"))
+			if err != nil {
+				return err
+			}
+			if e = compareIntro(intro.Hashes, latestIntro.Hashes, true); e != nil {
+				return e
+			}
 		}
-	}
-	for name, hash := range audit.Files {
-		if latest.Files[name] != hash {
+		finalPrepared := filepath.Join(instance, "source-final.zip")
+		m.setStep("verifying", 6, "Die Abschlussprüfung sucht nach Änderungen während des Umzugs …")
+		stopProgress = m.watchFiles(ctx, fixedFile(finalPrepared), "Abschließend geprüfte Sicherung")
+		latest, e := TransformArchive(finalArchive, finalPrepared, instance, port, s.Info, input.Mappings, m.Options.FFmpeg)
+		stopProgress()
+		if e != nil {
+			return e
+		}
+		_ = os.Remove(finalPrepared)
+		if e = CompareAudit(audit, latest); e != nil {
+			return errors.New("Jellyfin wurde während des Umzugs verändert. Bitte die Wiedergabe pausieren und die Übernahme erneut starten. Es wurde nicht umgeschaltet.")
+		}
+		if len(audit.Files) != len(latest.Files) {
 			return errors.New("Die Quelldateien haben sich während des Umzugs geändert. Bitte erneut versuchen.")
 		}
+		if len(audit.Settings) != len(latest.Settings) {
+			return errors.New("Die Quelleinstellungen wurden während des Imports verändert. Bitte erneut versuchen.")
+		}
+		for name, hash := range audit.Settings {
+			if latest.Settings[name] != hash {
+				return errors.New("Die Quelleinstellungen wurden während des Imports verändert. Bitte erneut versuchen.")
+			}
+		}
+		for name, hash := range audit.Files {
+			if latest.Files[name] != hash {
+				return errors.New("Die Quelldateien haben sich während des Umzugs geändert. Bitte erneut versuchen.")
+			}
+		}
+	} else if _, e = m.readBackup(input.backup.ID); e != nil {
+		return e
 	}
 	report := Report{Source: s.Info.ServerName, Users: audit.Counts["Users"], Libraries: len(libraries), Items: audit.Counts["BaseItems"], UserData: audit.Counts["UserData"], Instance: id, Verified: true, Finished: time.Now(), Notes: []string{"Benutzerzugänge, Rechte, Bibliotheken und Wiedergabestand wurden verglichen.", "Alte Gerätesitzungen und API-Schlüssel werden nicht übernommen; Geräte neu koppeln.", "Netzwerkzugang und Transcoding sind auf Mutti angepasst. Hardwarebeschleunigung bei Bedarf erneut wählen.", "Jellyfin bleibt erhalten. Ab jetzt bitte Mutti verwenden; spätere Änderungen auf Jellyfin werden nicht synchronisiert."}}
 	if m.Options.IntroSkipper != "" {
@@ -531,12 +584,26 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 		}
 		report.Notes = append(report.Notes, note)
 	}
+	if input.backup != nil {
+		report.Source = "Mutti-Sicherung " + input.backup.ID
+		report.Notes = []string{"Sicherung und wiederhergestellte Daten wurden verglichen.", "Medienoriginale bleiben an ihren bisherigen Speicherorten und müssen separat gesichert werden.", "Alte Gerätesitzungen und API-Schlüssel werden nicht wiederhergestellt. Geräte bitte neu koppeln."}
+		if input.verifyOnly {
+			m.setStep("complete", 7, "Wiederherstellung in einer getrennten Testinstanz geprüft. Deine aktive Bibliothek bleibt unverändert.")
+			// This directory is exclusively generated by this verification run.
+			return os.RemoveAll(instance)
+		}
+	}
 	b, _ := json.Marshal(report)
 	if e = privateWrite(filepath.Join(instance, "report.json"), b); e != nil {
 		return e
 	}
 	if e = ctx.Err(); e != nil {
 		return errors.New("Übernahme abgebrochen. Es wurde nicht umgeschaltet.")
+	}
+	if input.authorizeActivation != nil {
+		if e = input.authorizeActivation(ctx); e != nil {
+			return e
+		}
 	}
 	m.setStep("activating", 7, "Die geprüfte Bibliothek wird aktiviert …")
 	m.change.Lock()
@@ -574,6 +641,9 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	m.state.Progress.FinishedAt = time.Now()
 	m.state.Phase = "complete"
 	m.state.Message = "Deine Jellyfin-Bibliothek ist jetzt in Mutti bereit."
+	if input.backup != nil {
+		m.state.Message = "Sicherung wiederhergestellt. Bitte erneut anmelden und Geräte neu koppeln."
+	}
 	m.state.NewSetup = false
 	m.mu.Unlock()
 	// Only generated staging artifacts are removed, never the source backup/data.

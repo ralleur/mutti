@@ -139,6 +139,10 @@ type SourceInput struct {
 	Mappings                                                    map[string]string
 	Replace, PrepareSource                                      bool
 	Archive                                                     string
+	backup                                                      *storedBackup // Internal verified snapshot, never decoded from JSON.
+	authorizeActivation                                         func(context.Context) error
+	verifyOnly                                                  bool
+	targetAuthorized                                            bool
 	nativeOwner                                                 bool // Set only by the authenticated native request handler; never decoded from JSON.
 }
 

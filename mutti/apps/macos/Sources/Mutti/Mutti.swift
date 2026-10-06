@@ -66,6 +66,7 @@ final class ServerController: ObservableObject {
         var newSetup: Bool
         var phase: String
         var message: String
+        var serviceMessage: String?
         var active: String
     }
     func start() {
@@ -141,6 +142,9 @@ final class ServerController: ObservableObject {
                         if state.newSetup { self.showOnboarding = false }
                         if self.ready { self.starting = false; self.error = nil }
                         else if state.phase == "error" { self.starting = false; self.error = state.message }
+                        else if let message = state.serviceMessage, !message.isEmpty {
+                            self.starting = false; self.error = message
+                        }
                     }
                     attempts += 1
                     if !observed && attempts > 90 {

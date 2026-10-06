@@ -18,6 +18,8 @@ import urllib.request
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--keep', action='store_true')
+parser.add_argument('--image', default='mutti:import-preview')
+parser.add_argument('--maintenance', action='store_true')
 args = parser.parse_args()
 work = Path(tempfile.mkdtemp(prefix='mutti-management-package-'))
 config = work / 'config'
@@ -34,7 +36,7 @@ command = ['docker', 'run', '-d', '--name', name, '--user', f'{os.getuid()}:{os.
            '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m']
 for host, container in zip(ports, (18594, 18595, 8096)):
     command += ['-p', f'127.0.0.1:{host}:{container}']
-command += ['-v', f'{config}:/config', 'mutti:import-preview', '--origin',
+command += ['-v', f'{config}:/config', args.image, '--origin',
             'http://127.0.0.1:29594', '--target-origin', 'http://127.0.0.1:29597',
             '--connect-origin', 'http://127.0.0.1:29595']
 subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
@@ -141,6 +143,18 @@ try:
     check('Real add-library API persists synthetic folder', len(libraries) == 1 and libraries[0]['Locations'] == ['/config/media'])
     counts = api('/Items?ParentId=' + libraries[0]['ItemId'] + '&Recursive=true&IsFolder=false&Limit=0&EnableTotalRecordCount=true', token=token)
     check('Actual empty library has zero records', counts['TotalRecordCount'] == 0)
+    viewer_info = api('/Users/Me', token=viewer)
+    policy_before = viewer_info['Policy']
+    restricted = dict(policy_before, EnableAllFolders=False, EnabledFolders=[], EnableMediaPlayback=False)
+    api('/Users/' + viewer_info['Id'] + '/Policy', restricted, token)
+    rights = api('/Users/Me', token=viewer)['Policy']
+    check('Restricted profile policy is enforced and unrelated rights retained',
+          rights['EnableAllFolders'] is False and rights['EnableMediaPlayback'] is False and
+          all(rights[k] == v for k,v in policy_before.items() if k not in ('EnableAllFolders', 'EnabledFolders', 'EnableMediaPlayback')))
+    check('No libraries leak to profile without folder access', not api('/UserViews', token=viewer)['Items'])
+    allowed = dict(restricted, EnabledFolders=[libraries[0]['ItemId']], EnableMediaPlayback=True)
+    api('/Users/' + viewer_info['Id'] + '/Policy', allowed, token)
+    check('Explicit library grant works through existing user API', any(v['Id'] == libraries[0]['ItemId'] for v in api('/UserViews', token=viewer)['Items']))
     storage = api('/System/Info/Storage', token=token)
     check('Storage comes from packaged server', storage['ProgramDataFolder']['FreeSpace'] > 0)
     original = api('/System/Configuration', token=token)
@@ -151,6 +165,63 @@ try:
     api('/Library/Refresh', {}, token)
     check('Scheduled library work stays visible', any(task['Key'] == 'RefreshLibrary' for task in api('/ScheduledTasks', token=token)))
     check('Packaged web retains Mutti brand', b'<title>Mutti</title>' in request('/web/index.html')[2])
+    if args.maintenance:
+        check('Maintenance requires administrator rights',
+              request('/Mutti/Maintenance/state', {})[0] == 401 and
+              request('/Mutti/Maintenance/backup', {}, viewer)[0] == 403)
+        check('No arbitrary manager actions are forwarded', request('/Mutti/Maintenance/import', {}, token)[0] == 404)
+        before = api('/api/state', port=29594)['active']
+        def wait_job(expected, auth_token):
+            for _ in range(300):
+                state = api('/Mutti/Maintenance/state', {}, auth_token)
+                if state['job']['state'] != 'running':
+                    check('Maintenance job ' + expected, state['job']['state'] == expected)
+                    return state
+                time.sleep(1)
+            raise AssertionError('Maintenance job timed out')
+        check('Backup accepted asynchronously', request('/Mutti/Maintenance/backup', {}, token)[0] == 202)
+        backup_state = wait_job('completed', token)
+        backup = backup_state['backups'][0]
+        check('New backup has no invented restore proof', backup['bytes'] > 0 and not backup.get('verifiedAt'))
+        invalid = {'ID': backup['id'], 'Username': 'Testbesitzer', 'Password': 'incorrect', 'Confirm': True}
+        check('Probe accepted', request('/Mutti/Maintenance/verify', invalid, token)[0] == 202)
+        wait_job('failed', token)
+        check('Failed probe retains current instance', api('/api/state', port=29594)['active'] == before)
+        restore = dict(invalid, Password=password)
+        check('Valid probe accepted', request('/Mutti/Maintenance/verify', restore, token)[0] == 202)
+        checked = wait_job('completed', token)
+        check('Probe records actual verification and keeps active data', checked['backups'][0].get('verifiedAt') and api('/api/state', port=29594)['active'] == before)
+        # Make a real reversible change after the backup, then verify its rollback.
+        rename = api('/System/Configuration', token=token)
+        rename['ServerName'] = 'Changed after backup'
+        api('/System/Configuration', rename, token)
+        check('Restore accepted', request('/Mutti/Maintenance/restore', restore, token)[0] == 202)
+        for _ in range(300):
+            s = api('/api/state', port=29594)
+            if s['active'] != before and s['ready']:
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError('Restore did not activate')
+        check('Previous session is rejected after restore', request('/Mutti/Maintenance/state', {}, token)[0] == 401)
+        token = api('/Users/AuthenticateByName', {'Username': 'Testbesitzer', 'Pw': password})['AccessToken']
+        wait_job('completed', token)
+        check('Actual restored configuration matches backup', api('/System/Configuration', token=token)['ServerName'] == changed['ServerName'])
+        check('Previous instance retained', (config / 'data').is_dir())
+        # Kill only Jellyfin in this uniquely named synthetic container.
+        subprocess.run(['docker', 'exec', name, 'sh', '-c',
+                        'for p in /proc/[0-9]*; do if [ "$(readlink "$p/exe")" = /jellyfin/jellyfin ]; then kill -KILL "${p##*/}"; fi; done'], check=True)
+        time.sleep(2)
+        for _ in range(90):
+            try:
+                if api('/api/state', port=29594)['ready'] and api('/System/Info/Public')['StartupWizardCompleted']:
+                    break
+            except (OSError, AssertionError):
+                pass
+            time.sleep(1)
+        else:
+            raise AssertionError('Jellyfin did not recover after crash')
+        check('Automatic restart preserves library and owner session', len(api('/Library/VirtualFolders', token=token)) == 1)
     passed = True
 finally:
     with (work / 'container.log').open('w') as log:

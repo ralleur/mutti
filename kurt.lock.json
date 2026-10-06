@@ -1,0 +1,24 @@
+{
+  "repository": "https://github.com/ralleur/kurt",
+  "version": "0.2.0",
+  "revision": "89be080da965885301e0422d990329152977028d",
+  "profile": "mutti",
+  "artworkVersion": "kurt-a-refined-12",
+  "files": {
+    "mutti/migrate/web/kurt.js": "e4eed2089e9225293ab69b9113183dfc92eb606aa79d1d2089c926feec9077f1",
+    "mutti/migrate/web/kurt/ATTRIBUTION.md": "6fcfbb094ea5c2c28a2e3d5e5c028e92ce5d996a3e9ad9aaa6ebb21d0ea4d170",
+    "mutti/migrate/web/kurt/CC-BY-4.0.txt": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+    "mutti/migrate/web/kurt/GPL-2.0-or-later.txt": "f371b80469fb235bc500ec29e0e85b682d4a6157a158567d828ff0be544d4f1d",
+    "mutti/migrate/web/kurt/KURT-LICENSE.md": "54443c5e38beadca196b3f4abb2f07b3221feb34c4e3910b2c56d6dc7ba303e4",
+    "mutti/migrate/web/kurt/README.txt": "29f15e7baae0f3ae3339f8450de57a544d0ac0d35b2d59fd72adf9d12472df66",
+    "mutti/migrate/web/kurt/atlas-0.webp": "c3eff871fde307210397bd1c84de820af5c0b9803899d6b9222dd20ff83425f7",
+    "mutti/migrate/web/kurt/atlas-1.webp": "c9875bc4ccd00d3b464f0c2923079192444900723705739f9f64c081540a77d2",
+    "mutti/migrate/web/kurt/manifest.json": "fa445d1b167c845efbfd0e134200012c82be2205b7a3ef6a046180e540d001fb",
+    "mutti/migrate/web/kurt/poop-drop.png": "183231f884fdf216a5fc7f41a8ed659bd622e32d5b14eef73573df079b31a156",
+    "mutti/migrate/web/kurt/poop.png": "b4a56f577155cebe03a71c85964a1afb0bc4e99159a3cc2a815eb37dc429e20c",
+    "mutti/migrate/web/kurt/provenance.json": "f909a425a3da69217d36e825d2de43d41b105f63347f7102745ba655f9e5a878",
+    "mutti/migrate/web/kurt/rest.png": "6eef732940042e50b4b67f9cc9870136013f24d5f4a8f3190d4327df10027207",
+    "mutti/migrate/web/kurt/vomit-drop.png": "f15c4f498da14bdad8395ee443820dc363a23c311d6e2bf56a3c9b47f0049549",
+    "mutti/migrate/web/kurt/vomit.png": "d77ed5fddcd99b14627031cf1163409f04fb7c49102cf11c2e19e8517620389b"
+  }
+}

@@ -136,6 +136,26 @@ func TestRealMigration(t *testing.T) {
 	if len(items.Items) != 1 {
 		t.Fatal("media not scanned")
 	}
+	// Library discovery precedes completion of the background scan. Do not
+	// create collection links while that scan can still rewrite the fixture.
+	for {
+		var tasks []struct{ Key, State string }
+		call("GET", "/ScheduledTasks", nil, &tasks)
+		busy := false
+		for _, task := range tasks {
+			if task.Key == "RefreshLibrary" && (task.State == "Running" || task.State == "Cancelling") {
+				busy = true
+			}
+		}
+		if !busy {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal(ctx.Err())
+		case <-time.After(time.Second):
+		}
+	}
 	item := items.Items[0].Id
 	call("POST", "/UserItems/"+item+"/UserData?userId="+viewer.Id, map[string]any{"IsFavorite": true, "Played": true, "PlayCount": 3, "PlaybackPositionTicks": int64(40000000), "LastPlayedDate": "2026-10-01T12:00:00Z"}, nil)
 	call("POST", "/Playlists", map[string]any{"Name": "Meine Merkliste", "Ids": []string{item}, "UserId": viewer.Id, "MediaType": "Video", "IsPublic": true}, nil)
@@ -145,6 +165,12 @@ func TestRealMigration(t *testing.T) {
 	call("POST", "/Collections?name=Meine+Sammlung&ids="+item, nil, &collection)
 	if collection.Id == "" {
 		t.Fatal("collection was not created")
+	}
+	call("POST", "/Collections/"+collection.Id+"/Items?ids="+item, nil, nil)
+	var sourceCollection struct{ Items []struct{ Id string } }
+	call("GET", "/Items?ParentId="+collection.Id, nil, &sourceCollection)
+	if len(sourceCollection.Items) != 1 || sourceCollection.Items[0].Id != item {
+		t.Fatal("source collection fixture was not created")
 	}
 	// A generated profile image exercises private persisted ownership fields.
 	portrait := filepath.Join(work, "portrait.png")
@@ -448,6 +474,9 @@ func TestRealMigration(t *testing.T) {
 	}
 	if _, e = os.Stat(filepath.Join(o.Root, "data")); e != nil {
 		t.Fatal("previous target missing")
+	}
+	if os.Getenv("MUTTI_TEST_MAINTENANCE") == "1" {
+		testMaintenanceCycle(t, ctx, m, password, viewer.Id, item)
 	}
 	active := m.State().Active
 	stop()

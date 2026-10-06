@@ -7,3 +7,12 @@
 - Changes belong on `codex/` branches. Keep the upstream diff small.
 - Never use real libraries or existing Jellyfin databases for destructive tests.
 - Mac and Docker/NAS are one release gate. Local development is not remote readiness.
+
+## Kurt — gemeinsame Quelle
+
+Kurt wird in `/Users/ai/workspace/kurt` (`ralleur/kurt`) gepflegt.
+Die in `kurt.lock.json` aufgelisteten Dateien sind installierte, versionierte
+Abhängigkeiten; nicht hier bearbeiten. Zeichnungen und wiederverwendbare
+Animationen im Kurt-Repository ändern, dort prüfen/committen und mit dessen
+`tools/sync.py` übernehmen. `KURT.md` beschreibt die Einbindung.
+Projektbezogene UI und Aktionen bleiben in diesem Repository.

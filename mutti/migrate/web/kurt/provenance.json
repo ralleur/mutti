@@ -1,11 +1,11 @@
 {
-  "source": "Hauser private Kurt lab, docs/kurt/animation-v11/ios-assets",
-  "version": "kurt-a-refined-11",
-  "authorization": "Owner requested reuse in Mutti import, 2026-10-05",
-  "changes": "Selected original frames, lossless atlas repacking and pixel-identical deduplication; no redrawing.",
-  "uniqueTiles": 127,
+  "repository": "https://github.com/ralleur/kurt",
+  "artworkVersion": "kurt-a-refined-12",
+  "profile": "mutti",
+  "changes": "Original frames, 256px lossless WebP, identical-pixel deduplication. No redrawing.",
+  "uniqueCels": 127,
   "inputs": {
-    "manifest.json": "48fc12f4cb76ae7b4ed93c81bc0d5cc3bcd34bf87907b657acbfee5844bb6c1e",
+    "manifest.json": "ef79a1830dde61f0d58f3ee411120913c88390356c907d5167bb0d10152aa8b0",
     "kurt-a-18.png": "b67ffdd8c2e446b2b8da7e82e91e5d0aca56d2bf855599035817066f794812d5",
     "kurt-a-19.png": "f18936dc70a7b96472f97dd9250a9e0b05bd66435be72ab439b67831cb2fbf81",
     "kurt-a-5.png": "ec36008a323f210a8fe3b59e3dec7ea511ee660d3fa7c20452e96adc9edecce4",

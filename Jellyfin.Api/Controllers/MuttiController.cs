@@ -51,10 +51,33 @@ public class MuttiController : BaseJellyfinApiController
             return NotFound();
         }
 
-        var target = ConnectTarget();
+        return await Forward(operation, ConnectTarget(), Environment.GetEnvironmentVariable("MUTTI_CONNECT_ADMIN_ORIGIN"), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Performs a bounded owner maintenance operation on the package manager.</summary>
+    /// <param name="operation">State, backup, verification or restore.</param>
+    /// <param name="cancellationToken">Request cancellation.</param>
+    /// <returns>The manager response.</returns>
+    [HttpPost("Maintenance/{operation}")]
+    [Consumes("application/json")]
+    [RequestSizeLimit(16384)]
+    public async Task<ActionResult> Maintenance(string operation, CancellationToken cancellationToken)
+    {
+        if (operation is not ("state" or "backup" or "verify" or "restore"))
+        {
+            return NotFound();
+        }
+
+        var origin = Environment.GetEnvironmentVariable("MUTTI_MANAGEMENT_ORIGIN");
+        var target = LocalTarget(origin, "MUTTI_MANAGER_PORT", "/api/maintenance/");
+        return await Forward(operation, target, origin, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<ActionResult> Forward(string operation, Uri? target, string? origin, CancellationToken cancellationToken)
+    {
         if (target is null)
         {
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Die Gerätekopplung ist in diesem Paket nicht bereit.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, "Diese Verwaltungsfunktion ist in diesem Paket nicht bereit.");
         }
 
         var token = User.GetToken();
@@ -92,7 +115,7 @@ public class MuttiController : BaseJellyfinApiController
             using var body = JsonDocument.Parse(buffer.AsMemory(0, length));
             // The browser can never supply a target address or a route outside this list.
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(target, operation));
-            request.Headers.Host = new Uri(Environment.GetEnvironmentVariable("MUTTI_CONNECT_ADMIN_ORIGIN")!).Authority;
+            request.Headers.Host = new Uri(origin!).Authority;
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             request.Content = new StringContent(body.RootElement.GetRawText(), Encoding.UTF8, "application/json");
             using var response = await ConnectClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
@@ -119,22 +142,26 @@ public class MuttiController : BaseJellyfinApiController
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            return StatusCode(StatusCodes.Status502BadGateway, "Die Gerätekopplung ist gerade nicht erreichbar. Bitte erneut versuchen.");
+            return StatusCode(StatusCodes.Status502BadGateway, "Die Verwaltung ist gerade nicht erreichbar. Bei einer Wiederherstellung bitte den Neustart abwarten und erneut anmelden.");
         }
     }
 
     private static Uri? ConnectTarget()
     {
-        var host = Environment.GetEnvironmentVariable("MUTTI_CONNECT_ADMIN_ORIGIN");
+        return LocalTarget(Environment.GetEnvironmentVariable("MUTTI_CONNECT_ADMIN_ORIGIN"), "MUTTI_CONNECT_ADMIN_PORT", "/");
+    }
+
+    private static Uri? LocalTarget(string? host, string portVariable, string path)
+    {
         if (!Uri.TryCreate(host, UriKind.Absolute, out var origin)
             || (origin.Scheme != "http" && origin.Scheme != "https")
             || !string.IsNullOrEmpty(origin.UserInfo) || !string.IsNullOrEmpty(origin.Query)
             || !string.IsNullOrEmpty(origin.Fragment) || origin.AbsolutePath != "/"
-            || !int.TryParse(Environment.GetEnvironmentVariable("MUTTI_CONNECT_ADMIN_PORT"), out var port) || port < 1 || port > 65535)
+            || !int.TryParse(Environment.GetEnvironmentVariable(portVariable), out var port) || port < 1 || port > 65535)
         {
             return null;
         }
 
-        return new Uri($"http://127.0.0.1:{port}/");
+        return new Uri($"http://127.0.0.1:{port}{path}");
     }
 }

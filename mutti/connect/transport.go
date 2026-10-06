@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/yamux"
@@ -28,14 +29,25 @@ func privateHost(host string) bool {
 // Data channels preserve messages; TLS/yamux need a byte stream. Never discard
 // the unread portion of a message, and keep writes below SCTP's message limit.
 type channelConn struct {
-	*datachannel.DataChannel
+	DataChannel interface {
+		io.ReadWriteCloser
+		SetReadDeadline(time.Time) error
+		SetWriteDeadline(time.Time) error
+	}
 	pending         []byte
 	readMu, writeMu sync.Mutex
+	deadlineMu      sync.Mutex
+	closeOnce       sync.Once
+	closed          atomic.Bool
+	closeErr        error
 }
 
 func (c *channelConn) Read(p []byte) (int, error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
+	if c.closed.Load() {
+		return 0, net.ErrClosed
+	}
 	if len(c.pending) == 0 {
 		b := make([]byte, 65536)
 		n, e := c.DataChannel.Read(b)
@@ -51,6 +63,9 @@ func (c *channelConn) Read(p []byte) (int, error) {
 func (c *channelConn) Write(p []byte) (int, error) {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	if c.closed.Load() {
+		return 0, net.ErrClosed
+	}
 	total := 0
 	for len(p) > 0 {
 		n := len(p)
@@ -71,6 +86,32 @@ func (c *channelConn) Write(p []byte) (int, error) {
 }
 func (c *channelConn) LocalAddr() net.Addr  { return channelAddr("local") }
 func (c *channelConn) RemoteAddr() net.Addr { return channelAddr("peer") }
+func (c *channelConn) Close() error {
+	c.closeOnce.Do(func() {
+		c.closed.Store(true)
+		// SCTP Close initiates a graceful stream reset. A vanished peer cannot
+		// acknowledge it, so explicitly wake TLS/yamux's blocked read and write.
+		_ = c.SetDeadline(time.Now())
+		c.closeErr = c.DataChannel.Close()
+	})
+	return c.closeErr
+}
+func (c *channelConn) SetReadDeadline(t time.Time) error {
+	c.deadlineMu.Lock()
+	defer c.deadlineMu.Unlock()
+	if c.closed.Load() {
+		t = time.Now()
+	}
+	return c.DataChannel.SetReadDeadline(t)
+}
+func (c *channelConn) SetWriteDeadline(t time.Time) error {
+	c.deadlineMu.Lock()
+	defer c.deadlineMu.Unlock()
+	if c.closed.Load() {
+		t = time.Now()
+	}
+	return c.DataChannel.SetWriteDeadline(t)
+}
 func (c *channelConn) SetDeadline(t time.Time) error {
 	if e := c.SetReadDeadline(t); e != nil {
 		return e

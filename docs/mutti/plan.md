@@ -2,6 +2,10 @@
 
 Stand: **5. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**.
 
+Aktueller lokaler Übergabestand: [Testpakete, Grenzen und offene Arbeit](testpakete-2026-10-05.md).
+Sicherung/Restore und nativer Widerruf sind weiter implementiert; die Modul- und
+Release-Gates dieses Plans bleiben offen und werden nicht durch Vorversuche ersetzt.
+
 Mutti wird das Server-Gegenstück zu **kurtz**: ein eigenständiges, kuratiertes
 Produkt auf Jellyfin-Basis. Das wichtigste Ziel ist eine einfache Einrichtung
 und Kopplung: Medien auswählen, Gerät bestätigen, schauen. Nutzer benötigen
@@ -647,3 +651,19 @@ Die ersten ausführbaren Aufgaben sind:
 Der konkrete Fortschritt wird ab Umsetzung in den Mutti-Repositories gepflegt.
 Dieses Dokument wandert dann in deren Produktdokumentation; hier bleibt ein
 Verweis, damit Client- und Serverplanung verbunden bleiben.
+
+
+## 15. Autonomer Ausbauauftrag vom 5. Oktober 2026
+
+Der Owner autorisiert die Umsetzung der bestehenden Erweiterungsplanung in der
+Reihenfolge Foundation/Verwaltung → lokale KI → Immich → Paperless → gemeinsamer
+Betrieb, jeweils mit Integration in den vorhandenen kurtz-Client. Haussteuerung
+bleibt später. Reversible Implementierungsentscheidungen sind delegiert;
+reale Daten bleiben erhalten, destruktive Prüfungen verwenden nur neue Testdaten.
+Keine Veröffentlichung, Buchung oder Umgehung von Freigaben ist enthalten.
+
+M5 wird zuerst um nachweisbare lokale Sicherung und Restore ergänzt, M3 um
+serverseitige Rechteänderungen während laufender Streams. Externe Sicherungsziele,
+versionsübergreifende Updates und die vollständige Mac-/NAS-/WAN-/Geräteabnahme
+bleiben eigene offene Ergebnisse. Der laufende [Status](status.md) trennt
+implementierte Funktionen, tatsächliche Laufzeitnachweise und verbleibende Arbeit.

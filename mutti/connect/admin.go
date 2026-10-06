@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"github.com/hashicorp/yamux"
 	"github.com/skip2/go-qrcode"
 	"net/http"
 	"net/url"
@@ -33,12 +34,34 @@ var adminMark []byte
 var adminWordmark []byte
 
 type jellyUser struct {
-	ID     string `json:"Id"`
-	Name   string `json:"Name"`
-	Policy struct {
+	policySnapshot string
+	ID             string `json:"Id"`
+	Name           string `json:"Name"`
+	Policy         struct {
 		IsAdministrator bool `json:"IsAdministrator"`
 		IsDisabled      bool `json:"IsDisabled"`
 	} `json:"Policy"`
+}
+
+// Keep the complete policy for stream invalidation, including future upstream
+// permission fields. It never becomes a client-supplied authorization context.
+func (u *jellyUser) UnmarshalJSON(data []byte) error {
+	type plain jellyUser
+	var value plain
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	var raw struct{ Policy map[string]any }
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	policy, err := json.Marshal(raw.Policy)
+	if err != nil {
+		return err
+	}
+	*u = jellyUser(value)
+	u.policySnapshot = string(policy)
+	return nil
 }
 
 func (s *Server) Admin(origin string) http.Handler {
@@ -271,22 +294,28 @@ func (s *Server) approve(ctx context.Context, pin, userID, ownerToken string) er
 }
 func (s *Server) Revoke(pin string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	old, exists := s.state.Devices[pin]
 	delete(s.state.Devices, pin)
 	if e := savePrivate(s.path, s.state); e != nil {
 		if exists {
 			s.state.Devices[pin] = old
 		}
+		s.mu.Unlock()
 		return e
 	}
+	delete(s.policies, pin)
 	delete(s.pending, pin)
 	for k, inv := range s.invites {
 		if inv.Pin == pin {
 			delete(s.invites, k)
 		}
 	}
+	var closing []*yamux.Session
 	for session := range s.sessions[pin] {
+		closing = append(closing, session)
+	}
+	s.mu.Unlock()
+	for _, session := range closing {
 		_ = session.Close()
 	}
 	return nil

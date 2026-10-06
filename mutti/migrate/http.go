@@ -30,6 +30,7 @@ func (m *Manager) Handler() (http.Handler, error) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(v)
 	}
+	mux.HandleFunc("POST /api/maintenance/{operation}", m.maintenanceHandler)
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { respond(w, m.State()) })
 	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
 		respond(w, map[string]any{"csrf": m.token, "nativeOwner": m.isNativeOwner(r)})
@@ -113,7 +114,7 @@ func (m *Manager) Handler() (http.Handler, error) {
 				http.Error(w, "Unbekannter Ursprung.", 403)
 				return
 			}
-			if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Mutti-CSRF")), []byte(m.token)) != 1 {
+			if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") || (subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Mutti-CSRF")), []byte(m.token)) != 1 && !(strings.HasPrefix(r.URL.Path, "/api/maintenance/") && r.Header.Get("Origin") == "")) {
 				http.Error(w, "Bitte die Seite neu öffnen.", 403)
 				return
 			}

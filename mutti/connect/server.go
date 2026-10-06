@@ -53,6 +53,7 @@ type Server struct {
 	sessions                         map[string]map[*yamux.Session]bool
 	active                           chan struct{}
 	targetHTTP                       *http.Client
+	policies                         map[string]string
 }
 
 func NewServer(directory, broker, stun, target, host string) (*Server, error) {
@@ -171,6 +172,7 @@ func (s *Server) accept(parent context.Context, o Offer) {
 	}()
 	life, cancelLife := context.WithCancel(parent)
 	defer cancelLife()
+	go s.guardSession(life, pin, session)
 	go func() {
 		select {
 		case <-session.CloseChan():
@@ -213,10 +215,11 @@ func (s *Server) remoteRequest(pin string, w http.ResponseWriter, r *http.Reques
 		return
 	}
 	var currentUser jellyUser
-	if s.jf(r.Context(), "GET", "/Users/Me", device.Token, nil, &currentUser) != nil || currentUser.Policy.IsAdministrator || currentUser.Policy.IsDisabled {
+	if s.jf(r.Context(), "GET", "/Users/Me", device.Token, nil, &currentUser) != nil || currentUser.ID != device.UserID || currentUser.Policy.IsAdministrator || currentUser.Policy.IsDisabled {
 		http.Error(w, "Wiedergabeprofil nicht verfügbar.", 403)
 		return
 	}
+	s.observePolicy(pin, currentUser.policySnapshot)
 	if r.URL.Path == "/Users/AuthenticateWithQuickConnect" && r.Method == "POST" {
 		// Network identity has already been proved. Issue only this device's profile;
 		// the upstream Jellyfin bearer token never leaves the server sidecar.
@@ -360,3 +363,57 @@ type boundedConn struct {
 }
 
 func (c *boundedConn) Close() error { e := c.Conn.Close(); c.once.Do(c.release); return e }
+
+// Existing streams must end when the upstream session or playback profile is
+// revoked too. Per-request checks alone cannot terminate an ongoing film.
+func (s *Server) guardSession(ctx context.Context, pin string, session *yamux.Session) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-session.CloseChan():
+			return
+		case <-ticker.C:
+		}
+		s.mu.Lock()
+		device, approved := s.state.Devices[pin]
+		s.mu.Unlock()
+		if !approved {
+			continue
+		} // Unapproved pairing has its own bounded lifetime.
+		check, cancel := context.WithTimeout(ctx, 3*time.Second)
+		var user jellyUser
+		err := s.jf(check, "GET", "/Users/Me", device.Token, nil, &user)
+		cancel()
+		if err == nil {
+			s.observePolicy(pin, user.policySnapshot)
+		}
+		if err != nil || user.ID != device.UserID || user.Policy.IsDisabled || user.Policy.IsAdministrator {
+			_ = session.Close()
+			return
+		}
+	}
+}
+
+func (s *Server) observePolicy(pin, policy string) {
+	s.mu.Lock()
+	if s.policies == nil {
+		s.policies = map[string]string{}
+	}
+	previous, exists := s.policies[pin]
+	s.policies[pin] = policy
+	var closing []*yamux.Session
+	if exists && previous != policy {
+		// End old streams on any rights change. A new connection receives the
+		// freshly checked policy and remains usable if its profile is active.
+		for session := range s.sessions[pin] {
+			closing = append(closing, session)
+		}
+	}
+	s.mu.Unlock()
+	for _, session := range closing {
+		_ = session.Close()
+	}
+}
