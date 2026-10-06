@@ -1,6 +1,6 @@
 # Mutti – Produkt- und Umsetzungsplan
 
-Stand: **5. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**.
+Stand: **6. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**. Die Architektur-Review vom 6. Oktober und die daraus abgeleiteten Entscheidungen stehen in [review-2026-10-06.md](review-2026-10-06.md) und in [Abschnitt 15](#15-entscheidungsprotokoll-vom-6-oktober-2026).
 
 Mutti wird das Server-Gegenstück zu **kurtz**: ein eigenständiges, kuratiertes
 Produkt auf Jellyfin-Basis. Das wichtigste Ziel ist eine einfache Einrichtung
@@ -21,20 +21,21 @@ Produktempfehlung für eine verpflichtende externe Tailscale-Einrichtung.
 | Grundlage | Eigener Jellyfin-Fork mit erhaltener Historie und möglichst kleinen, klar abgegrenzten Anpassungen. |
 | Client | kurtz bleibt ein eigenständiges Produkt und weiterhin mit gewöhnlichen Jellyfin-Servern kompatibel. |
 | Gestaltung | Vorhandenes kurtz-Designsystem als Grundlage; eigene Mutti-Identität und passende Server-Oberfläche. |
-| Erste Auslieferung | **Mac-App und Docker/NAS gemeinsam**, mit identischem Serverstand und gemeinsamem Funktionsumfang. |
+| Erste Auslieferung | **Mac-App zuerst, bewusst ohne NAS-Support.** Docker/NAS folgt in einer späteren Iteration auf demselben Kern und derselben Weboberfläche. Grund: aktuelle NAS-Hardware kann die vorgesehenen lokalen Modelle nicht vernünftig betreiben. Owner-Entscheidung vom 06.10.2026; sie ersetzt die frühere gemeinsame Day-1-Auslieferung. |
 | Konto | Kein verpflichtendes Konto bei Ralleur, Tailscale, Cloudflare oder einem anderen Anbieter für Endnutzer. Lokale Besitzeridentität und Jellyfin-Benutzerrechte bleiben notwendig. |
 | Day 1 | Sichere lokale Verbindung und direkter verschlüsselter Fernzugriff, soweit beide Netze das ermöglichen. |
-| Relay | **Day 2. In Day 1 kein Medien-Relay, kein stiller Rückfall auf öffentliche DERP-, TURN- oder Peer-Relays.** |
-| Spätere Anbieterauswahl | Erst zum Start von Day 2 den Markt erneut prüfen, insbesondere kostenlose Angebote und deren reale Grenzen. Heute keine Anbieterbindung und kein dauerhaftes Gratisversprechen. |
+| Relay | **Kein zentrales Relay durch Ralleur, weder in Day 1 noch später.** Kein stiller Rückfall auf DERP-, TURN- oder Peer-Relays. Für Anschlüsse ohne direkten Weg (DS-Lite, CGNAT, gesperrtes UDP) beschreibt ein späterer Wiki-Artikel die manuelle Einrichtung von Tailscale als dokumentierten Ausweichweg. Owner-Entscheidung vom 06.10.2026. |
+| Netze ohne direkten Weg | Die Verbreitung von DS-Lite und CGNAT in Deutschland ist bekannt und wird bewusst nicht durch eigene Infrastruktur gelöst. Mutti und kurtz zeigen den Zustand „Direkte Verbindung derzeit nicht möglich“ verständlich an und verweisen auf den Tailscale-Artikel. Keine Anbieterbindung, kein Gratisversprechen. |
 | Netzwerkfehler | Verständliche Meldung und erneuter Versuch; niemals unverschlüsselter oder öffentlich freigeschalteter Ersatzweg. |
 | Aktueller Auftrag | Plan ausführen. Eigene Forks, lokale Implementierung und überprüfbare Builds sind beauftragt. Hosting und öffentliche Release-Freigabe folgen nach den jeweiligen Abnahmen. |
 
-**Plattformentscheidung:** Mac-App und Docker/NAS gehören gemeinsam zu Day 1.
-Beide Auslieferungen bauen auf demselben plattformübergreifenden Kern und
-derselben Weboberfläche auf. Installation und Betrieb werden pro Plattform
-geprüft; eine fertige Mac-App allein erfüllt das erste Release noch nicht.
-Windows-Installer und herstellerspezifische NAS-Pakete ohne Containerbetrieb
-gehören zunächst zum späteren Ausbau.
+**Plattformentscheidung (aktualisiert 06.10.2026):** Die erste Iteration ist
+bewusst **Mac-only**. Das Docker-Paket bleibt im Repository als Entwicklerweg
+erhalten und wird weiter gebaut, ist aber kein Release-Gate der ersten Iteration
+und wird nicht für Endnutzer dokumentiert. Docker/NAS folgt als eigene Iteration
+auf demselben Kern, sobald die NAS-Hardware die vorgesehenen lokalen Modelle
+tragen kann. Windows-Installer und herstellerspezifische NAS-Pakete gehören
+weiterhin zum späteren Ausbau.
 
 **Architekturvorschlag:** Ein kleiner erreichbarer Dienst vermittelt Kopplung
 und Verbindungsinformationen. STUN hilft beim Ermitteln erreichbarer Adressen.
@@ -42,7 +43,8 @@ Beide übertragen keine Bibliotheken oder Videodaten. „Ohne Relay“ bedeutet 
 keine Garantie für einen vollständig dienstlosen Fernzugriff. Betreiber,
 Hosting, Betriebskosten und Ausfallverhalten dieses Vermittlungsdienstes werden
 vor einer öffentlichen Fernzugriffs-Beta festgelegt; ein Hostingauftrag entsteht
-durch diesen Plan nicht.
+durch diesen Plan nicht. Der Vermittler bleibt der einzige von Ralleur
+betriebene Netzdienst; ein Relay kommt nicht hinzu (Abschnitt 13).
 
 ## 2. Was die erste Version leisten soll
 
@@ -69,8 +71,9 @@ Zum Pflichtumfang gehören:
 
 Nicht Bestandteil von Day 1 sind Relay, universelle Erreichbarkeitsversprechen,
 ein allgemeines VPN, Zugriff auf das gesamte Heimnetz, Exit-Node-Funktionen,
-eine neue Transcoding-Engine oder ein vollständiger Neubau sämtlicher Jellyfin-
-Verwaltungsfunktionen. Die zuvor ausgeschlossene Jellyfin-Übernahme ist durch die
+eine neue Transcoding-Engine, ein vollständiger Neubau sämtlicher Jellyfin-
+Verwaltungsfunktionen sowie seit dem 06.10.2026 auch die NAS-/Docker-Auslieferung
+für Endnutzer. Die zuvor ausgeschlossene Jellyfin-Übernahme ist durch die
 Owner-Rückmeldung vom 5. Oktober als M2b in den Umfang aufgenommen worden.
 Jellyfin-Wiedergabe im Browser bleibt erhalten; kurtz ist der bevorzugte Client.
 
@@ -178,6 +181,38 @@ qualifizierte Lösung für einen Dienst mit vielen voneinander getrennten
 Haushalten. Weder der Test-Control-Server aus dem PoC noch eine unbeschränkte
 gemeinsame Gerätewolke werden als Produktionslösung übernommen.
 
+### 4.1 — Zustands- und Identitätsmodell (Review 06.10.2026)
+
+Die Review hat gezeigt, dass Serveridentität und Geräteliste des Connect-Diensts
+heute in der jeweiligen Dateninstanz liegen (`<aktive Instanz>/connect/connect.json`)
+und beim Instanzwechsel nur die Vermittler-Einstellung mitgenommen wird. Jeder
+Import und jeder künftige Instanzwechsel erzeugt damit eine neue Identität, und
+alle gekoppelten Geräte verwaisen. Festlegungen:
+
+- **Identität auf Installationsebene.** Serverschlüssel, Besitzergeheimnis und
+  Geräteliste liegen außerhalb der Instanzverzeichnisse im Mutti-Datenordner und
+  überleben Import, Update und Wiederherstellung. Der Instanzwechsel kopiert
+  nichts mehr; er zeigt nur auf eine andere Bibliothek.
+- **Identität im Backup.** Die Mutti-Sicherung umfasst Identität und Geräteliste
+  gesondert geschützt (Dateirechte, keine Klartext-Tokens in Supportexporten).
+  Ein Verlust der Identität ist ein benannter Wiederherstellungsfall mit
+  verständlicher Anleitung „Geräte neu koppeln“, kein stilles Verhalten.
+- **Protokollversion und Fähigkeiten.** Einladung, Datenkanal und Tunnel tragen
+  eine Protokollversion; Server und Client tauschen beim Aufbau eine kurze
+  Fähigkeitsliste aus. Ältere Clients erhalten eine klare Meldung statt eines
+  Zeitüberschreitungsfehlers. Das geplante Verzeichnis `mutti/contracts/` nimmt
+  die versionierten Nachrichten auf. kurtz wird über den App Store aktualisiert,
+  Mutti separat; eine Versionsschere ist der Normalfall, nicht die Ausnahme.
+- **Mehrere Endpunkte pro Gerät.** Ein Gerät speichert LAN- und Vermittler-
+  Endpunkt; der Server kann Änderungen über den bestehenden Tunnel nachreichen.
+  Ein Wechsel der Vermittler-Adresse oder der Heimnetz-IP erfordert damit kein
+  erneutes Koppeln.
+- **Widerruf wirkt durchgängig.** „Gerät entfernen“ löscht auch Jellyfin-Sitzung
+  und -Gerät, nicht nur den Mutti-Eintrag.
+
+Diese Festlegungen gelten vor der ersten externen Kopplung, weil jede spätere
+Umstellung alle Geräte erneut koppeln lassen würde.
+
 ## 5. Kopplung vom ersten Start bis zum Film
 
 **Erste Einrichtung am Server:** Mutti erzeugt lokal die Serveridentität und
@@ -242,7 +277,7 @@ Details und Plattformgrenzen: [automatische Vorbereitung](import.md#automatische
 
 **Teststand umgesetzt für Jellyfin 12.1; Owner-Abnahme ausstehend.** Aktueller
 Funktionsumfang und Grenzen: [Import-Testanleitung](import.md). Kanonischer
-Ideeneintrag: [MK-005 im gemeinsamen Ideen-Eingang](/Users/ai/workspace/vela-swiftfin/IDEEN.md).
+Ideeneintrag: MK-005 im gemeinsamen Ideen-Eingang (lokale Arbeitsnotiz, nicht Teil des Repositories).
 
 Zielablauf:
 
@@ -337,11 +372,39 @@ Sicherheitsgrenzen nicht überschreiben. Inkompatible Einstellungen werden vor
 stilles Weglassen mit einer „alles übernommen“-Meldung. Mac und Docker/NAS
 gehören auch für diesen Import zur gemeinsamen Abnahme.
 
+**Härtung nach der Review vom 06.10.2026** (Owner-Entscheidung „so in den Plan“):
+
+- **Vorprüfung vor dem Start:** geschätzte Sicherungsgröße (Datenbank,
+  Metadaten, Trickplay getrennt), freier Speicherplatz auf Quelle und Ziel mit
+  Reserve von etwa dem Vierfachen der Sicherung, Lesbarkeit aller Medienordner
+  mit einer Stichprobe echter Dateien statt nur `stat` auf den Wurzelordner.
+- **Skalierende Zeitlimits** statt fester 30/45 Minuten: Limits richten sich
+  nach gemessener Größe und beobachtetem Fortschritt; ein stiller Abbruch bei
+  großen Bibliotheken ist kein zulässiges Ergebnis.
+- **Trickplay und Metadaten optional neu erzeugen** statt kopieren, wenn das
+  die Übernahme bei großen Bibliotheken von Stunden auf Minuten verkürzt; die
+  Wahl wird vor dem Start angezeigt.
+- **Vollständiger Vergleich:** Auch `Config/*` wird gegen die wiederhergestellte
+  Instanz verglichen, nicht nur gehasht. Die Vorprüfung berücksichtigt
+  interne Sammlungspfade auch bei entfernten Quellen.
+- **Quelle nur mit ausdrücklicher Bestätigung verändern.** Der Wechsel des
+  SQLite-Sperrmodus und der Neustart der Quelle werden einzeln bestätigt; Mutti
+  bietet an, die Originalkonfiguration nach dem Umzug zurückzusetzen, und
+  entfernt die eigenen Sicherungsarchive auf der Quelle oder benennt sie.
+- **Kompatibilitätsmatrix statt Einzelpin:** Der Import ist ein versionierter
+  Adapter mit dokumentierter Matrix aus Jellyfin-Version, Sicherungsformat und
+  qualifizierten Plugins. Nicht qualifizierte Kombinationen erhalten den
+  manuellen Archivweg als Ausweich, keine stille Ablehnung.
+- **Rückweg sichtbar:** Vorherige Instanzen bleiben erhalten und lassen sich
+  über die Oberfläche wieder aktivieren; fehlgeschlagene Instanzen werden
+  aufgeräumt. Der Import ist kein Release-Gate der ersten Mac-Iteration mehr,
+  sondern wird nach Abnahme auf echten Bibliotheken freigegeben.
+
 ### 5.3 — Intro Skipper als kuratierter Standard (MK-006)
 
 **Owner-Entscheidung 05.10.2026:** Intro Skipper gehört zu jeder Mutti-Einrichtung
 und wird bei einem Jellyfin-Umzug ohne gesonderte Plugin-Rückfrage mitgenommen.
-Kanonischer Eintrag: [MK-006](/Users/ai/workspace/vela-swiftfin/IDEEN.md).
+Kanonischer Eintrag: MK-006 im gemeinsamen Ideen-Eingang (lokale Arbeitsnotiz, nicht Teil des Repositories).
 
 - Offizielles Plugin 12.0.4.0, Quellcommit und SHA-256 im Komponentenmanifest.
   Identische DLL in Mac und Docker; kein Laufzeitdownload und keine Neuanmeldung.
@@ -356,6 +419,29 @@ Kanonischer Eintrag: [MK-006](/Users/ai/workspace/vela-swiftfin/IDEEN.md).
 - Gemeinsame Abnahme: Mac/Docker, Quelle mit und ohne Plugin, vorhandene Segmente
   und Konfiguration, FFmpeg-Funktionsprüfung, WAL-Sicherung und Neustart.
   Weitere Quell-Pluginversionen benötigen eine qualifizierte Schemaübernahme.
+
+### 5.4 — Einrichtung und Verwaltung vom Besitzergerät (Review 06.10.2026)
+
+- **Genau eine Besitzeridentität.** Der Jellyfin-Administrator ist der Mutti-
+  Besitzer. Es gibt keine zweite Anmeldung „Mutti-Besitzer“ in der
+  Geräteverwaltung; die Geräteverwaltung authentifiziert mit der bestehenden
+  Administratorsitzung. Die im ersten Owner-Test aufgetretene Doppelanmeldung
+  gilt als Fehler, nicht als Zwischenschritt.
+- **Geräteverwaltung in der Mutti-Weboberfläche.** Die separaten kleinen
+  Oberflächen des Verbindungsdiensts und des Importdiensts wandern in
+  `mutti-web` beziehungsweise verwenden dieselben Design-Tokens; es gibt eine
+  Status-API des Managers für alle Ansichten.
+- **Kopplungsrichtung für Apple TV.** Ein Gerät ohne Kamera zeigt selbst seine
+  Anfrage als Code; der Besitzer bestätigt sie auf dem Mac oder dem Handy. Das
+  Scannen eines von Mutti gezeigten QR-Codes bleibt der Weg für iPhone und iPad.
+  Ein langer Kopplungslink zum Eintippen ist kein Produktablauf.
+- **Setup-Code für Geräte ohne Bildschirm am Server.** Für die spätere
+  Docker/NAS-Iteration zeigt der Container einen einmaligen Setup-Code; das
+  Besitzergerät findet den Server im Heimnetz und schließt die Einrichtung über
+  denselben verschlüsselten Kopplungskanal ab. SSH-Tunnel sind ein
+  Entwicklerweg und tauchen in keiner Nutzeranleitung auf.
+- **Besitzer-Wiederherstellung** (verlorenes Passwort, verlorenes
+  Verwaltungsgerät) ist ein definierter Ablauf vor der ersten Beta.
 
 ## 6. Sicherheits- und Datenschutzumfang
 
@@ -457,12 +543,43 @@ fehlende Dateirechte erhalten verständliche Behandlung. Verfügbarkeit bei
 abgemeldetem Benutzer und Systemdienstinstallation werden gesondert entschieden;
 ein reiner Anmeldedienst darf nicht als immer verfügbar beworben werden.
 
+**Verfügbarkeitsmodell der Mac-App (Owner-Entscheidung 06.10.2026, Umsetzung
+begonnen):** Ein Mac, der als Mutti-Server dient, muss ohne Zutun erreichbar
+bleiben, solange er läuft. Dazu gehören:
+
+- **Supervisor im Manager:** Stirbt der Jellyfin-Prozess, startet der Manager
+  ihn mit wachsendem Abstand neu und zeigt den Zustand „Server wird neu
+  gestartet“; erst nach mehreren Fehlversuchen in Folge wird ein Fehler mit
+  Handlungsanweisung gezeigt. Der Verbindungsdienst wird mit Abstand neu
+  gestartet; sein Ausfall blockiert nie die Bibliothek, bleibt aber sichtbar.
+- **Prozessgruppe und Lebensader:** Manager und Kinder laufen in einer eigenen
+  Prozessgruppe; die App hält eine Pipe zum Manager offen. Endet die App oder
+  stürzt sie ab, beendet sich der Manager samt Server geordnet, statt Ports und
+  Datenbank als Waise zu belegen. Als letzte Stufe beendet die App die gesamte
+  Gruppe.
+- **Start bei der Anmeldung** als Schalter in der Menüleiste über die
+  System-Anmeldeobjekte; **Mac wach halten** verhindert den Ruhezustand, solange
+  Mutti läuft (abschaltbar, Hinweis auf Akkuverbrauch). Eine sitzungsbewusste
+  Variante, die nur bei aktiver Wiedergabe wach hält, folgt, sobald der Manager
+  einen authentifizierten Statuskanal zu Jellyfin hat.
+- **Beenden mit Warnung:** „Mutti beenden“ weist darauf hin, dass gekoppelte
+  Geräte den Zugriff verlieren. Abmelden und Herunterfahren zeigen keine
+  Rückfrage. Der Stopp blockiert die Oberfläche nicht.
+- **Startzeit nach Updates:** Ein langer erster Start (Datenbankmigration) wird
+  als solcher gemeldet und nicht nach 90 Sekunden abgebrochen.
+
+Betrieb bei abgemeldetem Benutzer (Systemdienst) bleibt eine spätere
+Entscheidung und wird nicht als verfügbar beworben.
+
 Ziel ist ein universelles Mac-Paket für Apple Silicon und Intel. Die gewählte
 Upstream-Laufzeit und alle gebündelten Komponenten müssen diese Kombination
 tragen. Älteste unterstützte macOS-Version und tatsächliche Architekturfreigaben
 werden in M0 festgelegt und durch eigene Build-/Runtime-Prüfungen belegt.
 
-**Docker/NAS im selben ersten Release:** versioniertes Image und verständliche Compose-Vorlage,
+**Docker/NAS (spätere Iteration, seit 06.10.2026 kein Gate der ersten
+Auslieferung):** Das Paket bleibt baubar und wird in CI mitgeprüft, damit der
+gemeinsame Kern nicht auseinanderläuft. Ziel der späteren Iteration bleibt ein
+versioniertes Image und verständliche Compose-Vorlage,
 persistente Konfiguration und Sicherungen, Medien standardmäßig nur lesbar,
 keine privilegierten Container oder pauschalen Heimnetzfreigaben. DNS, Discovery,
 Dateirechte, Host-Netzwerkbesonderheiten und Hardware-Transcoding werden für
@@ -533,6 +650,45 @@ Der Prozess pro Update:
 Jellyfin kennt keinen allgemeinen Datenbank-Downgrade. Ein Rückweg kann daher
 die Wiederherstellung des vorherigen Datenstands erfordern, nicht nur das
 Zurücksetzen der Programmdatei.
+
+**Update und Wiederherstellung als eigene Etappe M2.5 (Owner-Entscheidung
+06.10.2026):** Diese Arbeit rückt von M5 vor, weil sie den Kern von „stabil“
+bildet und das vorhandene Instanzmodell (`instances/<ID>`,
+`active-instance.json`) dafür bereits geeignet ist.
+
+- **Versionsstempel** im Datenordner; der Manager verweigert den Start einer
+  älteren Programmversion auf neueren Daten mit verständlicher Meldung.
+- **Snapshot vor dem ersten Start einer neuen Version:** Die Daten werden als
+  neue Instanz übernommen, die alte bleibt unverändert erhalten. Erst nach
+  erfolgreichem Start zeigt der Zeiger auf die neue Instanz.
+- **„Vorherigen Stand wiederherstellen“** als sichtbare Aktion in der App, die
+  den Zeiger zurücksetzt und den passenden Programmstand benennt.
+- **Aufräumen** alter Instanzen nach einer Frist mit Anzeige des belegten
+  Speicherplatzes; nie automatisch die aktive oder die unmittelbar vorherige.
+- **Mac-Updates** über einen signierten Update-Mechanismus (Sparkle mit
+  EdDSA-Signatur) aus notarisierten Paketen; die Datenmigration von
+  `Mutti Preview` auf den Release-Datenordner und die Bundle-ID ohne `preview`
+  gehört in dieselbe Etappe.
+- **Docker** erhält versionierte Image-Tags und Digests, sobald die NAS-Iteration
+  beginnt.
+
+**Release-Hygiene (Owner-Entscheidung 06.10.2026, Umsetzung begonnen):**
+
+- **Lizenzprüfung** vor der ersten öffentlichen Distribution. Die offenen Fragen
+  stehen in [licensing.md](licensing.md): GPL-2.0-Text der Jellyfin-LICENSE
+  gegenüber `GPL-3.0-only` in den Jellyfin-NuGet-Paketen, Intro Skipper
+  `GPL-3.0-only` im selben Prozess, FFmpeg-Quellbündel, sowie auf kurtz-Seite
+  die App-Store-Verträglichkeit des GPL-mpv-Builds, ohne die es keinen
+  Apple-TV-Client gibt. Ohne geklärte Antwort kein öffentlicher Download.
+- **Notarisierung in CI:** Ein manuell auslösbarer Release-Workflow signiert
+  mit Developer ID, Hardened Runtime und passenden Entitlements, notarisiert und
+  staplet. Er braucht hinterlegte Zertifikate und API-Schlüssel und ersetzt
+  keine andere Abnahme.
+- **Geerbte CI aufgeräumt:** Upstream-Workflows zeigen auf `main` statt
+  `master`; Jellyfin-eigene Automationen sind für den Fork abgeschaltet; die
+  Mutti-Prüfungen laufen auf allen Arbeitsbranches und Pull Requests.
+- **Dokumentation widerspruchsfrei:** README, Entwicklungsanleitung und Status
+  beschreiben denselben Stand; lokale Pfade und veraltete Aussagen sind entfernt.
 [Backup und Restore](https://jellyfin.org/docs/general/administration/backup-and-restore/),
 [Upstream-Updatepolitik](https://jellyfin.org/docs/general/testing/upgrades/).
 
@@ -554,63 +710,71 @@ Umfang wesentlich.
 
 | Etappe | Arbeit und Ergebnis | Abschlusskriterium |
 | --- | --- | --- |
-| **M0 – Entscheidungen und Techniknachweis** | Mac-/Docker-/NAS-Testmatrix festlegen; passende stabile Upstreams wählen; direkte Verbindung ohne Relay prüfen; Kopplungs-/Control-Architektur und Sicherheitsgrenzen dokumentieren. | Entscheidungsprotokolle und echter direkter WAN-Nachweis; kein versteckter Relay-Verkehr. Offene Grenzen sind benannt. |
-| **M1 – Fork und reproduzierbarer Build** | Repositories anlegen, Versionen festlegen, unveränderte Referenz für Mac und Container bauen, CI und Quellen-/Lizenzinventar aufsetzen. | Frische Testinstallationen zeigen Bibliothek und Film; beide Forks und beide Pakete lassen sich aus dokumentierten Quellen bauen. Kann teilweise schon während M0 erfolgen. |
-| **M2 – Mutti-Identität und lokale Einrichtung** | Markenpaket, Tokens und Kernansichten; Mac-Hülle und Docker-Paket mit gemeinsamer Weboberfläche; Besitzerzugang und Medienordner. | Mac-Einrichtung ohne Terminal; dokumentiertes Docker-/NAS-Deployment mit anschließendem Webassistenten. Beide benötigen keine manuellen Jellyfin-Konfigurationsdateien. |
-| **M3 – Sichere lokale Kopplung** | Schlüssel, QR, Freigabe, Profilrechte, Geräteverwaltung und Wiederherstellung; erste kurtz-Integration. | Zwei frisch installierte Geräte koppeln; abgelaufene/erneut verwendete Einladungen scheitern; Entfernen eines Geräts beendet dessen Zugriff. |
-| **M4 – Direkter Fernzugriff** | Vermittlung und STUN produktionsfähig einbinden; Client-Transport vervollständigen; Netzwechsel und Fehlerfälle. | App außerhalb des Heimnetzes spielt über direkten verschlüsselten Weg; gesperrter direkter Weg führt kontrolliert zum Fehler, ohne Relay. |
-| **M5 – Betrieb und Beta** | Updates, Backups/Restore und Langzeittests für Mac und Docker/NAS; echte Apple-Clients und Feldtest; Support-/Datenschutztexte. | Die unten stehende Abnahme ist für beide Server-Auslieferungen bestanden und reproduzierbar dokumentiert. |
-| **M6 – Gemeinsames erstes Release** | Zusammenpassende Mac-App und Docker-Images, Website, Hilfetexte und Quellen veröffentlichungsbereit machen. | Beide Pakete erfüllen den vereinbarten Umfang. Produkttexte entsprechen den getesteten Plattformen; Veröffentlichung erfolgt im dafür beauftragten Schritt. |
+| **M0 – Entscheidungen und Techniknachweis** | Mac-Testmatrix festlegen; passende stabile Upstreams wählen; direkte Verbindung ohne Relay prüfen; Kopplungs-/Control-Architektur und Sicherheitsgrenzen dokumentieren. | Entscheidungsprotokolle und echter direkter WAN-Nachweis mit zwei getrennten Anschlüssen; kein versteckter Relay-Verkehr. Erwartete Fehlschläge (DS-Lite, CGNAT, gesperrtes UDP) sind benannt und führen zum Tailscale-Artikel, nicht zu eigener Infrastruktur. |
+| **M1 – Fork und reproduzierbarer Build** | Repositories anlegen, Versionen festlegen, unveränderte Referenz für Mac bauen, CI und Quellen-/Lizenzinventar aufsetzen. Der Container-Build bleibt als Entwicklerweg mit in CI. | Frische Testinstallation zeigt Bibliothek und Film; beide Forks und das Mac-Paket lassen sich aus dokumentierten Quellen bauen. |
+| **M2 – Mutti-Identität, lokale Einrichtung und Verfügbarkeit** | Markenpaket, Tokens und Kernansichten; Mac-Hülle mit Supervisor, Prozessgruppe, Lebensader, Start bei Anmeldung, Wachhalten und Beenden-Warnung; Besitzerzugang und Medienordner; eine Besitzeridentität. | Mac-Einrichtung ohne Terminal; Jellyfin-Absturz wird automatisch behoben und sichtbar gemacht; App-Absturz hinterlässt keine verwaisten Prozesse; keine manuellen Jellyfin-Konfigurationsdateien. |
+| **M2.5 – Update und Wiederherstellung** | Versionsstempel, Snapshot vor Upgrade über das Instanzmodell, „Vorherigen Stand wiederherstellen“, Downgrade-Sperre, signierter Update-Mechanismus, Datenmigration vom Preview-Ordner. | Upgrade auf einer Datenkopie und Rückkehr zum alten Stand in der App geprüft; kein Verlust von Bibliotheken, Benutzern oder Gerätefreigaben. |
+| **M3 – Sichere lokale Kopplung** | Identität und Geräte auf Installationsebene, Protokollversion und Fähigkeitsabfrage, QR beziehungsweise Gerätecode, Freigabe, Profilrechte, Geräteverwaltung in der Weboberfläche, Wiederherstellung; kurtz-Integration. | Zwei frisch installierte Geräte koppeln; abgelaufene/erneut verwendete Einladungen scheitern; Entfernen eines Geräts beendet dessen Zugriff auch in Jellyfin; Import und Update lassen Kopplungen bestehen. |
+| **M4 – Direkter Fernzugriff** | Vermittlung und STUN produktionsfähig einbinden; Betreiber des Vermittlers festlegen; Client-Transport vervollständigen; Netzwechsel und Fehlerfälle; Tailscale-Wiki-Artikel für Netze ohne direkten Weg. | App außerhalb des Heimnetzes spielt über direkten verschlüsselten Weg; gesperrter direkter Weg führt kontrolliert zur Meldung mit Verweis auf den Artikel, ohne Relay. |
+| **M5 – Betrieb und Beta** | Backups/Restore-Abnahme, Langzeittests auf dem Mac, echte Apple-Clients und Feldtest in wenigen Haushalten, Support-/Datenschutztexte, Lizenzprüfung abgeschlossen. | Die unten stehende Abnahme ist für die Mac-Auslieferung bestanden und reproduzierbar dokumentiert. |
+| **M6 – Erstes Release (Mac)** | Notarisierte Mac-App, Website, Hilfetexte und Quellen veröffentlichungsbereit; Import nur, wenn auf echten Bibliotheken abgenommen. | Das Paket erfüllt den vereinbarten Umfang; Produkttexte entsprechen den getesteten Plattformen. |
+| **M7 – Docker/NAS-Iteration** | Setup-Code und Einrichtung vom Besitzergerät, signierte Multi-Arch-Images, NAS-Vorlagen, Hardware-Transcoding, reale NAS-Abnahme. | Dokumentiertes NAS-Deployment ohne SSH-Tunnel und ohne Portwissen; dieselbe Abnahme wie für den Mac. |
 
-Kritischer Pfad: **M0 → M3/M4 → M5**. Ein lokaler Zwischenstand aus M2 ist
-nützlich, darf aber nicht als fertige Fernzugriffslösung ausgegeben werden.
-M2 beginnt nach der Basisarbeit aus M1; M3 benötigt die lokale Einrichtung.
-Ein großer optischer Umbau des kompletten Upstreams ist kein Vorläufer des
-ersten Kopplungstests.
+Kritischer Pfad: **M0 → M2/M2.5 → M3 → M4 → M5**. Verfügbarkeit (M2) und
+Update/Wiederherstellung (M2.5) stehen vor der ersten externen Kopplung, weil
+das Zustandsmodell aus Abschnitt 4.1 sonst später alle Geräte erneut koppeln
+lassen würde. Ein lokaler Zwischenstand darf nicht als fertige
+Fernzugriffslösung ausgegeben werden. Ein großer optischer Umbau des kompletten
+Upstreams ist kein Vorläufer des ersten Kopplungstests.
 
 ## 12. Abnahme für Day 1
+
+Die Abnahme gilt seit dem 06.10.2026 für die **Mac-Auslieferung**. Die
+Docker/NAS-Nachweise bleiben als Vorlage für die spätere Iteration (M7) stehen
+und sind kein Gate des ersten Release.
 
 | Bereich | Nachweis |
 | --- | --- |
 | Einrichtung | Frische Mac-Installation ohne Shell sowie dokumentiertes Docker-/NAS-Deployment mit Webassistent; jeweils erste Bibliothek, Besitzerzugang und Kopplung. Abbruch/Neustart verliert keine bestätigten Einstellungen. |
 | Lokaler Betrieb | Wiedergabe und lokale Gerätefreigabe funktionieren bei ausgefallenem öffentlichen Vermittlungsdienst; kein fremdes Netz erhält Zugriff. |
-| Echtes WAN | Tests zwischen getrennten Internetanschlüssen, mit öffentlicher IPv4, IPv6, DS-Lite/CGNAT und Mobilfunk. Erwartete Fehlschläge werden dokumentiert, nicht als erfolgreiche Direktverbindung gewertet. |
+| Echtes WAN | Tests zwischen getrennten Internetanschlüssen, mit öffentlicher IPv4, IPv6, DS-Lite/CGNAT und Mobilfunk. Erwartete Fehlschläge werden dokumentiert, nicht als erfolgreiche Direktverbindung gewertet; sie führen in App und Wiki zum Tailscale-Artikel, nicht zu einem Relay. |
 | Kein Relay | Instrumentierung und gezielte Netzsperren belegen: beim Aufbau, Streaming und Netzwechsel keine Medien über DERP/TURN/Peer-Relay oder Control. Der Test fällt bei impliziten Drittservern durch. |
 | Wiedergabe | Reale Bibliothek, mindestens ein längerer Filmtest je freizugebender Clientplattform; Start, Sprung, Resume, HLS/Transcoding, Bilder, Untertitel, Audioauswahl und WebSockets. Bitraten und Hardware dokumentieren. |
-| Lebenszyklus | Server-/Client-Neustart, Ruhemodus, abgezogenes Laufwerk und WLAN/Mobilfunk-Wechsel; keine stillen Freigaben oder verlorenen Sperrungen. |
+| Lebenszyklus | Server-/Client-Neustart, Jellyfin-Absturz mit automatischem Neustart, App-Absturz ohne verwaiste Prozesse, Ruhemodus mit aktivem Wachhalten, abgezogenes Laufwerk und WLAN/Mobilfunk-Wechsel; keine stillen Freigaben oder verlorenen Sperrungen. |
 | Rechte | Anderes Gerät/anderer Haushalt, falscher Server, gestohlene oder wiederverwendete Einladung und entfernter Zugriff werden abgewiesen. Aktive Sitzungen enden bei Sperrung. |
 | Geheimnisse | QR, Logs, URL-Weiterleitungen, Absturzberichte und Supportexport enthalten keine dauerhaften Zugangsdaten. |
-| Updates | Auf Mac und Docker/NAS: Upgrade und Wiederherstellung aus passender Sicherung mit vorhandenen Bibliotheken, Benutzern und Gerätefreigaben; definierte Behandlung alter/geklonter Schlüssel. |
+| Updates | Auf dem Mac: Upgrade mit Snapshot, Rückkehr zum vorherigen Stand aus der App, Versionsstempel und Downgrade-Sperre; Bibliotheken, Benutzer und Gerätefreigaben bleiben erhalten; definierte Behandlung alter/geklonter Schlüssel. |
 | Gestaltung | Echte Mutti-Ansichten, korrektes Branding, DE/EN, Tastatur, Screenreader, Hell/Dunkel und mobile Freigabe geprüft. |
-| Distribution | Mac-Signatur/Notarisierung, Docker-Image-Provenienz und Digests, Hashes, Quellpaket, Lizenzen, unterstützte Systeme und Release-Notizen vollständig. Gemeinsames Komponentenmanifest stimmt mit beiden Paketen überein. |
+| Distribution | Mac-Signatur/Notarisierung aus dem Release-Workflow, Hashes, Quellpaket, abgeschlossene Lizenzprüfung, unterstützte Systeme und Release-Notizen vollständig. Das Komponentenmanifest stimmt mit dem Paket überein. |
 
 Für den freiwilligen Feldtest werden technische Ergebnisse ohne Mediennamen
 oder Kontoidentitäten ausgewertet: Aufbau erfolgreich/fehlgeschlagen,
 Aufbauzeit, Abbrüche, verwendeter direkter Weg und Wiedergabedauer. Es werden
 keine Erfolgsquoten aus dem lokalen PoC auf die spätere Nutzerschaft übertragen.
 
-## 13. Day 2 – Relay später gesondert entscheiden
+## 13. Kein Relay – Tailscale-Artikel als dokumentierter Ausweichweg
 
-Day 2 beginnt mit einer **neuen Marktprüfung zum damaligen Zeitpunkt**. Das
-heutige Cloudflare-Freikontingent oder eine derzeit kostenlose öffentliche
-Relay-Infrastruktur wird nicht als Grundlage für die langfristige Kalkulation
-festgeschrieben. Die Untersuchung vergleicht:
+**Owner-Entscheidung 06.10.2026:** Ralleur stellt kein zentrales Relay bereit,
+auch nicht als spätere Day-2-Option. Die frühere Marktprüfung für Relay-Anbieter
+entfällt. Die Verbreitung von DS-Lite und CGNAT in Deutschland ist bekannt und
+wird bewusst in Kauf genommen.
 
-- vollständig kostenlose Angebote, Freikontingente, Sponsoring sowie selbst
-  betriebene Open-Source-Lösungen einschließlich realer Hostingkosten;
-- Nutzungsbedingungen für unser Produkt und für Video, Registrierungspflichten,
-  Limits, Regionen, Überlastung, Verfügbarkeit und Folgen eines Kontingentendes;
-- Anschluss an den bis dahin gewählten Transport, Ende-zu-Ende-Verschlüsselung,
-  Metadaten, Geräteautorisierung und Trennung verschiedener Haushalte;
-- Kosten pro tatsächlich weitergeleitetem Datenvolumen und Eignung für die
-  gemessenen Bitraten, einschließlich hoher Videospitzen;
-- Anbieterwechsel, selbst gehostete Alternative und Betrieb ohne Relay bei
-  Ausfall oder Abschaltung des Angebots.
+Für Haushalte, in denen kein direkter Weg zustande kommt, gilt:
 
-Day 1 hält dafür eine kleine interne Transportgrenze und versionierte
-Fähigkeitsangaben bereit. Es implementiert weder vorsorglich mehrere
-Relay-Anbieter noch einen ungenutzten kostenpflichtigen Dienst. Ein späteres
-Relay darf die Gerätefreigabe und die Ende-zu-Ende-Verschlüsselung nicht verändern.
+- Mutti und kurtz zeigen den Zustand „Direkte Verbindung derzeit nicht möglich“
+  mit kurzer Erklärung und Verweis auf einen **Wiki-Artikel**, der die manuelle
+  Einrichtung von Tailscale auf Server und Geräten beschreibt. Der Artikel
+  entsteht vor der Fernzugriffs-Beta (M4) und wird bei Änderungen des
+  Tailscale-Produkts gepflegt.
+- Die Kopplung und die Gerätefreigabe bleiben dabei unverändert; Tailscale
+  liefert nur den Netzweg. Mutti behandelt eine Tailscale-Adresse wie jeden
+  anderen erreichbaren Endpunkt und prüft dieselbe Serveridentität.
+- Es gibt keinen stillen Rückfall, keinen eingebauten Tailscale-Client und keine
+  Kontopflicht in Mutti. Wer den Artikel nicht nutzen möchte, behält den
+  vollständigen Heimnetzbetrieb.
+- Day 1 hält weiterhin eine kleine interne Transportgrenze mit versionierten
+  Fähigkeitsangaben bereit, damit der Netzweg später austauschbar bleibt, ohne
+  Gerätefreigabe oder Ende-zu-Ende-Verschlüsselung zu verändern.
 
 ## 14. Startpaket für den Umsetzungsauftrag
 
@@ -624,12 +788,28 @@ Die ersten ausführbaren Aufgaben sind:
    durchführen und die Transportentscheidung festhalten.
 4. Forks und Build-Grundlage in den eigenen Repositories aufsetzen.
 5. Mutti-Markenpaket und die erste zusammenhängende Einrichtung gestalten.
-6. Für Mac und Docker/NAS dieselbe vertikale Funktionsstrecke liefern: frische
+6. Für den Mac die vertikale Funktionsstrecke liefern: frische
    Mutti-Installation → Medienordner → Besitzer → kurtz-QR → Bestätigung →
-   Film im Heimnetz.
+   Film im Heimnetz; dazu Supervisor, Lebensader und Start bei Anmeldung.
 7. Dieselbe Strecke über einen direkten Fernzugriff erweitern und die
-   Fehlerstrecke ohne möglichen Direktweg gleichwertig fertigstellen.
+   Fehlerstrecke ohne möglichen Direktweg gleichwertig fertigstellen, mit
+   Verweis auf den Tailscale-Artikel statt eines Relays.
 
 Der konkrete Fortschritt wird ab Umsetzung in den Mutti-Repositories gepflegt.
 Dieses Dokument wandert dann in deren Produktdokumentation; hier bleibt ein
 Verweis, damit Client- und Serverplanung verbunden bleiben.
+
+## 15. Entscheidungsprotokoll vom 6. Oktober 2026
+
+Grundlage ist die Architektur-Review in [review-2026-10-06.md](review-2026-10-06.md).
+Der Owner hat die sieben Empfehlungen wie folgt entschieden:
+
+| # | Empfehlung | Entscheidung |
+| --- | --- | --- |
+| 1 | Transport-Realitätscheck mit DS-Lite, CGNAT, Mobilfunk und IPv6 vor weiterer Connect-Arbeit | DS-Lite-Problematik ist bekannt und wird bewusst nicht durch ein zentrales Relay gelöst. Ein späterer Wiki-Artikel beschreibt die manuelle Tailscale-Einrichtung als Ausweichweg. Abschnitte 1 und 13. |
+| 2 | Zustandsmodell korrigieren: Identität und Geräte auf Installationsebene, Protokollversion plus Fähigkeiten, Identität im Backup | In den Plan aufgenommen. Abschnitt 4.1. |
+| 3 | Verfügbarkeit: Supervisor mit Neustart und Backoff, Prozessgruppe, Login-Agent, Wachhalten, Beenden-Warnung | Umsetzung beauftragt und begonnen, bewusst **Mac-only**. Die erste Iteration verzichtet auf NAS-Support, weil aktuelle NAS-Hardware die vorgesehenen lokalen Modelle nicht vernünftig betreiben kann. Abschnitte 1, 8 und 11. |
+| 4 | Einrichtung vom Besitzergerät: eine Besitzeridentität, Geräteverwaltung in der Weboberfläche, Gerätecode für Apple TV, Setup-Code für spätere NAS | In den Plan aufgenommen. Abschnitt 5.4. |
+| 5 | Update und Wiederherstellung als M2.5 statt M5 | In den Plan aufgenommen. Abschnitte 10 und 11. |
+| 6 | Import härten: Vorprüfung, skalierende Limits, vollständiger Vergleich, Kompatibilitätsmatrix, Quelle nur mit Bestätigung ändern, Rückweg | In den Plan aufgenommen. Abschnitt 5.2. |
+| 7 | Release-Hygiene: Lizenzprüfung, Notarisierung in CI, geerbte CI aufräumen, Doku-Widersprüche | Umsetzung beauftragt und begonnen. Abschnitt 10 und [licensing.md](licensing.md). |
