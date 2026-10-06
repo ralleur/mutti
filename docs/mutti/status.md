@@ -62,10 +62,15 @@ hoher Systemlast; Dialogbewertung durch den Agenten: 3,6 / 3,6 / 3,4. Damit auf
 dem Holdout alle „limited“-Bedingungen erfüllt. **Owner-Entscheidung
 06.10.2026:** `qwen3.8:27b-mlx` im Katalog „limited“ (`catalog.go`); unter P0
 ohne Runtime-Attestation weiterhin keine Produktnutzung. Ollama und MLX in
-`mutti/THIRD-PARTY.md`, MLX-Lizenz im App-Paket (`build-mac.sh`).
+`mutti/THIRD-PARTY.md`, MLX-Lizenz im App-Paket (`build-mac.sh`). Commit `c74373310c`.
+Mac-App daraus vollständig gebaut (`build/macos/osx-arm64/Mutti.app`, 805 MB,
+sauberer Baum, MLX-Kernel enthalten, Ad-hoc-Signatur geprüft; .NET SDK 10.0.401
+nach `~/.dotnet` installiert). Paket-Smoke mit der Engine aus der App: Holdout
+43/44, Netzsperre verifiziert, MLX auf GPU. `module-package-smoke.py` nicht
+ausgeführt; App nicht gestartet/bedient.
 [Nachweis](evidence/model-comparison-v5-2026-10-06.md),
 [Protokoll](evidence/casting-v5-rubric.md). Nächste Schritte: unabhängiger Holdout bzw.
-Owner-Dialogbewertung, Paket-Smoke der neu gebauten Mac-App, Bewerter-Artefakt (Markdown) als v6-Rubrik,
+Owner-Dialogbewertung, `module-package-smoke.py` und Bedienung der neuen App, Bewerter-Artefakt (Markdown) als v6-Rubrik,
 P0-Runtime-Attestation.
 
 **Session-Vorgaben, 06.10.2026:** [AGENTS.md](../../AGENTS.md) definiert jetzt

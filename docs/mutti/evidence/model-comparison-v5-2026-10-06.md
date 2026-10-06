@@ -149,6 +149,27 @@ verfehlt U02 die Nichtwissen-Pflicht.
 jeder Produktnutzung Runtime-Attestation und vertrauenswürdigen
 Nachweisimport verlangt — die Katalogspalte allein schaltet ohnehin nichts frei.
 
+### Nachtrag: Einstufung, Mac-App und Paket-Smoke (06.10.2026, 21:04)
+
+Owner-Entscheidung: `qwen3.8:27b-mlx` im Katalog **„limited“** (Commit
+`c74373310c`). Mac-App vollständig aus diesem sauberen Commit gebaut
+(`mutti/packaging/build-mac.sh`, .NET SDK 10.0.401 nach `~/.dotnet` per
+offiziellem `dotnet-install.sh` installiert, `MUTTI_DOTNET=~/.dotnet/dotnet`;
+Log `build/mac-build-2026-10-06-mlx.log`). Geprüft: Build-Nachweis
+`server.commit c74373310c`, `dirty: false`, Web `9cde06c4`, `releaseReady: false`;
+`ai-engine` mit `mlx_metal_v3/v4`, `LICENSE-mlx.txt`, `licenses/MLX-MIT.txt`;
+Hub enthält `mutti-assistant-v5`; Engine `3e54b34f…`; `codesign --verify --deep
+--strict` bestanden (Ad-hoc-Signatur); App 805 MB.
+
+Paket-Smoke: v5-Holdout, 1 Wiederholung, Engine direkt aus
+`Mutti.app/Contents/Resources/ai-engine/ollama`: **43/44** (nur VT15),
+`networkLock: verified`, `MLX engine initialized … device=gpu`, p95
+Werkzeugantwort 12,3 s, Median 56,8 tok/s
+(`build/model-casting/2026-10-06-v5-holdout-app-smoke/`). Grenze: Das prüft die
+mitgelieferte Engine mit dem Casting-Harness, nicht die laufende App über
+Hub-Route und Oberfläche; `mutti/tests/module-package-smoke.py` wurde nicht
+ausgeführt, und die KI-Produktroute bleibt durch P0 gesperrt.
+
 ## Verbleibende Fehler (jeweils alle drei Wiederholungen)
 
 - **U02 (Entwicklung):** „Keine Stromrechnung 2019 gefunden“, danach Aufzählung
