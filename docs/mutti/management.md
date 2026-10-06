@@ -23,12 +23,11 @@ Dashboard-Konzept mit kompakter Mutti-Marke, Sora und gelben Hauptaktionen.
   vorgetäuschten Online-Sitzungen. Direkter Fernzugriff behält die bestehende
   native Konfiguration und die Foundation-Grenzen.
 - Erweiterte Medien-/Benutzerverwaltung bleibt gezielt erreichbar.
-- Fotos (Immich-Kandidat), Dokumente (Paperless-ngx), lokale KI
-  (Ollama-Kandidat) und Zuhause (Dienst offen) als eigene, bedienbare Vorschauen.
-  Sie sind ausdrücklich **noch nicht angebunden**. Entwürfe gelten nur in der
-  aktuellen Ansicht, werden nicht gespeichert und starten keine Dienste.
-  Modulfreigaben und gemeinsamer Updatebetrieb bleiben gekennzeichnete
-  Ausbauaufgaben. Dies liefert kein neues Modulbackend aus.
+- **Seit 06.10.2026 angebunden:** Fotos (Immich), Dokumente (Paperless-ngx) und
+  lokale KI (Ollama) mit echter Verwaltung: Dienstadresse, Kontozuordnung pro
+  Profil, Freigaben, Ein/Aus, Engine-Status mit Netzsperre, geprüfter
+  Modellkatalog mit Download/Übernahme/Auswahl. Details: [modules.md](modules.md).
+  Zuhause bleibt eine gekennzeichnete Vorschau ohne Backend.
 
 ## Architektur und Grenzen
 

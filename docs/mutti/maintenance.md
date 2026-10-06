@@ -24,7 +24,11 @@ Geräte erneut koppeln. Die aktuelle Besitzerberechtigung wird vor dem Wechsel
 erneut geprüft. Ein falsches Kennwort oder eine defekte Sicherung schaltet nichts um.
 
 Sicherungen liegen als private Verzeichnisse unter `<Mutti-Datenordner>/backups`.
-Jede enthält `backup.json`, `library.zip` und gegebenenfalls `intro/`.
+Jede enthält `backup.json`, `library.zip`, gegebenenfalls `intro/` und seit dem
+6. Oktober `hub/` mit Moduleinstellungen, profilgebundenen Dienstschlüsseln,
+KI-Gesprächen, Chat-Anhängen und Importaufträgen (ohne Modelldateien). Die
+Wiederherstellung übernimmt diese Moduldaten nach erfolgreicher Aktivierung und
+legt den bisherigen Stand als `hub-before-restore-<Zeit>/` ab.
 Zum Schutz vor Plattenverlust den **gesamten jeweiligen Sicherungsordner** auf
 separaten Speicher kopieren. Die Dateien enthalten private Konfiguration und
 Passworthashes: geschützt aufbewahren. Ein komfortabler Import fremder
