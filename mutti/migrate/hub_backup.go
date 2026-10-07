@@ -2,7 +2,7 @@
 package migrate
 
 import (
-	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -97,7 +97,7 @@ func (m *Manager) restoreHub(b *storedBackup) error {
 		}
 		rel := strings.TrimPrefix(name, "hub/")
 		if err := copyPrivate(filepath.Join(b.directory, filepath.FromSlash(name)), filepath.Join(current, filepath.FromSlash(rel))); err != nil {
-			return errors.New("Die Moduldaten der Sicherung konnten nicht vollständig übernommen werden; der vorherige Stand liegt in " + keep + ".")
+			return fmt.Errorf("Die Moduldaten der Sicherung konnten nicht vollständig übernommen werden; der vorherige Stand liegt in %s.", keep)
 		}
 	}
 	return nil

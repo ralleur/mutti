@@ -213,7 +213,14 @@ measurement and the deferred expenditure dashboard. No current model is promoted
 ## Compatibility and operational contracts
 
 Existing `/mutti/hub/v1` routes remain. Qualification adds a stable error/state and
-proposal provenance field. Clients must display the server message and tolerate
+proposal provenance field.
+
+User-facing texts are German or English per request: an explicit `language`
+(query or message field) wins, then the first supported `Accept-Language`
+entry. The hub defaults to English; the service manager (setup, update and
+maintenance messages) keeps German when a request states no language, so
+older tools see no change. Stable codes, not texts, are the contract for
+clients; the setup page picks its language from the browser or app. Clients must display the server message and tolerate
 unknown capabilities; native runtime UX for this state remains an explicit test.
 No separate coupling, service ports or backend sessions are required in kurtz.
 

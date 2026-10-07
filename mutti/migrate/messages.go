@@ -282,6 +282,14 @@ func translateMessage(text string) string {
 	return text
 }
 
+// say renders a manager message in the language of the request.
+func say(r *http.Request, text string) string {
+	if englishRequest(r) {
+		return translateMessage(text)
+	}
+	return text
+}
+
 // englishRequest: an explicit ?language= wins, then the first supported
 // Accept-Language entry. Without either the manager answers in German, as
 // before; the Mac app and browsers always send the user's languages.

@@ -160,14 +160,16 @@ func (m *Manager) maintenanceOwner(ctx context.Context, token string) (*API, err
 func (m *Manager) maintenanceHandler(w http.ResponseWriter, r *http.Request) {
 	a, err := m.maintenanceOwner(r.Context(), strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 	if err != nil {
-		http.Error(w, err.Error(), 401)
+		http.Error(w, say(r, err.Error()), 401)
 		return
 	}
 	defer a.Client.CloseIdleConnections()
 	op := r.PathValue("operation")
 	if op == "state" {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(m.MaintenanceState())
+		s := m.MaintenanceState()
+		s.Job.Message = say(r, s.Job.Message)
+		_ = json.NewEncoder(w).Encode(s)
 		return
 	}
 	if op != "backup" && op != "verify" && op != "restore" {
@@ -181,16 +183,16 @@ func (m *Manager) maintenanceHandler(w http.ResponseWriter, r *http.Request) {
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384))
 	d.DisallowUnknownFields()
 	if d.Decode(&input) != nil {
-		http.Error(w, "Ungültige Anfrage.", 400)
+		http.Error(w, say(r, "Ungültige Anfrage."), 400)
 		return
 	}
 	var trailing any
 	if d.Decode(&trailing) != io.EOF || len(input.Username) > 128 || len(input.Password) > 1024 {
-		http.Error(w, "Ungültige Anfrage.", 400)
+		http.Error(w, say(r, "Ungültige Anfrage."), 400)
 		return
 	}
 	if op != "backup" && (!validID(input.ID) || input.Username == "" || !input.Confirm) {
-		http.Error(w, "Bitte Sicherung und Benutzerzugang prüfen und den Vorgang bestätigen.", 400)
+		http.Error(w, say(r, "Bitte Sicherung und Benutzerzugang prüfen und den Vorgang bestätigen."), 400)
 		return
 	}
 	err = m.startMaintenance(op, input.ID, func(ctx context.Context) (string, error) {
@@ -220,7 +222,7 @@ func (m *Manager) maintenanceHandler(w http.ResponseWriter, r *http.Request) {
 		return input.ID, nil
 	})
 	if err != nil {
-		http.Error(w, err.Error(), 409)
+		http.Error(w, say(r, err.Error()), 409)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
