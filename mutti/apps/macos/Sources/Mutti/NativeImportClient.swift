@@ -80,6 +80,26 @@ final class NativeImportClient {
         _ = try await request("api/import", body: data, csrf: authorization.csrf)
         return true
     }
+
+    /// Rolls back to the pre-update backup; only the native owner may do this
+    /// and only while the manager blocks the start.
+    func rollback(snapshot: String, window: NSWindow?) async throws -> Bool {
+        guard !confirming else { throw ServerController.Failure("Bitte die offene Bestätigung abschließen.") }
+        confirming = true
+        defer { confirming = false }
+        let alert = NSAlert()
+        alert.messageText = NSLocalizedString("Datenstand vor dem Update wiederherstellen?", comment: "Rollback confirmation")
+        alert.informativeText = NSLocalizedString("Mutti stellt die Sicherung wieder her, die vor dem Update angelegt wurde. Der aktuelle Datenstand wird nicht gelöscht, sondern im Mutti-Ordner beiseitegelegt. Nach der Sicherung entzogene Geräte und Freigaben bleiben entzogen; danach gekoppelte Geräte koppelst du neu.", comment: "Rollback confirmation")
+        alert.addButton(withTitle: NSLocalizedString("Wiederherstellen", comment: "Rollback confirmation"))
+        alert.addButton(withTitle: NSLocalizedString("Abbrechen", comment: "Rollback confirmation"))
+        let result = if let window { await alert.beginSheetModal(for: window) } else { alert.runModal() }
+        guard result == .alertFirstButtonReturn else { return false }
+        let authorization = try await authorization()
+        guard authorization.nativeOwner else { throw ServerController.Failure("Bitte Mutti erneut öffnen, um die Wiederherstellung in der App zu bestätigen.") }
+        let body = try JSONSerialization.data(withJSONObject: ["Snapshot": snapshot])
+        _ = try await request("api/update/rollback", body: body, csrf: authorization.csrf)
+        return true
+    }
 }
 
 private final class ImportRedirectBlocker: NSObject, URLSessionTaskDelegate {

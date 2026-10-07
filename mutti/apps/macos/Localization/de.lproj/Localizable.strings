@@ -18,3 +18,10 @@
 
 "Einrichtung läuft" = "Einrichtung läuft";
 "Bitte zuerst die Einrichtung abschließen." = "Bitte zuerst die Einrichtung abschließen.";
+"Sicherung vor dem Update wiederherstellen" = "Sicherung vor dem Update wiederherstellen";
+"Datenstand vor dem Update wiederherstellen?" = "Datenstand vor dem Update wiederherstellen?";
+"Mutti stellt die Sicherung wieder her, die vor dem Update angelegt wurde. Der aktuelle Datenstand wird nicht gelöscht, sondern im Mutti-Ordner beiseitegelegt. Nach der Sicherung entzogene Geräte und Freigaben bleiben entzogen; danach gekoppelte Geräte koppelst du neu." = "Mutti stellt die Sicherung wieder her, die vor dem Update angelegt wurde. Der aktuelle Datenstand wird nicht gelöscht, sondern im Mutti-Ordner beiseitegelegt. Nach der Sicherung entzogene Geräte und Freigaben bleiben entzogen; danach gekoppelte Geräte koppelst du neu.";
+"Wiederherstellen" = "Wiederherstellen";
+"Abbrechen" = "Abbrechen";
+"Bitte die offene Bestätigung abschließen." = "Bitte die offene Bestätigung abschließen.";
+"Bitte Mutti erneut öffnen, um die Wiederherstellung in der App zu bestätigen." = "Bitte Mutti erneut öffnen, um die Wiederherstellung in der App zu bestätigen.";

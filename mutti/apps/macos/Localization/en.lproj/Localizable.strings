@@ -18,3 +18,10 @@
 
 "Einrichtung läuft" = "Setup in progress";
 "Bitte zuerst die Einrichtung abschließen." = "Please finish setup first.";
+"Sicherung vor dem Update wiederherstellen" = "Restore the backup from before the update";
+"Datenstand vor dem Update wiederherstellen?" = "Restore the data from before the update?";
+"Mutti stellt die Sicherung wieder her, die vor dem Update angelegt wurde. Der aktuelle Datenstand wird nicht gelöscht, sondern im Mutti-Ordner beiseitegelegt. Nach der Sicherung entzogene Geräte und Freigaben bleiben entzogen; danach gekoppelte Geräte koppelst du neu." = "Mutti restores the backup taken before the update. The current data is not deleted but set aside in the Mutti folder. Devices and permissions revoked after the backup stay revoked; devices paired afterwards need to be paired again.";
+"Wiederherstellen" = "Restore";
+"Bitte die offene Bestätigung abschließen." = "Please finish the open confirmation first.";
+"Bitte Mutti erneut öffnen, um die Wiederherstellung in der App zu bestätigen." = "Please reopen Mutti to confirm the restore in the app.";
+"Abbrechen" = "Cancel";

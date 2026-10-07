@@ -48,6 +48,10 @@ final class ServerController: ObservableObject {
     @Published private(set) var importing = false
     @Published var error: String?
     @Published var starting = false
+    /// Shown while the manager secures the data before an update.
+    @Published private(set) var progressMessage: String?
+    /// Set while an update is blocked and a matching pre-update backup exists.
+    @Published private(set) var blockedSnapshot: String?
     let address = URL(string: "http://127.0.0.1:18596/web/")!
     let managementAddress = URL(string: "http://127.0.0.1:18596/web/#/mutti")!
     let onboardingAddress = URL(string: "http://127.0.0.1:18594/")!
@@ -60,6 +64,10 @@ final class ServerController: ObservableObject {
     private var launchID: UUID?
     private(set) var dataDirectory: URL?
     private(set) var nativeImportClient: NativeImportClient?
+    private struct UpdateInfo: Decodable {
+        var state: String
+        var snapshot: String?
+    }
     private struct ManagerState: Decodable {
         var ready: Bool
         var setupComplete: Bool
@@ -68,6 +76,7 @@ final class ServerController: ObservableObject {
         var message: String
         var serviceMessage: String?
         var active: String
+        var update: UpdateInfo?
     }
     func start() {
         guard child == nil, !starting else { return }
@@ -135,11 +144,16 @@ final class ServerController: ObservableObject {
                 var attempts = 0
                 while !Task.isCancelled && process.isRunning {
                     guard let self else { return }
+                    // A pre-update backup can take long; a blocked update waits for the owner.
+                    var waiting = false
                     var request = URLRequest(url: self.onboardingAddress.appending(path: "api/state"), cachePolicy: .reloadIgnoringLocalCacheData); request.timeoutInterval = 3
                     if let (data, response) = try? await URLSession.shared.data(for: request),
                        (response as? HTTPURLResponse)?.statusCode == 200,
                        let state = try? JSONDecoder().decode(ManagerState.self, from: data) {
                         self.importing = ["checking", "backup", "importing", "verifying", "activating"].contains(state.phase)
+                        waiting = state.phase == "update" || state.phase == "update_blocked"
+                        self.progressMessage = state.phase == "update" && !state.message.isEmpty ? state.message : nil
+                        self.blockedSnapshot = state.phase == "update_blocked" ? state.update?.snapshot : nil
                         self.ready = state.ready || self.importing
                         self.setupCompleted = state.setupComplete && !self.importing
                         self.dataDirectory = URL(fileURLWithPath: state.active, isDirectory: true)
@@ -149,12 +163,12 @@ final class ServerController: ObservableObject {
                         }
                         if state.newSetup { self.showOnboarding = false }
                         if self.ready { self.starting = false; self.error = nil }
-                        else if state.phase == "error" { self.starting = false; self.error = state.message }
+                        else if state.phase == "error" || state.phase == "update_blocked" { self.starting = false; self.error = state.message }
                         else if let message = state.serviceMessage, !message.isEmpty {
                             self.starting = false; self.error = message
                         }
                     }
-                    attempts += 1
+                    attempts = waiting ? 0 : attempts + 1
                     if !observed && attempts > 90 {
                         self.stop(); self.error = "Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut."; return
                     }
@@ -164,6 +178,17 @@ final class ServerController: ObservableObject {
         } catch { stop(); self.error = error.localizedDescription }
     }
     func restart() { stop(); start() }
+    /// Restores the backup taken before the update, after a native confirmation.
+    func rollback(window: NSWindow?) {
+        guard let snapshot = blockedSnapshot, let client = nativeImportClient else { return }
+        Task { @MainActor in
+            do {
+                if try await client.rollback(snapshot: snapshot, window: window) {
+                    self.blockedSnapshot = nil; self.error = nil; self.starting = true
+                }
+            } catch { self.error = error.localizedDescription }
+        }
+    }
     func stop() {
         stopping = true; launchID = nil; readiness?.cancel(); readiness = nil
         if let child, child.isRunning {
@@ -226,7 +251,13 @@ struct ContentView: View {
                     Text("Deine Medien.\nGut zu Hause.").font(.custom("Sora-Bold", size: 38)).multilineTextAlignment(.center)
                     if let error = server.error {
                         Text(error).multilineTextAlignment(.center).frame(maxWidth: 480)
-                        Button("Erneut starten", action: server.restart).buttonStyle(.borderedProminent)
+                        if server.blockedSnapshot != nil {
+                            Button("Sicherung vor dem Update wiederherstellen") { server.rollback(window: NSApp.keyWindow) }.buttonStyle(.borderedProminent)
+                        } else {
+                            Button("Erneut starten", action: server.restart).buttonStyle(.borderedProminent)
+                        }
+                    } else if let message = server.progressMessage {
+                        ProgressView(message)
                     } else { ProgressView("Mutti wird gestartet …") }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(32)
             }
