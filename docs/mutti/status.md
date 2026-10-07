@@ -159,6 +159,11 @@ Messsonde Wiedergabe mit Rückfall auf progressiven Transcode;
   Antworten. Behoben in `f1ae8dbd43`; de-v4 damit gesehen, neues Gate
   real-de-v5. real-en-v2 lief wegen belegter Ports nicht und bleibt
   ungesehen. [Messungen](evidence/qualification-v6-2026-10-06.md).
+- **v6-Holdout (einmalig, Paket `c365b6256`): 129/132** – die drei Fehlschläge
+  sind ein Fall (VT15), dessen richtige Antwort „noch **nicht** gesehen“ an
+  der Markdown-Hervorhebung scheiterte; Bewerter korrigiert (`d8d520dd84`).
+  v6-dev-8 auf dem Harness mit Tag-Bereinigung und Teilwortsuche: 60/60,
+  keine `</think>`-Lecks mehr.
 - **P4 DE/EN Manager** (`7d3c46f5e6`, gemergt): Zustand, Update-/Import-
   meldungen und alle Fehlerantworten des Managers in der Sprache der
   Anfrage; vollständige Tabelle per AST-Test.
