@@ -138,6 +138,26 @@ p50 2,5 s / p95 6,3 s; Median 60 Token/s; Engine bis 16,1 GB. Wiedergabe
 leer und unter KI-Last: alle Clips abspielbar. Entwicklungsregression vor
 dem Lauf: v6-dev-9 60/60 auf demselben Harness.
 
+### real-en-v3 (07.10.2026, danach gesehen) – Paket `426e3fad81`
+
+| Aufgabe | Ergebnis |
+| --- | --- |
+| media.search / media.read / media.favorite | 33/33, 9/9, 9/9 – erfüllt |
+| photos.search | 15/15 – erfüllt (Wort-/Stammsuche wirkt) |
+| documents.read | 21/27, Nichtwissen 0/3 – **nicht** erfüllt |
+| content.assist | 78/84, Nichtwissen 3/6 – **nicht** erfüllt |
+
+0 kritisch, 0 ungültige Marken; Median 60 Token/s, p95 vollständig 5,0 s.
+N18: die Teilwortsuche fand über „Vertrag“ den Mietvertrag, das Modell
+nannte ihn mit Quelle, obwohl es ihn als unpassend erkannte; N20: das Modell
+suchte für eine englische Frage auf Deutsch und fand die englische
+Zahnarztrechnung nicht (wie schon en-v2 M16). Behoben in `a4f1978460`
+(alle Begriffe müssen enthalten sein; Regel 3 mehrsprachig).
+
+**Release-Kandidat `426e3fad81`** (unverändert gesichert unter
+`build/release-candidates/426e3fad81/`): Deutsch alle sechs Aufgaben
+bestanden, Englisch Medien und Fotos bestanden; nichts signiert.
+
 ### Offen (Gate)
 
 - **real-de-v3** (frisch, eingefroren) und **real-en-v1** (ungesehen; ein Lauf

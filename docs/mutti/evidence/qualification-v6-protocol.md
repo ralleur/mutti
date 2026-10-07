@@ -129,6 +129,24 @@ untitled photos of earlier native tests). The English gate is
 frozen before its first run; real-de-v5 did not run yet (its setup found a
 leftover instance) and remains the unseen German gate.
 
+**Package `426e3fad81` (2026-10-07, release candidate):** real-de-v5
+passed every task (84/84); real-en-v3 passed media.search, media.read,
+media.favorite and photos.search, but not documents.read (21/27, an
+unknown-answer case cited an unrelated partial hit) and therefore not
+content.assist. The app is kept unchanged under
+`build/release-candidates/426e3fad81/` with both measurements; its
+candidates can be reviewed for signing as they are (German complete,
+English media and photos; English conversations stay locked without
+content.assist). real-en-v3 is seen: it was used to require all terms in
+the substring fallback and to state multilingual search in rule 3 (contract
+text changed). Because every hub change needs a new measurement, the next
+package is measured with two fresh suites, frozen before their first run:
+
+- `mutti/tests/fixtures/qualification-real-de-v6.json`
+  (SHA-256 `84372b882ceec2b596375f245721bd2690f7f53de763fcceaa31d62d766624e9`)
+- `mutti/tests/fixtures/qualification-real-en-v4.json`
+  (SHA-256 `b938af40712f8fbe2a96c9abea6c76d531181186cf657f7ab97c8be4a4cd5117`)
+
 Latency (first output, complete answer; p50/p95), median tokens/s and peak
 resident engine memory are recorded and reported, not gated: the v2 latency
 limits belong to the “recommended” level.
