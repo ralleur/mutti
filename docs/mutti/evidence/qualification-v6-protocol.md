@@ -98,6 +98,19 @@ cases), 3 repetitions, same thresholds. The harness changed again after
 v6-dev-5 (two review rounds); the v6 dev set must reach 60/60 on the final
 harness before the gates run (`qualification-session.py` enforces it).
 
+**Seen and replaced (2026-10-07):** real-de-v4 ran on package `c365b6256`
+(all media tasks and content.assist met the thresholds; documents.read
+21/27 and photos.search 12/15 did not; 0 critical). Its failures were used
+to fix reasoning-tag output and compound-word document search, and one
+expectation of the suite was wrong (it did not allow the archive's OCR copy
+of the scan). It is therefore no longer a gate. The German gate is
+`mutti/tests/fixtures/qualification-real-de-v5.json`
+(SHA-256 `a6579b26c2424d1626cfdfeb1a6a89bcad1d78197cf6734d2150616eb913339d`),
+written from the test data and frozen before its first run. real-en-v2 did
+not run (the setup found the previous instance's ports still in use) and
+remains the unseen English gate. Every hub change produces a new hub
+digest, so only the measurement of the final package can be signed.
+
 Latency (first output, complete answer; p50/p95), median tokens/s and peak
 resident engine memory are recorded and reported, not gated: the v2 latency
 limits belong to the “recommended” level.

@@ -67,6 +67,36 @@ p95 5,8 s; Median 51 Token/s; Engine-Speicher bis 15,0 GiB.
 Befunde → Korrekturen (Commit `cdfb464f3a`): Filter „länger als“ fehlte (N02);
 neue Korrektur `markers` gegen nicht ausgegebene Quellenmarken.
 
+### real-de-v4 (07.10.2026, danach gesehen) – Paket `c365b6256`
+
+Paket sauber gebaut (Komponentenliste geprüft, Hinweise enthalten);
+`mutti-hub qualify` aus der App, 3 Wiederholungen, deterministisch.
+
+| Aufgabe | Ergebnis |
+| --- | --- |
+| content.assist | 75/84 (89 %) – Schwelle erfüllt |
+| media.search | 33/33 – erfüllt |
+| media.read | 9/9 – erfüllt |
+| media.favorite | 9/9 – erfüllt |
+| documents.read | 21/27 (78 %) – **nicht** erfüllt |
+| photos.search | 12/15 (80 %) – **nicht** erfüllt |
+
+0 kritisch, 0 ungültige Marken, 0 Engine-Fehler, Nichtwissen 6/6. Latenz:
+erste Ausgabe p50 0,6 s / p95 1,0 s, vollständig p50 2,5 s / p95 7,0 s;
+Median 56 Token/s; Engine-Speicher bis 16,1 GB. Wiedergabe leer und unter
+KI-Last: alle fünf Clips abspielbar (progressiv).
+
+Fehlschläge (je alle drei Wiederholungen): K16 – Antwort richtig, zitiert
+aber die OCR-Kopie des Scans, die der Satz nicht zuließ (**Fehler im
+Satz**); K20 – Volltextsuche findet „Rechnung“ nicht in „Arztrechnung“
+(**Produktlücke**, behoben: Teilwortsuche); K25 – Datumssuche „Herbst“
+liefert zwölf unbeschriftete Fotos vom 06.10. aus früheren nativen
+Testläufen, „Herbstlaub“ liegt außerhalb der ersten zwölf (**Testumgebung**,
+Modell sagt korrekt, dass es mehr gibt). Nebenbefund: In rund 15 % aller
+aufgezeichneten Antworten (auch v6-dev und de-v1/v2) stand ein
+`</think>` mit wiederholter Antwort – bisher von keinem Bewerter erkannt;
+behoben (`f1ae8dbd43`).
+
 ### Offen (Gate)
 
 - **real-de-v3** (frisch, eingefroren) und **real-en-v1** (ungesehen; ein Lauf
