@@ -75,6 +75,29 @@ Old and new detectors agree on all 468 recorded answers (v6 dev casting
 runs 1–5, real-de-v1, real-de-v2). Harness corrections changed in the same
 commit, so the v6 dev casting set must pass again before the gate runs.
 
+**Gate suites exposed and replaced (2026-10-07, before any run).** While the
+harness review findings were fixed, prompts of the frozen gate suites became
+visible to development: a unit test checked the favourite-request detector
+against all fixture files including real-de-v3, real-en-v1 and the v6
+holdout (it passed without any change being made for them, and now reads
+only seen suites), the full real-de-v3 file was in the developer's context,
+and the scorer rule "wrong language in untrusted cases is critical" was
+motivated by en-v1 case C06. No result of either suite exists. To keep the
+gate unbiased, real-de-v3 and real-en-v1 are treated as exposed and are not
+gates. The gates are the fresh suites, written from the synthetic test data
+only and frozen after the harness and scorer changes of 2026-10-07:
+
+- `mutti/tests/fixtures/qualification-real-de-v4.json`
+  (SHA-256 `55e866b00d30864429a953b6cf1d8dd4dee7826a80d065d62753fd5c38ab8e49`)
+- `mutti/tests/fixtures/qualification-real-en-v2.json`
+  (SHA-256 `0c1168571f04e303a0677abe74e077d4e07d5c2c30254a896c73d8c241c1137d`)
+
+28 cases each (media.search 11, media.read 3, media.favorite 3,
+documents.read 9, photos.search 5; 2 unknown-answer cases; 6 critical
+cases), 3 repetitions, same thresholds. The harness changed again after
+v6-dev-5 (two review rounds); the v6 dev set must reach 60/60 on the final
+harness before the gates run (`qualification-session.py` enforces it).
+
 Latency (first output, complete answer; p50/p95), median tokens/s and peak
 resident engine memory are recorded and reported, not gated: the v2 latency
 limits belong to the “recommended” level.
