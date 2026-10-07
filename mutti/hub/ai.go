@@ -819,7 +819,7 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 		a.finish(l, "failed", "missing", HarnessResult{}, nil, err)
 		return
 	}
-	tools := a.toolsFor(l.identity, c, lang)
+	tools := a.toolsFor(l.identity, c, lang, model.ID)
 	tools.model = model.ID
 	omit := a.revokedHistory(ctx, l.identity, c, l.id)
 	messages := a.buildMessages(c, l.id, model, tools, omit)
@@ -949,7 +949,7 @@ func messageLanguage(m *Message) *languagePack {
 	return languagePacks[defaultLanguage]
 }
 
-func (a *AI) toolsFor(id Identity, c *Conversation, lang *languagePack) *profileTools {
+func (a *AI) toolsFor(id Identity, c *Conversation, lang *languagePack, model string) *profileTools {
 	book := sourceBook{Items: map[string]*Source{}, Next: c.Sources.Next}
 	for k, v := range c.Sources.Items {
 		copy := *v
@@ -967,7 +967,7 @@ func (a *AI) toolsFor(id Identity, c *Conversation, lang *languagePack) *profile
 	// Product tools are filtered for this deployment. Dispatch checks again.
 	qualified := t.defs[:0]
 	for _, def := range t.defs {
-		if _, err := a.qualify(toolTask(def.Function.Name), lang); err == nil {
+		if _, err := a.qualifyModel(toolTask(def.Function.Name), lang, model); err == nil {
 			qualified = append(qualified, def)
 		}
 	}

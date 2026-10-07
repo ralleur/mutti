@@ -125,7 +125,7 @@ func TestUnqualifiedProductRejectsAPIAndTools(t *testing.T) {
 	if code := e.do("POST", "/ai/proposals/legacy/reject", "token-a", map[string]string{"conversation": cid}, nil); code != 200 {
 		t.Fatalf("reject: %d", code)
 	}
-	tools := e.hub.ai.toolsFor(Identity{UserID: userA}, c, languagePacks["en"])
+	tools := e.hub.ai.toolsFor(Identity{UserID: userA}, c, languagePacks["en"], catalog[0].ID)
 	if len(tools.Definitions()) != 0 {
 		t.Fatal("unqualified tools advertised")
 	}
