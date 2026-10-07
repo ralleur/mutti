@@ -118,6 +118,19 @@ Messsonde Wiedergabe mit Rückfall auf progressiven Transcode;
   real-de-v3/real-en-v1 sind weiter eingefroren und ungesehen; die
   Bewerteränderung ist im [Protokoll](evidence/qualification-v6-protocol.md)
   vor ihrem ersten Lauf festgehalten.
+- **P4 – DE/EN für Einrichtung und Kopplung, teilweise** (`69203f253f`,
+  `d60386ac98`, `e803fc767e`, `b6858afb0b`, `80f38b7f65`): Einrichtungsseite
+  (`i18n.js`) und Kopplungsseite übersetzen sich für englische Browser/App;
+  Connect-Antworten an Seite, Geräte und Vermittlung folgen
+  `Accept-Language`; Mac-App-Texte vollständig in `en.lproj`; Tabelle aller
+  Manager-Meldungen (DE als Kennung, zusammengesetzte Meldungen rekursiv)
+  samt Tests. Wartungsantworten übersetzt; Zustands-/Update-/Importmeldungen
+  des Managers noch nicht verdrahtet (folgt nach dem P3-Review). Swift nur
+  typgeprüft, nicht gebaut; Seiten nicht im Browser angesehen.
+- **Mac-App: blockiertes Update** (`cd9d66494b`): Die App brach bisher nach
+  90 s ohne „ready“ ab, auch während der Sicherung vor einem Update und im
+  blockierten Zustand; jetzt Fortschrittsmeldung bzw. Erklärung und Knopf
+  für die native Wiederherstellung (mit Bestätigung).
 - Folge: Der Harness hat sich nach v6-dev-5 geändert; **die Wirkung auf das
   Modell ist ungemessen.** `qualification-session.py` misst deshalb zuerst den
   v6-Entwicklungssatz und bricht vor den Gate-Sätzen ab, wenn er nicht 60/60
