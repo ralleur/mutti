@@ -70,14 +70,50 @@ Meldung übersetzt; Owner-Webansicht „Freigabe“ (nur lesend, Mutti Web
 Messsonde Wiedergabe mit Rückfall auf progressiven Transcode;
 `mutti/tests/qualification-session.py` für einen Messtag. Go-Tests (`-race`) grün.
 
+**Nachtrag 06./07.10.2026, Nacht (ohne Inferenz/Builds; Branch
+`codex/mutti-p2-qualification`):**
+
+- **P3 – wiederherstellbare Updates (Mac), implementiert und synthetisch
+  geprüft** (`8ab251aa11`, `74f9a6daeb`, `e7cbdb0a18`; `mutti/migrate/update.go`,
+  `engine.go`, `http.go`, `update_test.go`): Datenversion, Offline-Snapshot
+  vor jedem neuen Build (APFS-Klon, Hashes, atomar sichtbar, Platzprüfung,
+  abgebrochene Snapshots werden verworfen), Zustände pending/verified/failed/
+  blocked/rolled_back, Downgrade-Sperre, Rollback nur nativ und nur im
+  blockierten Zustand. Entscheidung (Plan P3 „Identitäts-/Widerrufsverhalten
+  festlegen“): nach der Sicherung entzogene Geräte, Freigaben, Module und
+  Kontoverknüpfungen bleiben nach einem Rollback entzogen; danach gekoppelte
+  Geräte koppeln neu. Dabei behoben: die Nachprüfung las `connect/state.json`
+  statt `connect/connect.json`. Vertrag: [contracts.md](contracts.md#updates-and-rollback-p3-mac).
+  **Nicht** im Paket oder mit echten Daten geprüft; offen: signierte
+  Komponentensätze, native Oberfläche für den blockierten Zustand,
+  Wiederherstellung auf leerem Zweitziel.
+- **Drei unabhängige Reviews, Befunde behoben** (je mit Regressionstests,
+  `go test -race` grün): P1 (`920f11a701`), P2 (`51fe393d84`: Modelldateien
+  werden auf der Platte geprüft, Bindung je Modell, nur verwaltete Engine,
+  Thinking erzwungen, Engine-Digest nach jedem Start veraltet, Links im
+  Engine-Ordner), Harness/Bewerter v6 (`3f6b017822`: falsche Korrekturen bei
+  Verneinungen, Favoritenfragen, erfolgreicher zweiter Suche, Echo der Frage;
+  gruppierte Marken; Summen statt stiller Kappung; Bewerter streng bei
+  abgeschnittenen Antworten, Lecks in zurückgezogenen Entwürfen und
+  Sprachwechsel in Fremddaten). Offline-Abgleich: alte und neue Erkennung
+  stimmen auf allen 468 aufgezeichneten Antworten überein. Die Gate-Sätze
+  real-de-v3/real-en-v1 sind weiter eingefroren und ungesehen; die
+  Bewerteränderung ist im [Protokoll](evidence/qualification-v6-protocol.md)
+  vor ihrem ersten Lauf festgehalten.
+- Folge: Der Harness hat sich nach v6-dev-5 geändert; **die Wirkung auf das
+  Modell ist ungemessen.** `qualification-session.py` misst deshalb zuerst den
+  v6-Entwicklungssatz und bricht vor den Gate-Sätzen ab, wenn er nicht 60/60
+  erreicht.
+
 Nächste Schritte (Inferenz nur tagsüber, Lüfter im Schlafzimmer): ein Aufruf
 `python3 mutti/tests/qualification-session.py --testenv
 /Users/ai/workspace/mutti/build/module-testenv/private.json --models
 /Users/ai/workspace/mutti/build/model-casting/store-mlx/models` baut das Paket
-(inkl. Webbuild) und misst real-de-v3, real-en-v1 (je mit Wiedergabe leer/unter
-KI-Last) und den v6-Holdout. Danach Review/Signatur durch Ralf, Produkt-E2E mit
-`--expect-qualified`, native Bedienung der KI in kurtz. Offene Owner-Entscheidungen:
-Signatur/Review, Mac-Laufzeit für verwaltete Dienste, Bindung an exaktes Mac-Modell.
+(inkl. Webbuild), misst den v6-Entwicklungssatz (Regression), dann real-de-v3,
+real-en-v1 (je mit Wiedergabe leer/unter KI-Last) und den v6-Holdout. Danach
+Review/Signatur durch Ralf, Produkt-E2E mit `--expect-qualified`, native
+Bedienung der KI in kurtz. Offene Owner-Entscheidungen: Signatur/Review,
+Mac-Laufzeit für verwaltete Dienste, Bindung an exaktes Mac-Modell.
 
 **Modellfreigabe v4, 06.10.2026 (P2-Vorarbeit, abgeschlossen als Messung):**
 Nutzerauftrag „Werkzeuge/Harness verbessern, dann mit neuem ungesehenem Satz
