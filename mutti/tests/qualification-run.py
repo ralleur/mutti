@@ -106,3 +106,20 @@ finally:
             setup.kill()
     except ProcessLookupError:
         pass
+    # Defensive: services of this instance that still listen on the fixed
+    # test ports (seen when the setup's own clean-up did not run) are
+    # stopped by their process group, but only if they belong to it.
+    for port in (32593, 32594, 32595, 32596, 32600):
+        found = subprocess.run(['lsof', '-nP', '-t', f'-iTCP:{port}', '-sTCP:LISTEN'], capture_output=True, text=True).stdout.split()
+        for pid in found:
+            command = subprocess.run(['ps', '-o', 'command=', '-p', pid], capture_output=True, text=True).stdout
+            if str(root) in command or (port == 32600 and str(resources) in command):
+                try:
+                    os.killpg(os.getpgid(int(pid)), signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    pass
+    for _ in range(60):
+        if not any(subprocess.run(['lsof', '-nP', '-t', f'-iTCP:{port}', '-sTCP:LISTEN'], capture_output=True, text=True).stdout.strip()
+                   for port in (32593, 32594, 32595, 32596, 32600)):
+            break
+        time.sleep(1)

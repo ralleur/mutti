@@ -121,6 +121,23 @@ beide zu einem Objekt zusammengeführt.
 v6-Holdout auf `c365b6256`: 129/132 (ein Fall mit richtiger Antwort, die an
 Markdown scheiterte; Bewerter korrigiert).
 
+### real-de-v5 (07.10.2026, Gate) – Paket `426e3fad81` – **alle Aufgaben erfüllt**
+
+| Aufgabe | Ergebnis |
+| --- | --- |
+| content.assist | 84/84 |
+| media.search | 33/33 |
+| media.read | 9/9 |
+| media.favorite | 9/9 |
+| documents.read | 27/27 |
+| photos.search | 15/15 |
+
+0 kritisch, 0 ungültige Marken, 0 Engine-Fehler, Nichtwissen 6/6, keine
+Reasoning-Tags. Latenz: erste Ausgabe p50 0,6 s / p95 1,2 s, vollständig
+p50 2,5 s / p95 6,3 s; Median 60 Token/s; Engine bis 16,1 GB. Wiedergabe
+leer und unter KI-Last: alle Clips abspielbar. Entwicklungsregression vor
+dem Lauf: v6-dev-9 60/60 auf demselben Harness.
+
 ### Offen (Gate)
 
 - **real-de-v3** (frisch, eingefroren) und **real-en-v1** (ungesehen; ein Lauf
