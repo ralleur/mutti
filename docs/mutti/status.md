@@ -62,6 +62,22 @@ real-de-v3 und real-en-v1. **Nichts signiert, keine KI freigeschaltet.**
 [Messungen](evidence/qualification-v6-2026-10-06.md),
 [Entscheidungsvorlage Mac-Laufzeit](decision-mac-service-runtime.md).
 
+**Stand 07.10.2026, ca. 09:30 – P2-Produktqualifikation bestanden, wartet auf
+Owner-Signatur.** Release-Kandidat **`7a036fc459`** (App unverändert unter
+`build/release-candidates/7a036fc459/`): frische Gate-Sätze real-de-v6 und
+real-en-v4 je 84/84, alle sechs Aufgaben in beiden Sprachen, 0 kritisch,
+Nichtwissen 6/6, Wiedergabe unter KI-Last unbeeinträchtigt; Hub bitgleich aus
+dem sauberen Commit reproduzierbar (`812a518260fd…`). **Nichts signiert.**
+Prüfvorlage mit Bindung, Grenzen und Signaturbefehl:
+[release-review-7a036fc459](evidence/release-review-7a036fc459.md).
+Nächste Schritte nach der Owner-Signatur: Paket mit `records.json` bauen
+(Hub-Digest bleibt), `module-package-smoke.py --expect-qualified`, native
+KI-Prüfung in kurtz. Weitere offene Owner-Entscheidungen: Release-Schlüssel
+für Komponentenlisten ([Ablauf](release-keys.md)), Mac-Laufzeit für verwaltete
+Dienste, Lizenz-Prüffälle ([Inventar](evidence/license-inventory-2026-10-07.md)).
+Hinweis: Jede Änderung am Hub (auch an Harness/Bewertung) erfordert eine neue
+Messung mit frischen Sätzen.
+
 Nachtrag 06.10.2026, nachts (ohne Inferenz/Builds): Hub-Meldungen folgen der
 Sprache der Anfrage (DE/EN; Fehler, Modulstatus, Suchbereiche, Aufträge sowie in
 Gesprächen gespeicherte Hinweise und Vorschlagsergebnisse), Test hält jede
