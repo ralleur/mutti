@@ -39,6 +39,13 @@ cp "$ROOT/LICENSE" "$APP/Contents/Resources/licenses/Jellyfin.txt"
 cp "$WEB/LICENSE" "$APP/Contents/Resources/licenses/Jellyfin-Web.txt"
 cp "$ROOT/mutti/design/assets/Sora-OFL.txt" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/THIRD-PARTY.md" "$APP/Contents/Resources/licenses/"
+# The portable FFmpeg archive carries no licence text; the GPL build needs it next to the binaries.
+cp "$ROOT/build/ffmpeg/$RID/licenses/COPYING.GPLv3" "$APP/Contents/Resources/licenses/FFmpeg-COPYING.GPLv3.txt"
+cp "$ROOT/build/ffmpeg/$RID/licenses/LICENSE.md" "$APP/Contents/Resources/licenses/FFmpeg-LICENSE.md"
+cp "$ROOT/build/intro-skipper/LICENSE" "$APP/Contents/Resources/licenses/IntroSkipper-LICENSE.txt"
+cp "$ROOT/mutti/connect/LICENSE.md" "$APP/Contents/Resources/licenses/MuttiConnect-MPL-2.0.md"
+# A self-contained publish does not copy the runtime pack's notices; collect them explicitly.
+python3 "$ROOT/mutti/packaging/collect-dotnet-notices.py" "$RID" "$ROOT/build/server/$RID" "$APP/Contents/Resources/licenses"
 cp "$ROOT/mutti/components.lock.json" "$APP/Contents/Resources/"
 python3 "$ROOT/mutti/packaging/provenance.py" "$WEB" "$APP/Contents/Resources/build-provenance.json"
 # Local development signature by default. Release signing is a separate gate: with

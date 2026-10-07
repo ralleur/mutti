@@ -261,8 +261,15 @@ Umgesetzt auf `claude/peaceful-babbage-rt0p2v` (Pull Request gegen `codex/mutti-
   Jellyfin-eigene Automationen für den Fork abgeschaltet, Mutti-CI auf allen
   Arbeitsbranches, manuell auslösbarer Release-Workflow mit Developer-ID-
   Signatur, Hardened Runtime, Entitlements und Notarisierung (benötigt
-  hinterlegte Geheimnisse, noch nicht ausgeführt). Offene Lizenzfragen in
-  [licensing.md](licensing.md).
+  hinterlegte Geheimnisse, noch nicht ausgeführt).
+- **Lizenzprüfung:** Die Lizenzfakten aller gebündelten Komponenten sind mit
+  Primärquellen belegt und gegengeprüft ([licensing.md](licensing.md)). Ergebnis:
+  Upstream behandelt den Jellyfin-Quellcode als „GPL unversioned“ und die
+  Binaries als GPL v3; Intro Skipper ist GPL-3.0-only; der FFmpeg-Build ist GPL
+  v3. Der Mac-Build bündelt jetzt die FFmpeg-Lizenztexte (per Hash gepinnt), die
+  .NET-Hinweise aus dem Runtime-Pack, die Intro-Skipper-LICENSE und den MPL-Text
+  des Transports. Offen bleiben die Außenlizenz des Pakets (Owner-Entscheidung),
+  das FFmpeg-Quellbündel, die Sora-Provenienz und der App-Store-Weg für kurtz.
 
 Geprüft: `gofmt`, `go vet` und `go test -race ./...` für `mutti/migrate` auf
 Linux. Die Swift-Änderungen werden ausschließlich durch den `mac-shell`-Job der
