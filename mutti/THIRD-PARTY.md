@@ -11,10 +11,13 @@
 | Tailscale | v1.102.5 in isolated directlab | Experiment only. Not linked into the Mac app or container. Preserve upstream BSD/file-specific notices if adopted. |
 
 Owned Mutti code is GPL-2.0-or-later. This inventory does not relicense upstream
-files. The licence under which the combined package is offered is an open owner
-decision recorded in docs/mutti/licensing.md; the FFmpeg matching-source bundle
-and the transitive dependency inventory remain release gates. Ad-hoc signed
-local builds are not a distributable release.
+files. By owner decision of 7 October 2026 (docs/mutti/licensing.md), the
+combined Mutti package is offered under the GNU General Public License version 3
+(`licenses/GPL-3.0.txt`, bundled as `Mutti-Package-GPL-3.0.txt`), following
+upstream's own treatment of its binaries; every file and component keeps the
+licence listed above. The FFmpeg matching-source bundle and the transitive
+dependency inventory remain release gates. Ad-hoc signed local builds are not a
+distributable release.
 
 ## Mutti Connect test transport
 

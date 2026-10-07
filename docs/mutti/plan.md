@@ -1,6 +1,6 @@
 # Mutti – Produkt- und Umsetzungsplan
 
-Stand: **6. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**. Die Architektur-Review vom 6. Oktober und die daraus abgeleiteten Entscheidungen stehen in [review-2026-10-06.md](review-2026-10-06.md) und in [Abschnitt 15](#15-entscheidungsprotokoll-vom-6-oktober-2026).
+Stand: **7. Oktober 2026**. Aktuelle QR-/Transport-Umsetzung: [connect.md](connect.md). Status: **Umsetzung beauftragt und begonnen; noch kein Release**. Die Architektur-Review vom 6. Oktober und die daraus abgeleiteten Entscheidungen stehen in [review-2026-10-06.md](review-2026-10-06.md) und in [Abschnitt 15](#15-entscheidungsprotokoll-vom-6-oktober-2026).
 
 Mutti wird das Server-Gegenstück zu **kurtz**: ein eigenständiges, kuratiertes
 Produkt auf Jellyfin-Basis. Das wichtigste Ziel ist eine einfache Einrichtung
@@ -28,6 +28,8 @@ Produktempfehlung für eine verpflichtende externe Tailscale-Einrichtung.
 | Netze ohne direkten Weg | Die Verbreitung von DS-Lite und CGNAT in Deutschland ist bekannt und wird bewusst nicht durch eigene Infrastruktur gelöst. Mutti und kurtz zeigen den Zustand „Direkte Verbindung derzeit nicht möglich“ verständlich an und verweisen auf den Tailscale-Artikel. Keine Anbieterbindung, kein Gratisversprechen. |
 | Netzwerkfehler | Verständliche Meldung und erneuter Versuch; niemals unverschlüsselter oder öffentlich freigeschalteter Ersatzweg. |
 | Aktueller Auftrag | Plan ausführen. Eigene Forks, lokale Implementierung und überprüfbare Builds sind beauftragt. Hosting und öffentliche Release-Freigabe folgen nach den jeweiligen Abnahmen. |
+| Weitere Dienste | **Hybrid.** Immich, Paperless und ähnliche Dienste laufen unverändert als gepinnte Upstream-Container in einer in die Mac-App eingebetteten Container-Runtime (Apples Containerization-Framework); nativ läuft nur, was Apple-Hardware braucht (Jellyfin-Transcoding, lokale Modelle). Kein Fork weiterer Dienste. Owner-Entscheidung vom 07.10.2026, Abschnitt 16. |
+| Außenlizenz des Pakets | Das Gesamtpaket wird unter der **GNU GPL Version 3** angeboten; Mutti-eigene Dateien bleiben GPL-2.0-or-later, der Transport MPL-2.0, alle Upstream-Lizenzen unverändert. Owner-Entscheidung vom 07.10.2026 auf Basis von [licensing.md](licensing.md); eine anwaltliche Bestätigung vor dem ersten öffentlichen Download bleibt empfohlen. |
 
 **Plattformentscheidung (aktualisiert 06.10.2026):** Die erste Iteration ist
 bewusst **Mac-only**. Das Docker-Paket bleibt im Repository als Entwicklerweg
@@ -674,12 +676,17 @@ bildet und das vorhandene Instanzmodell (`instances/<ID>`,
 
 **Release-Hygiene (Owner-Entscheidung 06.10.2026, Umsetzung begonnen):**
 
-- **Lizenzprüfung** vor der ersten öffentlichen Distribution. Die offenen Fragen
-  stehen in [licensing.md](licensing.md): GPL-2.0-Text der Jellyfin-LICENSE
-  gegenüber `GPL-3.0-only` in den Jellyfin-NuGet-Paketen, Intro Skipper
-  `GPL-3.0-only` im selben Prozess, FFmpeg-Quellbündel, sowie auf kurtz-Seite
-  die App-Store-Verträglichkeit des GPL-mpv-Builds, ohne die es keinen
-  Apple-TV-Client gibt. Ohne geklärte Antwort kein öffentlicher Download.
+- **Lizenzprüfung** vor der ersten öffentlichen Distribution. Die belegten
+  Fakten stehen in [licensing.md](licensing.md). Upstream behandelt den
+  Jellyfin-Quellcode als „GPL unversioned“ und die Binaries als GPL v3, das
+  Plugin-Template erklärt kompilierte Plugins zu GPLv3, Intro Skipper ist
+  GPL-3.0-only, der FFmpeg-Build GPL v3. **Entscheidung 07.10.2026:** Das
+  Mutti-Paket folgt dieser Praxis und wird unter GPL Version 3 angeboten;
+  Datei- und Komponentenlizenzen bleiben erhalten. Vor dem ersten Download:
+  FFmpeg-Quellbündel oder schriftliches Angebot, Sora-Provenienz, Lizenztexte
+  im Bundle (umgesetzt), anwaltliche Bestätigung empfohlen. Auf kurtz-Seite
+  bleibt der App-Store-Weg für den GPL-mpv-Build die Voraussetzung für einen
+  Apple-TV-Client.
 - **Notarisierung in CI:** Ein manuell auslösbarer Release-Workflow signiert
   mit Developer ID, Hardened Runtime und passenden Entitlements, notarisiert und
   staplet. Er braucht hinterlegte Zertifikate und API-Schlüssel und ersetzt
@@ -719,6 +726,7 @@ Umfang wesentlich.
 | **M5 – Betrieb und Beta** | Backups/Restore-Abnahme, Langzeittests auf dem Mac, echte Apple-Clients und Feldtest in wenigen Haushalten, Support-/Datenschutztexte, Lizenzprüfung abgeschlossen. | Die unten stehende Abnahme ist für die Mac-Auslieferung bestanden und reproduzierbar dokumentiert. |
 | **M6 – Erstes Release (Mac)** | Notarisierte Mac-App, Website, Hilfetexte und Quellen veröffentlichungsbereit; Import nur, wenn auf echten Bibliotheken abgenommen. | Das Paket erfüllt den vereinbarten Umfang; Produkttexte entsprechen den getesteten Plattformen. |
 | **M7 – Docker/NAS-Iteration** | Setup-Code und Einrichtung vom Besitzergerät, signierte Multi-Arch-Images, NAS-Vorlagen, Hardware-Transcoding, reale NAS-Abnahme. | Dokumentiertes NAS-Deployment ohne SSH-Tunnel und ohne Portwissen; dieselbe Abnahme wie für den Mac. |
+| **M8 – Weitere Dienste** | App-Modul-Vertrag mit den Laufzeiten `native` und `container`; eingebettete Container-Runtime; erstes Modul (Immich oder Paperless) mit OIDC-Anmeldung über die Mutti-Besitzeridentität, Proxy, Backup und Vertragstests. Abschnitt 16. | Modul auf einem Apple-Silicon-Mac ohne Docker-Installation aktiviert, über kurtz beziehungsweise Browser erreichbar, Upstream-Update als Image-Wechsel ohne Neubau geprüft. |
 
 Kritischer Pfad: **M0 → M2/M2.5 → M3 → M4 → M5**. Verfügbarkeit (M2) und
 Update/Wiederherstellung (M2.5) stehen vor der ersten externen Kopplung, weil
@@ -813,3 +821,104 @@ Der Owner hat die sieben Empfehlungen wie folgt entschieden:
 | 5 | Update und Wiederherstellung als M2.5 statt M5 | In den Plan aufgenommen. Abschnitte 10 und 11. |
 | 6 | Import härten: Vorprüfung, skalierende Limits, vollständiger Vergleich, Kompatibilitätsmatrix, Quelle nur mit Bestätigung ändern, Rückweg | In den Plan aufgenommen. Abschnitt 5.2. |
 | 7 | Release-Hygiene: Lizenzprüfung, Notarisierung in CI, geerbte CI aufräumen, Doku-Widersprüche | Umsetzung beauftragt und begonnen. Abschnitt 10 und [licensing.md](licensing.md). |
+
+Ergänzungen vom 7. Oktober 2026:
+
+| # | Empfehlung | Entscheidung |
+| --- | --- | --- |
+| 8 | Außenlizenz des Pakets: GPL Version 3 für das Gesamtpaket, Dateilizenzen bleiben; FFmpeg-Quellbündel und kurtz-App-Store-Weg als Gates | Übernommen. Abschnitte 1 und 10, [licensing.md](licensing.md). |
+| 9 | Weitere Dienste hybrid: eingebettete Container-Runtime für unveränderte Upstream-Dienste, nativ nur für Apple-Hardware; kein Fork; App-Modul-Vertrag | Übernommen. Abschnitte 1, 11 (M8) und 16. |
+
+## 16. Weitere Dienste: Laufzeitmodell und Upstream-Treue
+
+**Owner-Entscheidung 07.10.2026.** Mutti soll später weitere Heimserver-Dienste
+einbinden, zunächst Immich (Fotos) und Paperless (Dokumente). Die Vision, von
+Upstream-Updates zu profitieren, setzt voraus, dass Mutti *um* diese Dienste
+herum gebaut wird und nicht in sie hinein.
+
+### Grundsatz: kein Fork weiterer Dienste
+
+Immich, Paperless und ihre Datenbanken laufen **unverändert** als gepinnte
+Upstream-Artefakte. Mutti integriert sie über ihre öffentlichen APIs, über
+OpenID Connect und über den bestehenden Connect-Proxy. Die Upstream-Oberfläche
+bleibt die Oberfläche des Dienstes; Branding nur, soweit der Dienst es selbst
+anbietet. Ein Update ist ein Image-Wechsel mit neuem Digest, kein Neubau.
+
+Für Jellyfin gilt dieselbe Richtung rückwirkend: Patches in Upstream-Dateien
+gegen null treiben (Upstreamfähiges nach oben geben, Mutti-Spezifisches hinter
+einen Mutti-Schalter oder in ein Plugin), Web-Branding über die offiziellen
+Branding- und Custom-CSS-Wege statt über den Web-Fork, und pro Upstream-Version
+Vertragstests für die genutzten API-Pfade, das Sicherungsformat und die
+Konfigurationsdateien.
+
+### App-Modul-Vertrag
+
+Der Manager erhält einen kleinen Vertrag, an dem Jellyfin heute schon hängt und
+an den weitere Module andocken:
+
+- **Lebenszyklus:** Start, Stop, Gesundheit, Neustart mit Backoff, Backup,
+  Wiederherstellung über das Instanzmodell.
+- **Identität:** Mutti ist OIDC-Anbieter; die eine Besitzeridentität aus
+  Abschnitt 5.4 meldet sich bei jedem Modul an. Keine zweiten Konten.
+- **Netz:** Loopback-Bindung; der Connect-Proxy führt mit festem Ziel pro
+  Modul; keine beliebigen Proxy-Ziele.
+- **Speicher:** Volumes und Daten im Mutti-Datenordner, Backups über die
+  app-eigenen Dumps der Module.
+- **Laufzeit:** `native` oder `container`. Die Laufzeit ist hinter dem Vertrag
+  austauschbar.
+
+### Eingebettete Container-Runtime
+
+Container-Module laufen über **Apples Containerization-Framework** (Apache-2.0,
+Swift-Package, `container` 1.0 seit Juni 2026), eingebettet in die Mac-Hülle:
+
+- OCI-Images aus Registries, gepinnt per Digest in `components.lock.json`;
+  dieselben Images wie die spätere NAS-Iteration (M7).
+- Eine leichte VM pro Container; keine Installation von Docker Desktop,
+  OrbStack oder Colima; kein Terminal.
+- Netzwerk über veröffentlichte Loopback-Ports zum Mutti-Proxy.
+- Images werden beim Aktivieren eines Moduls digest-geprüft geladen. Das ist
+  der einzige Laufzeit-Download des Produkts und wird als solcher ausgewiesen
+  (Immich mit Modellen liegt über einem Gigabyte; Bündeln würde die App
+  aufblähen).
+
+### Nativ, wo Apple-Hardware zählt
+
+Linux-VMs haben keinen Zugriff auf GPU oder Neural Engine. Deshalb bleibt
+nativ: Jellyfin mit VideoToolbox-Transcoding (wie heute), und alle lokalen
+Modelle über MLX, CoreML oder Metal. Immichs ML-Dienst ist ein eigener
+HTTP-Dienst mit konfigurierbarer Adresse und läuft nativ, während Server,
+Postgres und Redis im Container bleiben. Ein LLM für Paperless läuft ebenfalls
+nativ.
+
+### Plattformgrenze und Ressourcen
+
+- Container-Module setzen **Apple Silicon und macOS 26** voraus. Das passt zur
+  Mac-only-Begründung (lokale Modelle brauchen Apple Silicon), schließt aber
+  Intel-Macs und macOS 14/15 für diese Module aus. Jellyfin bleibt dort
+  nutzbar. Die Mindestvoraussetzung wird pro Modul in der App ausgewiesen.
+- Pro Modul ein Speicherbudget; die App zeigt vor dem Aktivieren an, was das
+  Modul auf diesem Mac kostet. Ein Mac mit 8 GB wird mit Immich eng.
+
+### Risiken und Absicherung
+
+- Das Framework ist jung: Version pinnen, Änderungen in Release-Notes prüfen,
+  Runtime hinter dem Vertrag austauschbar halten (Lima- oder Podman-VM als
+  Rückfall).
+- Upstream-Vertragstests pro Modulversion: API-Pfade, OIDC-Ablauf,
+  Image-Digest, Backup und Restore.
+- Keine Sonderwege pro Dienst in Upstream-Code; was Mutti braucht und Upstream
+  nicht bietet, wird upstream vorgeschlagen.
+
+### Verworfen
+
+- Forks von Immich oder Paperless.
+- Native Builds dieser Dienste samt Postgres, Redis, Tesseract, Ghostscript,
+  Java und Chromium im App-Paket als Standardweg.
+- Docker Desktop, OrbStack oder Colima als Voraussetzung für Endnutzer.
+
+### Reihenfolge
+
+Die Entscheidung gilt ab sofort, damit der Modul-Vertrag beim Ausbau des
+Managers (M2, M2.5) berücksichtigt wird. Die Umsetzung weiterer Dienste beginnt
+als Etappe **M8** nach dem ersten Mac-Release (M6).

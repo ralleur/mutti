@@ -86,7 +86,7 @@ Keine Rechtsbewertung, sondern die Konsequenzen, die aus den Fakten folgen:
 
 ## 3. Offene Punkte
 
-1. **Außenlizenz des Pakets** festlegen und in `THIRD-PARTY.md`, App-Info und Website konsistent angeben (Vorschlag aus Punkt 2.1: GPL Version 3 für das Gesamtpaket, Dateilizenzen bleiben erhalten). Owner-Entscheidung, gegebenenfalls mit anwaltlicher Prüfung, weil Upstream die GPL-Version seines Quellcodes selbst nicht belegt.
+1. **Außenlizenz des Pakets: entschieden.** Der Owner hat am 07.10.2026 den Vorschlag aus Punkt 2.1 übernommen: Das Gesamtpaket wird unter der GNU GPL Version 3 angeboten, Dateilizenzen bleiben erhalten ([plan.md, Abschnitt 15](plan.md#15-entscheidungsprotokoll-vom-6-oktober-2026)). Der GPLv3-Text liegt als `mutti/licenses/GPL-3.0.txt` im Repository und wird als `licenses/Mutti-Package-GPL-3.0.txt` ins Bundle kopiert; `THIRD-PARTY.md` nennt die Entscheidung. Eine anwaltliche Bestätigung vor dem ersten öffentlichen Download bleibt empfohlen, weil Upstream die GPL-Version seines Quellcodes selbst nicht belegt.
 2. **FFmpeg-Quellbündel** erzeugen: Tag `v8.1.3-1` samt Builder und allen in `builder/scripts.d/` gepinnten Drittquellen, als Archiv neben dem Release oder als schriftliches Angebot.
 3. **Sora-Provenienz** dokumentieren: aus welcher TTF/OTF die WOFF2-Dateien erzeugt wurden und ob die Metadaten erhalten sind (OFL-FAQ 2.2.1).
 4. **kurtz im App Store**: Ohne Lösung für den GPL-mpv-Build gibt es keinen Apple-TV-Client. Mögliche Wege laut Primärbeleg: Doppellizenzierung wie bei VLC ist nur für eigenen Code möglich, nicht für mpv/FFmpeg; also Store-Build ohne GPL-Decoder oder eine andere Lizenzgrundlage. Entscheidung im kurtz-Repository, hier als Abhängigkeit geführt.
@@ -95,6 +95,6 @@ Keine Rechtsbewertung, sondern die Konsequenzen, die aus den Fakten folgen:
 
 ## 4. Gate
 
-- Vor dem ersten öffentlichen Download: Punkt 3.1 entschieden, 3.2 und 3.3 erledigt, `THIRD-PARTY.md` und App-Info angepasst, Bundle enthält alle Lizenztexte (Jellyfin, Web, Intro Skipper, FFmpeg, .NET, Sora, MPL-Komponenten).
+- Vor dem ersten öffentlichen Download: Punkt 3.2 und 3.3 erledigt, App-Info und Website nennen GPL Version 3, Bundle enthält alle Lizenztexte (Paket-GPLv3, Jellyfin, Web, Intro Skipper, FFmpeg, .NET, Sora, MPL-Komponenten); anwaltliche Bestätigung von 3.1 eingeholt.
 - Vor dem Apple-TV-Release: Punkt 3.4 im kurtz-Repository entschieden.
 - Der Release-Workflow (Signatur, Notarisierung) ersetzt diese Prüfung nicht.

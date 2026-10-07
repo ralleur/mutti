@@ -44,6 +44,7 @@ cp "$ROOT/build/ffmpeg/$RID/licenses/COPYING.GPLv3" "$APP/Contents/Resources/lic
 cp "$ROOT/build/ffmpeg/$RID/licenses/LICENSE.md" "$APP/Contents/Resources/licenses/FFmpeg-LICENSE.md"
 cp "$ROOT/build/intro-skipper/LICENSE" "$APP/Contents/Resources/licenses/IntroSkipper-LICENSE.txt"
 cp "$ROOT/mutti/connect/LICENSE.md" "$APP/Contents/Resources/licenses/MuttiConnect-MPL-2.0.md"
+cp "$ROOT/mutti/licenses/GPL-3.0.txt" "$APP/Contents/Resources/licenses/Mutti-Package-GPL-3.0.txt"
 # A self-contained publish does not copy the runtime pack's notices; collect them explicitly.
 python3 "$ROOT/mutti/packaging/collect-dotnet-notices.py" "$RID" "$ROOT/build/server/$RID" "$APP/Contents/Resources/licenses"
 cp "$ROOT/mutti/components.lock.json" "$APP/Contents/Resources/"

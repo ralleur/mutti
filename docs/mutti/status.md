@@ -270,6 +270,12 @@ Umgesetzt auf `claude/peaceful-babbage-rt0p2v` (Pull Request gegen `codex/mutti-
   .NET-Hinweise aus dem Runtime-Pack, die Intro-Skipper-LICENSE und den MPL-Text
   des Transports. Offen bleiben die Außenlizenz des Pakets (Owner-Entscheidung),
   das FFmpeg-Quellbündel, die Sora-Provenienz und der App-Store-Weg für kurtz.
+- **Entscheidungen vom 7. Oktober:** Das Gesamtpaket wird unter GPL Version 3
+  angeboten (Dateilizenzen bleiben; GPLv3-Text im Bundle). Weitere Dienste wie
+  Immich und Paperless werden nicht geforkt, sondern als unveränderte, per
+  Digest gepinnte Container in einer in die Mac-App eingebetteten
+  Container-Runtime betrieben; nativ bleibt nur, was Apple-Hardware braucht.
+  Details und Reihenfolge (M8): [plan.md, Abschnitt 16](plan.md#16-weitere-dienste-laufzeitmodell-und-upstream-treue).
 
 Geprüft: `gofmt`, `go vet` und `go test -race ./...` für `mutti/migrate` auf
 Linux. Die Swift-Änderungen werden ausschließlich durch den `mac-shell`-Job der
