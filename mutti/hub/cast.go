@@ -167,11 +167,7 @@ func (d castData) Containing(_ context.Context, term string) ([]Document, int, e
 			out = append(out, Document{ID: doc.ID, Title: doc.Title, Created: doc.Created, Snippet: doc.Title})
 		}
 	}
-	n := len(out)
-	if n > 5 {
-		out = out[:5]
-	}
-	return out, n, nil
+	return out, len(out), nil
 }
 
 func (d castData) Read(_ context.Context, id int) (Document, error) {

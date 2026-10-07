@@ -141,7 +141,9 @@ type orDocs struct{ queries []string }
 
 func (o *orDocs) Search(_ context.Context, query string) ([]Document, int, error) {
 	o.queries = append(o.queries, query)
-	if strings.Contains(query, " OR ") {
+	// Full-text matches whole words: only the any-term query of the
+	// "Mietvertrag Kündigungsfrist" case finds the contract.
+	if strings.Contains(query, " OR ") && strings.Contains(query, "Mietvertrag") {
 		return []Document{{ID: 3, Title: "Mietvertrag"}}, 1, nil
 	}
 	return nil, 0, nil
@@ -149,7 +151,10 @@ func (o *orDocs) Search(_ context.Context, query string) ([]Document, int, error
 func (o *orDocs) Read(context.Context, int) (Document, error) { return Document{}, nil }
 func (o *orDocs) Containing(_ context.Context, term string) ([]Document, int, error) {
 	o.queries = append(o.queries, "contains:"+term)
-	if strings.EqualFold(term, "rechnung") {
+	switch strings.ToLower(term) {
+	case "vertrag":
+		return []Document{{ID: 3, Title: "Mietvertrag"}}, 1, nil
+	case "rechnung":
 		return []Document{{ID: 5, Title: "Arztrechnung B"}}, 1, nil
 	}
 	return nil, 0, nil
@@ -166,8 +171,14 @@ func TestDocumentSearchFallsBackToAnyTerm(t *testing.T) {
 	// words: "Rechnung" is part of "Arztrechnung".
 	docs.queries = nil
 	r = tools.Call(context.Background(), "search_documents", []byte(`{"query":"Rechnung"}`))
-	if fmt.Sprint(docs.queries) != "[Rechnung contains:Rechnung]" || !strings.Contains(r.Content, "Arztrechnung") || !strings.Contains(r.Content, "inside a longer word") {
+	if fmt.Sprint(docs.queries) != "[Rechnung contains:rechnung]" || !strings.Contains(r.Content, "Arztrechnung") || !strings.Contains(r.Content, "inside longer words") {
 		t.Fatalf("compound word: %v %s", docs.queries, r.Content)
+	}
+	// A generic part of a multi-word query alone is not a hit.
+	docs.queries = nil
+	r = tools.Call(context.Background(), "search_documents", []byte(`{"query":"Sportstudio Vertrag"}`))
+	if !strings.Contains(r.Content, `"count":0`) {
+		t.Fatalf("partial compound hit: %s", r.Content)
 	}
 }
 

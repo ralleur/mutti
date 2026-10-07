@@ -113,7 +113,7 @@ func (h hubDocuments) Search(ctx context.Context, query string) ([]Document, int
 }
 
 func (h hubDocuments) Containing(ctx context.Context, term string) ([]Document, int, error) {
-	page, err := h.d.containing(ctx, h.id, term, 5)
+	page, err := h.d.containing(ctx, h.id, term, 50)
 	return page.Items, max(page.Count, len(page.Items)), err
 }
 
@@ -401,19 +401,37 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			partial = len(items) > 0
 		}
 		// German compound words: "Rechnung" is not a word of "Arztrechnung"
-		// in the full-text index. Look for the longest term inside words.
+		// in the full-text index. Documents that contain every term, also
+		// inside longer words, are found ("Rechnung Arzt" -> "Arztrechnung");
+		// a single generic part ("Vertrag" of "Sportstudio Vertrag") is not
+		// enough.
 		inside := false
 		if len(items) == 0 {
-			words := slices.DeleteFunc(strings.Fields(strings.ReplaceAll(a.Query, " OR ", " ")), func(w string) bool { return utf8.RuneCountInString(w) < 4 })
-			slices.SortStableFunc(words, func(x, y string) int { return utf8.RuneCountInString(y) - utf8.RuneCountInString(x) })
-			for _, w := range words {
-				if items, total, err = t.docs.Containing(ctx, w); err != nil {
+			var words []string
+			for _, w := range strings.Fields(strings.ReplaceAll(a.Query, " OR ", " ")) {
+				if w = strings.ToLower(w); utf8.RuneCountInString(w) >= 4 && !slices.Contains(words, w) {
+					words = append(words, w)
+				}
+			}
+			var common []Document
+			for i, w := range words {
+				found, _, err := t.docs.Containing(ctx, w)
+				if err != nil {
 					return toolError(name, "The document archive is currently unavailable.")
 				}
-				if len(items) > 0 {
-					inside = true
+				if i == 0 {
+					common = found
+				} else {
+					common = slices.DeleteFunc(common, func(d Document) bool {
+						return !slices.ContainsFunc(found, func(f Document) bool { return f.ID == d.ID })
+					})
+				}
+				if len(common) == 0 {
 					break
 				}
+			}
+			if len(common) > 0 {
+				items, total, inside = common[:min(len(common), 5)], len(common), true
 			}
 		}
 		out := []map[string]any{}
@@ -426,7 +444,7 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			result["note"] = "No document contains all terms; these hits contain some of them. Check that they answer the question."
 		}
 		if inside {
-			result["note"] = "No document contains the terms as words; these hits contain one of them inside a longer word. Check that they answer the question."
+			result["note"] = "No document contains the terms as words; these hits contain every term, partly inside longer words. Check that they answer the question."
 		}
 		return ToolResult{Content: toolJSON(result),
 			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["documents"], total)}}

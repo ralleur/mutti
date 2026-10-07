@@ -92,7 +92,7 @@ func TestReadingAnEarlierSourceCountsAsUsed(t *testing.T) {
 
 type readDocs struct{ text string }
 
-func (r readDocs) Search(context.Context, string) ([]Document, int, error) { return nil, 0, nil }
+func (r readDocs) Search(context.Context, string) ([]Document, int, error)     { return nil, 0, nil }
 func (r readDocs) Containing(context.Context, string) ([]Document, int, error) { return nil, 0, nil }
 func (r readDocs) Read(context.Context, int) (Document, error) {
 	return Document{ID: 1, Title: "Mietvertrag", Content: &r.text}, nil
