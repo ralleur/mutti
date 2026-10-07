@@ -1,5 +1,10 @@
 # Entscheidungsvorlage: Laufzeit für Linux-Dienste auf dem Mac (offene Entscheidung 1)
 
+> **Entschieden am 07.10.2026:** hybrid mit eingebetteter Container-Runtime
+> (Apples Containerization-Framework), nativ nur für Apple-Hardware; Umsetzung
+> als M8. Maßgeblich ist [plan.md, Abschnitt 16](plan.md#16-weitere-dienste-laufzeitmodell-und-upstream-treue).
+> Diese Vorlage bleibt als Entscheidungsgrundlage erhalten.
+
 Stand 06.10.2026, für Day 1 „Mac only, Apple Silicon, MLX“. Betrifft P2
 „Verwalteter Betrieb“: Immich (Fotos) und Paperless-ngx (Dokumente) sind
 Linux-Containerdienste mit Datenbank/Queue (Postgres, Valkey/Redis). Heute bindet
