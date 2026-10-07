@@ -16,6 +16,10 @@ import (
 )
 
 func main() {
+	// Build and diagnostics: mutti-migrate components write|verify RESOURCES
+	if len(os.Args) == 4 && os.Args[1] == "components" {
+		os.Exit(components(os.Args[2], os.Args[3]))
+	}
 	var o migrate.Options
 	flag.StringVar(&o.Root, "root", "", "Private Mutti data directory")
 	flag.StringVar(&o.Server, "server", "", "Jellyfin executable")
@@ -83,4 +87,27 @@ func main() {
 		fmt.Fprintln(os.Stderr, e)
 		os.Exit(1)
 	}
+}
+
+func components(action, resources string) int {
+	switch action {
+	case "write":
+		digest, err := migrate.WriteComponents(resources)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println("components", digest)
+	case "verify":
+		digest, signed, err := migrate.VerifyComponentSet(resources)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println("components", digest, map[bool]string{true: "signed", false: "unsigned"}[signed])
+	default:
+		fmt.Fprintln(os.Stderr, "usage: mutti-migrate components write|verify RESOURCES")
+		return 2
+	}
+	return 0
 }

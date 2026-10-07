@@ -226,7 +226,20 @@ redownloadable. An old binary alone is not a database rollback.
 ### Updates and rollback (P3, Mac)
 
 The service manager records the data version (`data-version.json`: schema,
-Jellyfin version, build, product version) after a verified start.
+Jellyfin version, build, product version, component-list digest, signed,
+channel) after a verified start.
+
+- The build lists every file and link under `Contents/Resources` with its
+  SHA-256 (`components.json`, written last before code signing; links must
+  stay inside the package). A release signs exactly these bytes with Ed25519
+  (`components.sig`, `mutti-release sign-components`, key outside the
+  repository, trusted key IDs compiled into `mutti-migrate`). On every start
+  the manager checks the whole set (about 0.4 s for the 804 MB package): a
+  changed, missing or additional file, a foreign or unknown-key signature, or
+  a `release` channel build without a valid signature blocks the start before
+  anything is touched. Development builds without a list or signature run and
+  are recorded as unsigned. Two builds of the same commit with different
+  files count as different builds (snapshot before the second one starts).
 
 - A start with a different build first takes an offline snapshot of the
   stopped instance (config, data, Connect state, setup state) and the module
@@ -247,8 +260,10 @@ Jellyfin version, build, product version) after a verified start.
   replaced state counts as withdrawn. Devices paired after the snapshot must
   pair again. Jellyfin's own users and sessions return to the snapshot;
   remote access only works through a paired device.
-- Not yet implemented: signed component sets, a native UI for the blocked
-  state, and restore of a snapshot onto an empty second target.
+- Not yet implemented: a native UI for the blocked state, restore of a
+  snapshot onto an empty second target, and the release key itself (no key
+  is trusted yet, so every current package is an unsigned development
+  build).
 
 ## Open decisions
 

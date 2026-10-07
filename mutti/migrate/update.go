@@ -2,6 +2,8 @@
 package migrate
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,15 +28,21 @@ import (
 
 // dataVersion identifies the server build that owns the data stage.
 type dataVersion struct {
-	Schema   int       `json:"schema"`
-	Jellyfin string    `json:"jellyfin"` // packaged Jellyfin version, e.g. "12.1"
-	Build    string    `json:"build"`    // server source identity of the package
-	Product  string    `json:"product"`  // Mutti package version
-	Recorded time.Time `json:"recorded"`
+	Schema   int    `json:"schema"`
+	Jellyfin string `json:"jellyfin"` // packaged Jellyfin version, e.g. "12.1"
+	Build    string `json:"build"`    // server source identity of the package
+	Product  string `json:"product"`  // Mutti package version
+	// Components is the digest of the package's component list; two
+	// development builds of the same commit differ here. Empty for packages
+	// without a list and data recorded before it existed.
+	Components string    `json:"components,omitempty"`
+	Signed     bool      `json:"signed,omitempty"`  // component list signed with a release key
+	Channel    string    `json:"channel,omitempty"` // "release" requires a signed component list
+	Recorded   time.Time `json:"recorded"`
 }
 
 func (v dataVersion) same(o dataVersion) bool {
-	return v.Jellyfin == o.Jellyfin && v.Build == o.Build
+	return v.Jellyfin == o.Jellyfin && v.Build == o.Build && (v.Components == "" || o.Components == "" || v.Components == o.Components)
 }
 
 func (v dataVersion) label() string {
@@ -68,11 +76,13 @@ type snapshotManifest struct {
 
 // packageVersion reads the shipped component manifest next to the server.
 // Without one (development runs) the update guard is not active.
+func (o Options) resources() string { return filepath.Dir(filepath.Dir(o.Server)) }
+
 func (o Options) packageVersion() (dataVersion, bool) {
 	if o.Server == "" {
 		return dataVersion{}, false
 	}
-	resources := filepath.Dir(filepath.Dir(o.Server))
+	resources := o.resources()
 	var lock struct {
 		Version  string `json:"version"`
 		Jellyfin struct {
@@ -88,7 +98,8 @@ func (o Options) packageVersion() (dataVersion, bool) {
 	// The package's own server commit distinguishes Mutti builds of the same
 	// Jellyfin release; a dirty development tree gets a content-free marker.
 	var provenance struct {
-		Server struct {
+		Channel string `json:"channel"`
+		Server  struct {
 			Commit string `json:"commit"`
 			Dirty  bool   `json:"dirty"`
 		} `json:"server"`
@@ -98,8 +109,34 @@ func (o Options) packageVersion() (dataVersion, bool) {
 		if provenance.Server.Dirty {
 			v.Build += "+dirty"
 		}
+		v.Channel = provenance.Channel
+	}
+	if b, err = os.ReadFile(filepath.Join(resources, componentsFile)); err == nil {
+		sum := sha256.Sum256(b)
+		v.Components = hex.EncodeToString(sum[:])
 	}
 	return v, true
+}
+
+// checkPackage verifies the component set before the server starts. A
+// damaged or modified package, or a release without a valid signature,
+// blocks the start; nothing has changed yet.
+func (m *Manager) checkPackage(v *dataVersion) error {
+	m.setPhase("update", "Programmpaket wird geprüft …")
+	defer m.setPhase("idle", "")
+	check, err := VerifyComponents(m.Options.resources())
+	switch {
+	case errors.Is(err, os.ErrNotExist) && v.Channel != "release":
+		return nil // development build without a component list
+	case errors.Is(err, os.ErrNotExist):
+		return errors.New("Dieses Mutti-Paket enthält keine Komponentenliste. Bitte Mutti neu installieren. Es wurde nichts verändert.")
+	case err != nil:
+		return errors.New("Das Mutti-Paket ist beschädigt oder verändert (" + err.Error() + "). Bitte Mutti neu installieren. Es wurde nichts verändert.")
+	case v.Channel == "release" && !check.Signed:
+		return errors.New("Dieses Mutti-Paket ist nicht mit dem Release-Schlüssel signiert. Bitte Mutti aus der offiziellen Quelle installieren. Es wurde nichts verändert.")
+	}
+	v.Components, v.Signed = check.Digest, check.Signed
+	return nil
 }
 
 // compareVersions orders dotted numeric versions ("12.1" < "12.10").
@@ -170,6 +207,16 @@ func (m *Manager) prepareStart() error {
 	m.removeIncompleteSnapshots()
 	update, err := m.readUpdate()
 	if err != nil {
+		return m.blockUpdate(&UpdateState{State: "blocked", To: current, Started: time.Now().UTC()}, err.Error())
+	}
+	// A block is decided anew on every attempt; only the stored record stays.
+	m.setUpdate(update)
+	if m.State().Phase == "update_blocked" {
+		m.setPhase("idle", "")
+	}
+	// The whole component set is checked on every start (about 0.4 s for
+	// the 800 MB Mac package); a damaged or modified package touches nothing.
+	if err := m.checkPackage(&current); err != nil {
 		return m.blockUpdate(&UpdateState{State: "blocked", To: current, Started: time.Now().UTC()}, err.Error())
 	}
 	// An unfinished or failed update: its target build continues; a newer

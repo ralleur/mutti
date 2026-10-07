@@ -7,15 +7,18 @@
 //	mutti-release keygen --id mutti-qualification-2026-10 --out KEYFILE
 //	mutti-release sign   --key KEYFILE --id ID --candidates candidates.json --out records.json [--tasks a,b] [--languages de,en]
 //	mutti-release verify --file records.json
+//	mutti-release sign-components --key KEYFILE --id ID --resources Mutti.app/Contents/Resources
 package main
 
 import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	hub "github.com/ralleur/mutti/hub"
@@ -23,7 +26,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: mutti-release keygen|sign|verify ...")
+		fmt.Fprintln(os.Stderr, "usage: mutti-release keygen|sign|verify|sign-components ...")
 		os.Exit(2)
 	}
 	fs := flag.NewFlagSet(os.Args[1], flag.ExitOnError)
@@ -34,6 +37,7 @@ func main() {
 	tasks := fs.String("tasks", "", "comma-separated tasks to sign (default: all passed candidates)")
 	languages := fs.String("languages", "", "comma-separated answer languages to sign (default: all)")
 	file := fs.String("file", "", "signed records file")
+	resources := fs.String("resources", "", "package resources with components.json")
 	_ = fs.Parse(os.Args[2:])
 	var err error
 	switch os.Args[1] {
@@ -43,6 +47,11 @@ func main() {
 		var private []byte
 		if private, err = readKey(*key); err == nil {
 			err = hub.SignCandidates(*candidates, *out, *id, ed25519.NewKeyFromSeed(private), split(*tasks), split(*languages))
+		}
+	case "sign-components":
+		var private []byte
+		if private, err = readKey(*key); err == nil {
+			err = signComponents(*resources, *id, ed25519.NewKeyFromSeed(private))
 		}
 	case "verify":
 		var summary string
@@ -55,6 +64,24 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// signComponents signs the exact bytes of the package's component list,
+// which mutti-migrate checks before a build touches the data.
+func signComponents(resources, id string, key ed25519.PrivateKey) error {
+	if resources == "" || id == "" {
+		return fmt.Errorf("--resources and --id are required")
+	}
+	raw, err := os.ReadFile(filepath.Join(resources, "components.json"))
+	if err != nil {
+		return err
+	}
+	b, _ := json.Marshal(map[string]string{"keyId": id, "signature": base64.StdEncoding.EncodeToString(ed25519.Sign(key, raw))})
+	if err = os.WriteFile(filepath.Join(resources, "components.sig"), b, 0644); err != nil {
+		return err
+	}
+	fmt.Printf("signed components.json with %s\n", id)
+	return nil
 }
 
 func split(s string) []string {

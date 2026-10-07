@@ -57,6 +57,13 @@ if [ "$ARCH" = arm64 ]; then cp "$ROOT/mutti/packaging/licenses/MLX-MIT.txt" "$A
 cp "$ROOT/mutti/THIRD-PARTY.md" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/components.lock.json" "$APP/Contents/Resources/"
 python3 "$ROOT/mutti/packaging/provenance.py" "$WEB" "$APP/Contents/Resources/build-provenance.json"
+# Component list of everything in Resources; mutti-migrate checks it before a
+# build touches the data. Must be the last change to Resources. A release
+# signs it with the key outside the repository (MUTTI_COMPONENT_KEY[_ID]).
+(cd "$ROOT/mutti/migrate" && go run ./cmd/mutti-migrate components write "$APP/Contents/Resources")
+if [ -n "${MUTTI_COMPONENT_KEY:-}" ]; then
+  (cd "$ROOT/mutti/hub" && go run ./cmd/mutti-release sign-components --key "$MUTTI_COMPONENT_KEY" --id "${MUTTI_COMPONENT_KEY_ID:?}" --resources "$APP/Contents/Resources")
+fi
 # Local development signature only. Release signing/notarization is a separate gate.
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
