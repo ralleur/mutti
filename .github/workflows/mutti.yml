@@ -1,9 +1,8 @@
 name: Mutti
 on:
   push:
-    branches: [main, 'codex/**']
+    branches: [main, 'codex/**', 'claude/**']
   pull_request:
-    branches: [main]
 permissions:
   contents: read
 jobs:

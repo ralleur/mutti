@@ -18,3 +18,20 @@
 
 "Einrichtung läuft" = "Setup in progress";
 "Bitte zuerst die Einrichtung abschließen." = "Please finish setup first.";
+
+"Mutti beenden?" = "Quit Mutti?";
+"Gekoppelte Geräte können Mutti nicht erreichen, solange die App beendet ist." = "Paired devices cannot reach Mutti while the app is quit.";
+"Beenden" = "Quit";
+"Abbrechen" = "Cancel";
+"Der Start bei der Anmeldung konnte nicht geändert werden. Prüfe die Anmeldeobjekte in den Systemeinstellungen." = "Launch at login could not be changed. Check Login Items in System Settings.";
+"Mutti stellt Medien bereit" = "Mutti is serving media";
+"Der Start dauert länger als gewohnt. Nach einem Update kann die Bibliothek einige Minuten aktualisiert werden." = "Startup is taking longer than usual. After an update the library may need a few minutes to upgrade.";
+"Der Fernzugriff ist nicht verfügbar." = "Remote access is unavailable.";
+"Bereit" = "Ready";
+"Wird gestartet …" = "Starting …";
+"Server wird neu gestartet …" = "Restarting server …";
+"Fehler" = "Error";
+"Bei der Anmeldung starten" = "Launch at login";
+"Mac wach halten, solange Mutti läuft" = "Keep Mac awake while Mutti is running";
+"Wird beendet …" = "Stopping …";
+"Mutti muss in den Systemeinstellungen unter Anmeldeobjekte erlaubt werden." = "Mutti must be allowed under Login Items in System Settings.";

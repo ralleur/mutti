@@ -1,0 +1,130 @@
+# Release gate, not CI: builds, signs and notarizes Mutti.app with a Developer ID.
+# Run it by hand (workflow_dispatch) after the other release gates are green. It needs
+# these repository secrets (see mutti/packaging/macos/README.md):
+#   MUTTI_MAC_CERT_P12        base64 of the "Developer ID Application" .p12 export
+#   MUTTI_MAC_CERT_PASSWORD   password of that .p12
+#   MUTTI_MAC_SIGN_IDENTITY   e.g. "Developer ID Application: Name (TEAMID)"
+#   MUTTI_NOTARY_KEY_ID       App Store Connect API key ID
+#   MUTTI_NOTARY_ISSUER_ID    App Store Connect issuer ID
+#   MUTTI_NOTARY_KEY_P8       contents of the AuthKey_<KEY_ID>.p8 file
+name: Mutti Release (macOS)
+on:
+  workflow_dispatch:
+    inputs:
+      rid:
+        description: .NET runtime identifier of the Mac build
+        type: choice
+        default: osx-arm64
+        options:
+          - osx-arm64
+          - osx-x64
+permissions:
+  contents: read
+jobs:
+  sign-and-notarize:
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      MUTTI_MAC_RID: ${{ inputs.rid }}
+    steps:
+      # The runner context is not available in job-level env, so the temporary paths are
+      # written to GITHUB_ENV first; every later step, including the always() cleanup, reads them.
+      - name: Derive temporary paths
+        run: |
+          {
+            echo "MUTTI_WEB_DIR=$RUNNER_TEMP/mutti-web"
+            echo "KEYCHAIN=$RUNNER_TEMP/mutti-release.keychain-db"
+            echo "CERT_PATH=$RUNNER_TEMP/mutti-cert.p12"
+            echo "NOTARY_KEY=$RUNNER_TEMP/mutti-notary.p8"
+          } >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.401
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.1
+      - name: Check out pinned web sources
+        run: |
+          WEB_COMMIT=$(python3 -c 'import json; print(json.load(open("mutti/components.lock.json"))["web"]["commit"])')
+          git clone https://github.com/ralleur/mutti-web.git "$MUTTI_WEB_DIR"
+          git -C "$MUTTI_WEB_DIR" checkout --detach "$WEB_COMMIT"
+      - name: Import Developer ID certificate into a temporary keychain
+        env:
+          CERT_P12: ${{ secrets.MUTTI_MAC_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MUTTI_MAC_CERT_PASSWORD }}
+        run: |
+          test -n "$CERT_P12" || { echo "Secret MUTTI_MAC_CERT_P12 is not set." >&2; exit 1; }
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          printf '%s' "$CERT_P12" | tr -d '\n\r ' | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          # Apple's Developer ID intermediate: codesign needs the full chain to add a timestamp,
+          # and a .p12 exported from Keychain Access does not always carry it.
+          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -t cert -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          rm -f "$CERT_PATH"
+      - name: Build and sign Mutti.app
+        env:
+          MUTTI_SIGN_IDENTITY: ${{ secrets.MUTTI_MAC_SIGN_IDENTITY }}
+        run: |
+          test -n "$MUTTI_SIGN_IDENTITY" || { echo "Secret MUTTI_MAC_SIGN_IDENTITY is not set." >&2; exit 1; }
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          bash mutti/packaging/build-mac.sh
+      - name: Notarize and staple
+        env:
+          NOTARY_KEY_ID: ${{ secrets.MUTTI_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MUTTI_NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8: ${{ secrets.MUTTI_NOTARY_KEY_P8 }}
+        run: |
+          test -n "$NOTARY_KEY_P8" || { echo "Secret MUTTI_NOTARY_KEY_P8 is not set." >&2; exit 1; }
+          APP="build/macos/$MUTTI_MAC_RID/Mutti.app"
+          ZIP="build/macos/$MUTTI_MAC_RID/Mutti-$MUTTI_MAC_RID.zip"
+          RESULT="$RUNNER_TEMP/notary-result.json"
+          printf '%s\n' "$NOTARY_KEY_P8" > "$NOTARY_KEY"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          # notarytool exits non-zero on a rejected submission; keep going to print its log.
+          xcrun notarytool submit "$ZIP" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --output-format json > "$RESULT" || true
+          cat "$RESULT"
+          notary_field() {
+            python3 -c 'import json, sys
+          try:
+              print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))
+          except Exception:
+              print("")' "$RESULT" "$1"
+          }
+          STATUS="$(notary_field status)"
+          SUBMISSION="$(notary_field id)"
+          if [ "$STATUS" != "Accepted" ]; then
+            if [ -n "$SUBMISSION" ]; then
+              xcrun notarytool log "$SUBMISSION" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" || true
+            fi
+            echo "Notarization did not succeed (status: ${STATUS:-unknown})." >&2
+            exit 1
+          fi
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+          rm -f "$ZIP"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Mutti-${{ inputs.rid }}
+          path: build/macos/${{ inputs.rid }}/Mutti-${{ inputs.rid }}.zip
+          if-no-files-found: error
+      - name: Remove temporary keychain and key material
+        if: always()
+        run: |
+          rm -f "${NOTARY_KEY:-$RUNNER_TEMP/mutti-notary.p8}" "${CERT_PATH:-$RUNNER_TEMP/mutti-cert.p12}" "$RUNNER_TEMP/DeveloperIDG2CA.cer" "$RUNNER_TEMP/notary-result.json"
+          if [ -n "${KEYCHAIN:-}" ] && [ -f "$KEYCHAIN" ]; then
+            security delete-keychain "$KEYCHAIN"
+          fi
