@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements of the Swift shell (Contents/MacOS/Mutti) for release signing with the hardened
+  runtime. The app is not sandboxed and does not JIT; WKWebView needs no entitlement, so the
+  dictionary stays empty on purpose. The bundled .NET host uses packaging/macos/runtime.entitlements.
+-->
+<plist version="1.0">
+<dict/>
+</plist>

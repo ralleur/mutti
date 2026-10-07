@@ -25,7 +25,9 @@ keine laufende Synchronisierung zwischen beiden Servern.
 Docker/NAS verwendet denselben Dienst und Ablauf. Der neue Einstieg liegt auf
 `http://127.0.0.1:18594`, Jellyfin weiterhin auf `18597`, Geräteverwaltung auf
 `18595`. Compose veröffentlicht diese drei Verwaltungsports ausschließlich auf
-localhost. Für die NAS-Vorschau bleibt der SSH-Tunnel nötig. Medien müssen im
+localhost. Für die NAS-Vorschau bleibt der SSH-Tunnel mit denselben drei
+Portnummern nötig (siehe [development.md](development.md)); Docker/NAS ist ein
+Entwicklerweg und kein Gate der ersten, Mac-only ausgelieferten Iteration. Medien müssen im
 Container lesbar eingebunden sein. Andere Speicherorte im Importformular zuordnen.
 Bei einem bereits eingerichteten Docker-/Browser-Ziel wird zusätzlich dessen
 bestehender Bibliotheksadministrator geprüft. Die Mac-Freigabe gilt ausschließlich

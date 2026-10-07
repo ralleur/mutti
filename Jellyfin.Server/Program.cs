@@ -80,6 +80,7 @@ namespace Jellyfin.Server
                     {
                         throw new ArgumentException("Expected source and new snapshot directory.");
                     }
+
                     global::Mutti.IntroSkipper.IntroSnapshot.Create(args[1], args[2]);
                 }
                 catch (Exception)

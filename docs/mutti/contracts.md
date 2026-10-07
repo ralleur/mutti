@@ -6,7 +6,7 @@ contains no Umbrel implementation. Field names below are contracts for upcoming
 work, not claims that every field or endpoint already exists.
 
 Implementation and evidence: [baseline](baseline-2026-10-06.md),
-[P0 checks](evidence/p0-2026-10-06.md). Delivery order: [product plan](plan.md#16-integrierter-ausbauplan-p0p4).
+[P0 checks](evidence/p0-2026-10-06.md). Delivery order: [product plan](plan.md#18-integrierter-ausbauplan-p0p4).
 
 ## Product and authority boundary
 
@@ -240,8 +240,10 @@ package without a version file never starts unguarded once a component list
 or recorded data exists.
 
 - The build lists every file and link under `Contents/Resources` with its
-  SHA-256 (`components.json`, written last before code signing; links must
-  stay inside the package). A release signs exactly these bytes with Ed25519
+  SHA-256 (`components.json`; links must stay inside the package). It is
+  written last before the ad-hoc code signature, or in a release build after
+  the per-file Developer ID signature of every Mach-O file and before the
+  bundle is sealed, so the list matches the shipped binaries. A release signs exactly these bytes with Ed25519
   (`components.sig`, `mutti-release sign-components`, key outside the
   repository, trusted key IDs compiled into `mutti-migrate`). On every start
   the manager checks the whole set (about 0.4 s for the 804 MB package): a
@@ -263,8 +265,9 @@ or recorded data exists.
   the previous state stays untouched. Interrupted snapshots are discarded.
 - The update is `pending` until the new version is set up and its module and
   device state still parse; then `verified` and the new data version is
-  recorded. A crash loop or 20 minutes without verification is `failed`; the
-  same build retries, an older build is `blocked`.
+  recorded. If the Jellyfin supervisor gives up (repeated crashes despite its
+  backoff) or 20 minutes pass without verification, the update is `failed`;
+  the same build retries, an older build is `blocked`.
 - Data written by a newer Jellyfin or by a build from newer sources of the
   same release is never started by an older package (`blocked`, downgrade
   lock). A data folder that is a link elsewhere blocks the update (it could
@@ -282,7 +285,11 @@ or recorded data exists.
   as withdrawn. Devices paired after the snapshot must pair again.
   Limitation: Jellyfin's own users and sessions return to the snapshot, so a
   user disabled inside Jellyfin after the snapshot is active again while a
-  device paired before stays paired.
+  device paired before stays paired. The installation-level identity of
+  plan §4.1 will move identity and device list out of the instance; rollback
+  then restores only library data, and the carry-over of withdrawals above is
+  replaced by removing Jellyfin sessions and devices of withdrawn devices from
+  the restored database.
 - Snapshots kept: the newest two, the one the update record refers to and
   the newest of every Jellyfin release.
 - The native Mac app shows the pre-update backup and the blocked state and

@@ -75,14 +75,16 @@ Aufforderung, Jellyfin-HTTP im Router freizugeben. Für reine LAN-Kopplung statt
 `MUTTI_LAN_ORIGIN=http://NAS-LAN-IP:18599` setzen; standardmäßig ist die
 Veröffentlichung des LAN-Vermittlers vorsichtig auf Loopback begrenzt.
 
-Die Besitzerverwaltung bleibt lokal. Für die Testversion vom eigenen Rechner:
+Die Besitzerverwaltung bleibt lokal. Für die Testversion vom eigenen Rechner,
+mit denselben Portnummern wie im Container, weil Host und Origin exakt geprüft werden:
 
 ```sh
-ssh -L 18597:127.0.0.1:18597 -L 18595:127.0.0.1:18595 user@nas
+ssh -L 18594:127.0.0.1:18594 -L 18595:127.0.0.1:18595 -L 18597:127.0.0.1:18597 user@nas
 ```
 
-Bibliothek unter `http://127.0.0.1:18597`, Geräte unter
-`http://127.0.0.1:18595`. Ein komfortabler, sicherer NAS-Besitzerzugang von einem
+Einrichtung und Import unter `http://127.0.0.1:18594`, Bibliothek unter
+`http://127.0.0.1:18597`, Geräte unter `http://127.0.0.1:18595`. Docker/NAS ist
+seit dem 6. Oktober 2026 ein Entwicklerweg und kein Gate der ersten Auslieferung. Ein komfortabler, sicherer NAS-Besitzerzugang von einem
 zweiten Gerät bleibt offen. Keine ungeschützte Admin-Oberfläche ins LAN stellen.
 
 ## Protokoll und Grenzen

@@ -22,6 +22,10 @@
   "ffmpeg": {
     "version": "8.1.3-1",
     "repository": "https://github.com/jellyfin/jellyfin-ffmpeg",
+    "licenses": {
+      "COPYING.GPLv3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "LICENSE.md": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+    },
     "assets": {
       "osx-arm64": {
         "archive": "jellyfin-ffmpeg_8.1.3-1_portable_macarm64-gpl.tar.xz",

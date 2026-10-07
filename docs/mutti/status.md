@@ -1,6 +1,10 @@
 # Umsetzungsstand
 
 Stand: 6. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
+Die Architektur-Review vom 6. Oktober und die Owner-Entscheidungen dazu stehen in
+[review-2026-10-06.md](review-2026-10-06.md) und [plan.md, Abschnitt 15](plan.md#15-entscheidungsprotokoll-vom-6-oktober-2026).
+Seitdem gilt: erste Iteration Mac-only (Apple Silicon, MLX), kein zentrales
+Relay, Docker/NAS als Entwicklerweg ohne Release-Gate (Iteration M7).
 
 Die Forks `ralleur/mutti` und `ralleur/mutti-web` behalten ihre vollständige
 Jellyfin-Historie. Die Produktbranches beginnen beim zusammenpassenden stabilen
@@ -8,6 +12,47 @@ Stand v12.1. Die Umsetzung liegt zunächst auf `codex/mutti-foundation`; `main`
 ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 
 ## Aktuelle Übergabe und nächste Schritte
+
+**Stand 07.10.2026, mittags – Planverfeinerung (PR #2) mit P2/P3
+zusammengeführt.** Branch `codex/mutti-integration` (Worktree
+`mutti-integration`) = Merge von `origin/codex/mutti-foundation` (`b855397f7d`,
+PR #2: Review-Entscheidungen, Supervisor/Lebensader/Anmeldeobjekt, Release-
+Signierung, GPL-3-Paketlizenz, RIGHTS/CLA/TRADEMARKS, hybrides Laufzeitmodell)
+in `codex/mutti-p2-qualification` (`31ed8948bc`). Nicht gepusht.
+
+- **Konfliktauflösung:** Manager (`engine.go`) vereinigt Supervisor und
+  Update-Wächter: Neustarts laufen über den Supervisor und über `launch`
+  (Paketprüfung); ein ausstehendes Update gilt als gescheitert, wenn der
+  Supervisor aufgibt oder 20 Minuten ohne Bestätigung vergehen. Das frühere
+  Neustartbudget (`recovery.go`) entfällt zugunsten des Supervisors. Mac-App:
+  Neustart-/Beenden-Zustände aus PR #2 plus Sicherungsfortschritt,
+  Rücksprung-Schaltfläche im gesperrten Update und Paketersetzt-Meldung
+  (`ManagerState.update`, `serviceMessage`, `isBlocked`). `build-mac.sh`:
+  Komponentenliste nach der Mach-O-Signatur und vor der Bundle-Versiegelung,
+  Lizenzhinweise aus beiden Zweigen. Supervisor-Meldungen DE/EN ergänzt.
+- **Plan:** verfeinerte Fassung übernommen; P0–P4 jetzt §18, Docker/NAS bis M7
+  §19 (Docker bleibt baubar und in CI, kein Release-Gate), neuer Abgleich in
+  §18: P3 = Update-Teil von M2.5, Folgen von §4.1 für die Widerrufslogik,
+  Release-Signierung erfordert Qualifikation auf dem signierten Paket.
+  Mac-Laufzeit für Dienste ist entschieden (§16, hybrid, M8). Verweise in
+  `AGENTS.md`, `contracts.md` und diesem Status nachgezogen; `contracts.md`
+  P3-Vertrag um Supervisor, Signaturreihenfolge und §4.1 ergänzt.
+- **Geprüft (synthetisch):** `gofmt`/`go vet` sauber, `go test -race` grün für
+  `mutti/hub`, `mutti/migrate`, `mutti/connect`; Swift-Typecheck und
+  `swift test` 10/10 (neuer Test für die Update-Felder); `bash -n`,
+  `py_compile`, `node --check`. **Nicht** geprüft: Paketbau und
+  Paket-Smoke des zusammengeführten Stands, C#-Tests (aus PR #2 unverändert
+  übernommen), signierter Build (keine Signaturidentität hinterlegt).
+- **Folgen für die Freigabe:** Die Messung auf `7a036fc459` bleibt für genau
+  dieses ad-hoc signierte Paket gültig. Ein Developer-ID-signiertes Release
+  verändert Hub- und Engine-Digest und braucht eine neue Messung mit frischen
+  Gate-Sätzen; ebenso jeder Hub-Stand nach diesem Merge, falls sich der
+  Hub-Digest ändert.
+- **Nächste Schritte:** zusammengeführtes Paket bauen und
+  `module-package-smoke.py` ausführen; Merge nach Review in
+  `codex/mutti-foundation` übernehmen; Owner: Signatur der Freigaben für
+  `7a036fc459` oder Verzicht zugunsten einer Messung auf dem signierten
+  Release-Paket, Komponentenschlüssel ([Ablauf](release-keys.md)).
 
 Stand 06.10.2026 (abends): P0 (`750f9158a2`), Harness v5 (`c74373310c`) und P1
 sind auf `codex/mutti-foundation` zusammengeführt (Merge von
@@ -20,10 +65,12 @@ und vertrauenswürdigen Nachweis weiterhin **nicht** produktiv freigeschaltet.
 
 **Plattformentscheidung (Owner, 06.10.2026):** Day 1 ist **Mac only, Apple
 Silicon, MLX**. Docker/NAS ist aus dem Entwicklungsplan genommen und steht auf
-der [Roadmap](plan.md#17-roadmap-docker-nas-nach-day-1); vorhandener Docker-Code
+der [Roadmap](plan.md#19-dockernas-bis-zur-iteration-m7); vorhandener Docker-Code
 bleibt unangetastet, wird aber weder gebaut, getestet noch als bereit
 bezeichnet. Nachgezogen in `plan.md` (§1, §8, §11/12-Hinweis, §16, §17),
 `AGENTS.md` und `contracts.md`; historische Belege bleiben unverändert.
+*Am 07.10.2026 verfeinert (PR #2): Das Docker-Paket bleibt baubar und in CI
+mitgeprüft; Abschnittsnummern seitdem §18 (P0–P4) und §19 (Docker/NAS bis M7).*
 
 **P1 — gemeinsamer Inhaltsweg: für den Day-1-Umfang umgesetzt und auf dem
 Mac-Paket sowie nativ im Simulator geprüft.** Branch `codex/mutti-p1-content`
@@ -281,7 +328,7 @@ Agentenprozess gestartet, keine erneute Produktprüfung für diese Textänderung
 ## Aktuelle Ausgangsbasis und P0, 6. Oktober 2026
 
 [Bestandsabgleich](baseline-2026-10-06.md), [Verträge v1](contracts.md) und
-[integrierter Plan P0–P4](plan.md#16-integrierter-ausbauplan-p0p4) sind maßgeblich.
+[integrierter Plan P0–P4](plan.md#18-integrierter-ausbauplan-p0p4) sind maßgeblich.
 Ältere Tagesabschnitte unten sind historische Prüfstufen, keine widersprüchlichen
 aktuellen Funktionszusagen. Insbesondere sind Hub/Adapter und native Modulquellen
 vorhanden; deren vollständige Laufzeit-/Paketabnahme bleibt offen.
@@ -728,6 +775,53 @@ sind keine Freigabe von kurtz-Artefakten durch diese lokale Mutti-Änderung.
 Immich 2.7.5 und Paperless-ngx 2.20.15 in eigenen, netzisolierten Testprojekten
 mit echten APIs geprüft. Nutzertrennung, Originaldownload und Neustart bestehen;
 Paperless zusätzlich Importauftrag, Volltext und separater Export/Restore unter
-Erhalt der Eigentümerrechte. [Nachweis und noch fehlende Integration](/Users/ai/workspace/mutti/docs/mutti/modules-qualification.md).
+Erhalt der Eigentümerrechte. [Nachweis und noch fehlende Integration](modules-qualification.md).
 Dies sind keine fertigen Mutti-/kurtz-Module; laufende Originalinstallationen
 wurden nicht verändert.
+
+## Review und Verfügbarkeitsarbeit vom 6. Oktober
+
+Umgesetzt auf `claude/peaceful-babbage-rt0p2v` (Pull Request gegen `codex/mutti-foundation`):
+
+- **Supervisor im Manager (`mutti/migrate`):** Ein beendeter Jellyfin-Prozess
+  wird mit wachsendem Abstand neu gestartet; der Zustand `restarting` ist in der
+  Status-API und der Mac-App sichtbar, erst nach mehreren Fehlversuchen in Folge
+  erscheint ein Fehler mit Handlungsanweisung. Der Verbindungsdienst wird mit
+  Abstand neu gestartet; dauerhaftes Scheitern wird als `connectState`/
+  `connectMessage` gemeldet, ohne die Bibliothek zu blockieren. Während einer
+  laufenden Übernahme greift der Supervisor nicht ein.
+- **Prozessgruppe und Lebensader:** Im Mac-Modus bildet der Manager eine eigene
+  Prozessgruppe; die App hält die Token-Pipe offen, deren Ende den Manager
+  geordnet beendet. Als letzte Stufe beendet die App die gesamte Gruppe. Docker
+  bleibt unverändert.
+- **Mac-Hülle:** Start bei der Anmeldung über die System-Anmeldeobjekte,
+  „Mac wach halten“ als Schalter, Beenden-Rückfrage mit Hinweis auf gekoppelte
+  Geräte (nicht bei Abmelden/Herunterfahren), nicht blockierender Stopp,
+  migrationsbewusster Startwächter, Statuszeile in der Menüleiste.
+- **Release-Hygiene:** Format- und StyleCop-Fehler behoben, Windows-Testfehler
+  im Intro-Skipper-Snapshot behoben, geerbte Workflows auf `main` umgestellt und
+  Jellyfin-eigene Automationen für den Fork abgeschaltet, Mutti-CI auf allen
+  Arbeitsbranches, manuell auslösbarer Release-Workflow mit Developer-ID-
+  Signatur, Hardened Runtime, Entitlements und Notarisierung (benötigt
+  hinterlegte Geheimnisse, noch nicht ausgeführt).
+- **Lizenzprüfung:** Die Lizenzfakten aller gebündelten Komponenten sind mit
+  Primärquellen belegt und gegengeprüft ([licensing.md](licensing.md)). Ergebnis:
+  Upstream behandelt den Jellyfin-Quellcode als „GPL unversioned“ und die
+  Binaries als GPL v3; Intro Skipper ist GPL-3.0-only; der FFmpeg-Build ist GPL
+  v3. Der Mac-Build bündelt jetzt die FFmpeg-Lizenztexte (per Hash gepinnt), die
+  .NET-Hinweise aus dem Runtime-Pack, die Intro-Skipper-LICENSE und den MPL-Text
+  des Transports. Offen bleiben die Außenlizenz des Pakets (Owner-Entscheidung),
+  das FFmpeg-Quellbündel, die Sora-Provenienz und der App-Store-Weg für kurtz.
+- **Entscheidungen vom 7. Oktober:** Das Gesamtpaket wird unter GPL Version 3
+  angeboten (Dateilizenzen bleiben; GPLv3-Text im Bundle). Weitere Dienste wie
+  Immich und Paperless werden nicht geforkt, sondern als unveränderte, per
+  Digest gepinnte Container in einer in die Mac-App eingebetteten
+  Container-Runtime betrieben; nativ bleibt nur, was Apple-Hardware braucht.
+  Details und Reihenfolge (M8): [plan.md, Abschnitt 16](plan.md#16-weitere-dienste-laufzeitmodell-und-upstream-treue).
+
+Geprüft: `gofmt`, `go vet` und `go test -race ./...` für `mutti/migrate` auf
+Linux. Die Swift-Änderungen werden ausschließlich durch den `mac-shell`-Job der
+CI auf einem macOS-Runner kompiliert und getestet; ein Start der neuen App auf
+einem echten Mac, die Wirkung der Wach-halten-Einstellung, die Anmeldeobjekt-
+Registrierung und das Verhalten beim Abmelden sind Owner-Tests. Der
+Release-Workflow wurde nicht ausgeführt. Kein WAN-, Geräte- oder NAS-Nachweis.

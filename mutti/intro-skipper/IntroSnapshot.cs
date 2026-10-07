@@ -100,7 +100,10 @@ internal static class IntroSnapshot
     {
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = path, Mode = mode, Pooling = false, DefaultTimeout = 15,
+            DataSource = path,
+            Mode = mode,
+            Pooling = false,
+            DefaultTimeout = 15,
         }.ToString());
         connection.Open();
         using var command = connection.CreateCommand();

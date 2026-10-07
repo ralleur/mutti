@@ -10,8 +10,9 @@ Tags prüfen, Upstream-Historie integrieren und Mutti-Anpassungen nachziehen.
 Ein Sicherheitsfix kann vorab als dokumentierter Backport übernommen werden.
 
 Pflicht vor Freigabe: Server/Web-Build, Zugriffstests, Einrichtung, Wiedergabe,
-Kopplung/Widerruf sobald implementiert, Mac und Docker, Upgrade auf einer Datenkopie
-und Restore des alten Datenstands. Ein Datenbank-Downgrade ist kein Rückweg.
+Kopplung/Widerruf sobald implementiert, das Mac-Paket (Docker bleibt Entwicklerweg
+bis zur NAS-Iteration), Upgrade auf einer Datenkopie und Restore des alten
+Datenstands über das Instanzmodell. Ein Datenbank-Downgrade ist kein Rückweg.
 Upstream-Konflikte nicht durch Löschen von Mutti-Sicherheitsgrenzen lösen.
 
 Release-Manifest, Image-Digests, Signaturen, passende Quellen und Lizenzinventar

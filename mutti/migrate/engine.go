@@ -43,6 +43,16 @@ type State struct {
 	ServiceMessage string   `json:"serviceMessage,omitempty"`
 	// Update describes a pending, verified, failed or blocked server update.
 	Update *UpdateState `json:"update,omitempty"`
+	// Restarts counts consecutive automatic Jellyfin relaunches in the current
+	// unstable period; it returns to 0 after 60s of continuous readiness.
+	Restarts int `json:"restarts"`
+	// ConnectState is "" (Connect is not running and no start is in progress:
+	// not configured, setup not finished, or the server is down), "starting"
+	// (spawned, alive for less than 10s), "running" (alive for 10s) or
+	// "failed" (still retried every minute). ConnectMessage explains "failed";
+	// otherwise it is empty.
+	ConnectState   string `json:"connectState"`
+	ConnectMessage string `json:"connectMessage"`
 }
 type Manager struct {
 	Options Options
@@ -65,10 +75,13 @@ type Manager struct {
 	connectSettings  []byte
 	closing          bool
 	maintenance      MaintenanceJob
-	recovery         recoveryBudget
 	// unblock wakes a start that waits after a blocked update (rollback).
 	unblock        chan struct{}
 	updateLaunched time.Time
+	// resumePhase and resumeMessage hold what the state showed before the
+	// phase became "restarting" (idle, or an import outcome); they come back
+	// once the relaunched server is ready. Guarded by mu.
+	resumePhase, resumeMessage string
 }
 
 func NewManager(o Options) (*Manager, error) {
@@ -173,6 +186,32 @@ func (m *Manager) State() State {
 	s.Progress = s.Progress.at(time.Now())
 	return s
 }
+
+// applyChildLocked publishes a supervision decision; m.mu must be held.
+func (m *Manager) applyChildLocked(a childAction, restarts int, now time.Time) {
+	switch a {
+	case childRestarting:
+		if m.state.Phase != "restarting" {
+			// A failed relaunch reports restarting again; only the first notice
+			// of an unstable period replaces something worth bringing back, such
+			// as the explanation of a failed import.
+			m.resumePhase, m.resumeMessage = m.state.Phase, m.state.Message
+		}
+		m.state.Phase, m.state.Message, m.state.Restarts = "restarting", restartingMessage, restarts
+	case childGiveUp:
+		m.state.Phase, m.state.Message = "error", restartFailedMessage
+		m.state.Progress.FinishedAt = now
+	case childRecovered:
+		// Never clobber an import phase or report; only our own notice goes
+		// away, and what it had replaced comes back.
+		if m.state.Phase == "restarting" {
+			m.state.Phase, m.state.Message = m.resumePhase, m.resumeMessage
+		}
+	case childStable:
+		m.state.Restarts = 0
+	}
+}
+
 func (m *Manager) setPhase(phase, message string) {
 	m.mu.Lock()
 	m.state.Phase = phase
@@ -261,18 +300,25 @@ func (m *Manager) Run(ctx context.Context) error {
 	if e := m.launch(m.State().Active); e != nil {
 		return e
 	}
+	child := newChildSupervisor()
+	connect := newConnectSupervisor()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
 		}
+		if ctx.Err() != nil {
+			return nil
+		}
 		m.change.Lock()
+		now := time.Now()
 		requestCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		var info PublicInfo
 		e := m.api.call(requestCtx, "GET", "/System/Info/Public", nil, &info)
 		cancel()
-		ready := e == nil && info.Id != "" && m.child.running()
+		running := m.child.running()
+		ready := e == nil && info.Id != "" && running
 		if ready {
 			healthCtx, healthCancel := context.WithTimeout(ctx, 2*time.Second)
 			ready = m.api.call(healthCtx, "GET", "/Users/Public", nil, nil) == nil
@@ -283,43 +329,45 @@ func (m *Manager) Run(ctx context.Context) error {
 		m.state.SetupComplete = ready && info.StartupWizardCompleted
 		active := m.state.Active
 		update := m.state.Update
+		// The import job owns the child while it runs. Decide under the same lock
+		// StartImport takes, so no job can begin between the check and the phase.
+		action := child.observe(now, running, ready, m.jobCancel != nil)
+		m.applyChildLocked(action, child.restarts(), now)
 		m.mu.Unlock()
 		if update != nil && update.State == "pending" {
-			if ready {
+			switch {
+			case ready:
 				m.verifyUpdate(info.Version, info.StartupWizardCompleted)
-			} else if time.Since(m.updateLaunched) > 20*time.Minute {
-				m.failUpdate(update, "der neue Server ist nach 20 Minuten nicht bereit")
-			}
-		}
-		if !m.child.running() {
-			m.connect.stop()
-			m.connect = nil
-			message := "Mutti wurde unerwartet beendet. Automatischer Wiederanlauf wartet; bei wiederholtem Fehler bitte das Paket und freien Speicher prüfen."
-			if m.recovery.allow(time.Now()) {
-				if e := m.launch(active); e == nil {
-					message = "Mutti wird nach einem unerwarteten Ende neu gestartet …"
-				} else if errors.Is(e, errPackageReplaced) {
-					message = e.Error()
-				}
-			} else if update != nil && update.State == "pending" {
+			case action == childGiveUp:
 				// Repeated crashes right after an update: report it as failed
 				// with the way back instead of retrying silently.
 				m.failUpdate(update, "der neue Server beendet sich wiederholt")
+			case time.Since(m.updateLaunched) > 20*time.Minute:
+				m.failUpdate(update, "der neue Server ist nach 20 Minuten nicht bereit")
 			}
-			m.mu.Lock()
-			m.state.ServiceMessage = message
-			m.mu.Unlock()
-		} else if ready {
-			m.mu.Lock()
-			m.state.ServiceMessage = ""
-			m.mu.Unlock()
 		}
+		if !running {
+			m.connect.stop()
+			m.connect = nil
+			connect.stopped()
+		}
+		if action == childRelaunch {
+			if e := m.launch(active); e != nil {
+				m.mu.Lock()
+				m.applyChildLocked(child.failed(now), child.restarts(), now)
+				m.mu.Unlock()
+			}
+		}
+		// A package replaced while Mutti runs is not relaunched (launch refuses
+		// it) and no module or Connect process of it is started.
 		replaced := m.packageReplaced()
+		m.mu.Lock()
 		if replaced {
-			m.mu.Lock()
 			m.state.ServiceMessage = errPackageReplaced.Error()
-			m.mu.Unlock()
+		} else if m.state.ServiceMessage == errPackageReplaced.Error() {
+			m.state.ServiceMessage = ""
 		}
+		m.mu.Unlock()
 		if !replaced && ready && info.StartupWizardCompleted && m.Options.Hub != "" && !m.hub.running() && time.Since(m.hubStarted) > 10*time.Second {
 			// Optional modules run in their own process: a failing module never
 			// stops Jellyfin, Connect or playback and is retried with a pause.
@@ -330,30 +378,12 @@ func (m *Manager) Run(ctx context.Context) error {
 			}
 		}
 		if !replaced && ready && info.StartupWizardCompleted && m.Options.Connect != "" {
-			settings, _ := os.ReadFile(filepath.Join(active, "connect-settings.json"))
-			if !m.connect.running() || string(settings) != string(m.connectSettings) {
-				m.connect.stop()
-				m.connect = nil
-				var cs struct{ Broker, Stun string }
-				_ = json.Unmarshal(settings, &cs)
-				args := []string{"--state", filepath.Join(active, "connect"), "--listen", m.Options.ConnectListen, "--admin-origin", m.Options.ConnectOrigin, "--target", m.Options.Backend, "--target-host", m.api.Host}
-				env := os.Environ()
-				if m.Options.Hub != "" {
-					args = append(args, "--hub", "http://"+m.Options.HubListen)
-					env = append(env, "MUTTI_HUB_PEER="+m.hubPeer)
-				}
-				if cs.Broker != "" {
-					args = append(args, "--broker", cs.Broker)
-				}
-				if cs.Stun != "" {
-					args = append(args, "--stun", cs.Stun)
-				}
-				m.connect, e = startProcess(m.Options.Connect, args, env, filepath.Join(active, "logs", "connect.log"))
-				if e != nil {
-					m.setPhase("error", "Die Geräteverbindung konnte nicht gestartet werden.")
-				}
-				m.connectSettings = settings
-			}
+			m.superviseConnect(connect, active, now)
+		}
+		if m.Options.Connect != "" {
+			m.mu.Lock()
+			m.state.ConnectState, m.state.ConnectMessage = connect.state, connect.message
+			m.mu.Unlock()
 		}
 		m.change.Unlock()
 	}
@@ -377,11 +407,60 @@ func (m *Manager) startHub() (*process, error) {
 	return startProcess(m.Options.Hub, args, env, filepath.Join(m.Options.Root, "logs", "hub.log"))
 }
 
+// superviseConnect keeps the Connect helper running next to a ready server.
+// Settings changes restart it deliberately; its own exits and spawn errors go
+// through the backoff so a taken port never becomes a tight respawn loop and
+// never fails the server itself. m.change must be held.
+func (m *Manager) superviseConnect(s *connectSupervisor, active string, now time.Time) {
+	settings, _ := os.ReadFile(filepath.Join(active, "connect-settings.json"))
+	if m.connect.running() {
+		if string(settings) == string(m.connectSettings) {
+			s.alive(now)
+			return
+		}
+		m.connect.stop()
+		m.connect = nil
+		s.stopped()
+	} else if m.connect != nil {
+		m.connect = nil
+		s.exited(now)
+	}
+	if !s.due(now) {
+		return
+	}
+	var cs struct{ Broker, Stun string }
+	_ = json.Unmarshal(settings, &cs)
+	args := []string{"--state", filepath.Join(active, "connect"), "--listen", m.Options.ConnectListen, "--admin-origin", m.Options.ConnectOrigin, "--target", m.Options.Backend, "--target-host", m.api.Host}
+	if cs.Broker != "" {
+		args = append(args, "--broker", cs.Broker)
+	}
+	if cs.Stun != "" {
+		args = append(args, "--stun", cs.Stun)
+	}
+	env := os.Environ()
+	if m.Options.Hub != "" {
+		args = append(args, "--hub", "http://"+m.Options.HubListen)
+		env = append(env, "MUTTI_HUB_PEER="+m.hubPeer)
+	}
+	m.connectSettings = settings
+	c, e := startProcess(m.Options.Connect, args, env, filepath.Join(active, "logs", "connect.log"))
+	if e != nil {
+		s.exited(now)
+		return
+	}
+	m.connect = c
+	s.started(now)
+}
 func (m *Manager) StartImport(ctx context.Context, input SourceInput) error {
 	m.mu.Lock()
 	if m.jobCancel != nil || m.closing {
 		m.mu.Unlock()
 		return errors.New("Eine Übernahme läuft bereits.")
+	}
+	if m.state.Phase == "restarting" {
+		// The supervisor is about to relaunch the child; a job would race it.
+		m.mu.Unlock()
+		return errors.New("Der Server startet gerade neu. Bitte kurz warten.")
 	}
 	jobCtx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
 	m.jobCancel = cancel

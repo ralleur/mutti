@@ -55,20 +55,69 @@ cp "$ROOT/mutti/design/assets/Sora-OFL.txt" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/packaging/licenses/Ollama-MIT.txt" "$ROOT/mutti/packaging/licenses/llama.cpp-MIT.txt" "$APP/Contents/Resources/licenses/"
 if [ "$ARCH" = arm64 ]; then cp "$ROOT/mutti/packaging/licenses/MLX-MIT.txt" "$ROOT/mutti/packaging/licenses/mlx-c-MIT.txt" "$APP/Contents/Resources/licenses/"; fi
 cp "$ROOT/mutti/THIRD-PARTY.md" "$APP/Contents/Resources/licenses/"
+# The portable FFmpeg archive carries no licence text; the GPL build needs it next to the binaries.
+cp "$ROOT/build/ffmpeg/$RID/licenses/COPYING.GPLv3" "$APP/Contents/Resources/licenses/FFmpeg-COPYING.GPLv3.txt"
+cp "$ROOT/build/ffmpeg/$RID/licenses/LICENSE.md" "$APP/Contents/Resources/licenses/FFmpeg-LICENSE.md"
+cp "$ROOT/build/intro-skipper/LICENSE" "$APP/Contents/Resources/licenses/IntroSkipper-LICENSE.txt"
+cp "$ROOT/mutti/connect/LICENSE.md" "$APP/Contents/Resources/licenses/MuttiConnect-MPL-2.0.md"
+cp "$ROOT/mutti/licenses/GPL-3.0.txt" "$APP/Contents/Resources/licenses/Mutti-Package-GPL-3.0.txt"
+# A self-contained publish does not copy the runtime pack's notices; collect them explicitly.
+python3 "$ROOT/mutti/packaging/collect-dotnet-notices.py" "$RID" "$ROOT/build/server/$RID" "$APP/Contents/Resources/licenses"
 cp "$ROOT/mutti/components.lock.json" "$APP/Contents/Resources/"
 python3 "$ROOT/mutti/packaging/provenance.py" "$WEB" "$APP/Contents/Resources/build-provenance.json"
 # License texts of bundled .NET, Go and npm packages, from the exact inputs.
 python3 "$ROOT/mutti/packaging/notices.py" --resources "$APP/Contents/Resources" --web "$WEB"
-# Component list of everything in Resources; mutti-migrate checks it before a
-# build touches the data. Must be the last change to Resources. A release
-# signs it with the key outside the repository (MUTTI_COMPONENT_KEY[_ID]).
-(cd "$ROOT/mutti/migrate" && go run ./cmd/mutti-migrate components write "$APP/Contents/Resources")
-if [ -n "${MUTTI_COMPONENT_KEY:-}" ]; then
-  (cd "$ROOT/mutti/hub" && go run ./cmd/mutti-release sign-components --key "$MUTTI_COMPONENT_KEY" --id "${MUTTI_COMPONENT_KEY_ID:?}" --resources "$APP/Contents/Resources")
+# Component list of everything in Resources; mutti-migrate checks it on every
+# start. It must describe the files as shipped, so it is written after the
+# last change to Resources: before the ad-hoc signature (which leaves Resources
+# unchanged) or, for a release, after every nested Mach-O file was signed and
+# before the bundle seal. A release signs the list with the key outside the
+# repository (MUTTI_COMPONENT_KEY[_ID]).
+write_components() {
+  (cd "$ROOT/mutti/migrate" && go run ./cmd/mutti-migrate components write "$APP/Contents/Resources")
+  if [ -n "${MUTTI_COMPONENT_KEY:-}" ]; then
+    (cd "$ROOT/mutti/hub" && go run ./cmd/mutti-release sign-components --key "$MUTTI_COMPONENT_KEY" --id "${MUTTI_COMPONENT_KEY_ID:?}" --resources "$APP/Contents/Resources")
+  fi
+}
+# Local development signature by default. Release signing is a separate gate: with
+# MUTTI_SIGN_IDENTITY set (a "Developer ID Application" identity in an unlocked keychain)
+# the bundle is signed inside-out with the hardened runtime and secure timestamps, which
+# notarization requires. --deep is not used there because it would sign nested code with
+# the outer entitlements instead of per-executable ones.
+# Note: release signing rewrites the hub and AI engine binaries, whose digests
+# the AI qualification binds; a release is qualified on the signed package.
+if [ -z "${MUTTI_SIGN_IDENTITY:-}" ]; then
+  write_components
+  codesign --force --deep --sign - "$APP"
+  codesign --verify --deep --strict "$APP"
+else
+  RESOURCES="$APP/Contents/Resources"
+  RUNTIME_ENTITLEMENTS="$ROOT/mutti/packaging/macos/runtime.entitlements"
+  APP_ENTITLEMENTS="$ROOT/mutti/apps/macos/Mutti.entitlements"
+  sign_hardened() { codesign --force --options runtime --timestamp --sign "$MUTTI_SIGN_IDENTITY" "$@"; }
+  # 1. Every Mach-O file under Contents/Resources first (.dylib by name, everything else by
+  #    magic), so a native library dropped into any payload directory is signed too. Only the
+  #    .NET host gets the JIT entitlements; ffmpeg, ffprobe, mutti-connect and mutti-migrate
+  #    run with the plain hardened runtime. Managed .dll files and web assets are not Mach-O.
+  while IFS= read -r -d '' candidate; do
+    case "$candidate" in
+      *.dylib) ;;
+      *) case "$(file -b "$candidate")" in Mach-O*) ;; *) continue;; esac ;;
+    esac
+    if [ "$candidate" = "$RESOURCES/server/jellyfin" ]; then
+      sign_hardened --entitlements "$RUNTIME_ENTITLEMENTS" "$candidate"
+    else
+      sign_hardened "$candidate"
+    fi
+  done < <(find "$RESOURCES" -type f -print0)
+  # 2. The component list over the signed files, then the bundle last: this signs the main
+  #    executable Contents/MacOS/Mutti with the shell's entitlements and seals Contents/Resources
+  #    (including the signatures and the list written above).
+  write_components
+  sign_hardened --entitlements "$APP_ENTITLEMENTS" "$APP"
+  # spctl --assess only passes after notarization; the release workflow staples the ticket.
+  codesign --verify --deep --strict "$APP"
 fi
-# Local development signature only. Release signing/notarization is a separate gate.
-codesign --force --deep --sign - "$APP"
-codesign --verify --deep --strict "$APP"
 # Source/license inventory with open release points (report only).
 python3 "$ROOT/mutti/packaging/inventory.py" --resources "$APP/Contents/Resources" --web "$WEB" \
   --json "$ROOT/build/macos/$RID/license-inventory.json" --md "$ROOT/build/macos/$RID/license-inventory.md"

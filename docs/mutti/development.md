@@ -1,9 +1,12 @@
 # Lokale Entwicklungsvorschau
 
-Die Vorschau benutzt ausschließlich neue Testdaten. Keine vorhandene Jellyfin-
-Datenbank übernehmen. Sichere QR-Kopplung und direkter Transport sind inzwischen
-als Teststand implementiert: [Connect](connect.md). Reale WAN-Abnahme bleibt offen.
-Aktueller Bestand und Qualifikationssperre: [Ausgangsbasis](baseline-2026-10-06.md).
+Die Vorschau benutzt für Tests ausschließlich neue Testdaten oder den
+dokumentierten Importablauf ([import.md](import.md)); nie eine fremde Jellyfin-
+Datenbank direkt öffnen. QR-Kopplung und direkter Transport sind als Teststand
+vorhanden ([connect.md](connect.md)); die reale WAN-Abnahme bleibt offen. Die
+erste Iteration ist Mac-only (Apple Silicon, MLX); der Docker-Abschnitt unten
+ist ein Entwicklerweg, keine Nutzeranleitung. Aktueller Bestand und
+Qualifikationssperre: [Ausgangsbasis](baseline-2026-10-06.md).
 
 ## Quellen
 
@@ -31,10 +34,21 @@ ausgewählt. Das Menüleistensymbol hält den Server bei geschlossenem Fenster
 erreichbar; „Mutti beenden“ beendet auch den eigenen Serverprozess.
 
 Daten liegen getrennt unter `~/Library/Application Support/Mutti Preview/`.
-Der Server bindet nur `127.0.0.1:18596`; ein belegter Port führt zu einer Meldung.
-Das App-Paket wird lokal ad-hoc signiert, nicht notarisiert. Kein öffentlicher Download.
+Jellyfin bindet nur `127.0.0.1:18596`, Einrichtung und Geräteverwaltung liegen
+auf `127.0.0.1:18594` und `127.0.0.1:18595`. Nach abgeschlossener Einrichtung
+lauscht zusätzlich der LAN-Vermittler für die Heimnetz-Kopplung auf TCP 18599
+auf allen Schnittstellen; er trägt keine Mediendaten. Ein belegter Port führt zu
+einer Meldung. Der Manager startet Jellyfin nach einem Absturz mit wachsendem
+Abstand neu und beendet sich samt Server, wenn die App endet oder abstürzt.
+Das App-Paket wird lokal ad-hoc signiert, nicht notarisiert. Kein öffentlicher
+Download. Signierte Release-Builds: [Release-Workflow](../../mutti/packaging/macos/README.md).
 
-## Docker / NAS
+## Docker / NAS (Entwicklerweg, spätere Iteration)
+
+Seit dem 6. Oktober 2026 ist Docker/NAS kein Gate der ersten Auslieferung
+([plan.md](plan.md), Abschnitt 1). Das Paket wird weiter gebaut und in CI geprüft,
+damit der gemeinsame Kern nicht auseinanderläuft. Die folgenden Schritte sind
+für Entwickler, nicht für Endnutzer.
 
 Docker mit Compose v2 / BuildKit und Linux arm64 oder amd64. Die drei Verzeichnisse
 vorab neu anlegen. UID/GID müssen dort Schreibrechte haben; Medien werden nur
@@ -49,10 +63,12 @@ export MUTTI_UID=1000 MUTTI_GID=1000
 docker compose up --build -d
 ```
 
-Auf dem Docker-Host `http://127.0.0.1:18597/web/` öffnen. Beim Test auf einem NAS
-ist bis zur sicheren Kopplung ein lokaler SSH-Tunnel nötig:
-`ssh -L 18597:127.0.0.1:18597 nas`. Das ist ein Entwicklerweg und erfüllt noch
-nicht die geplante einfache NAS-Einrichtung. Den Container nicht durch Ändern
+Auf dem Docker-Host `http://127.0.0.1:18594/` (Einrichtung und Import) und
+`http://127.0.0.1:18597/web/` (Bibliothek) öffnen. Beim Test auf einem NAS ist
+ein lokaler SSH-Tunnel mit denselben Portnummern nötig, weil Host und Origin
+exakt geprüft werden:
+`ssh -L 18594:127.0.0.1:18594 -L 18595:127.0.0.1:18595 -L 18597:127.0.0.1:18597 nas`.
+Das ist ein Entwicklerweg und erfüllt nicht die geplante einfache NAS-Einrichtung. Den Container nicht durch Ändern
 der Port-Bindung ins Heimnetz oder Internet öffnen. Es gibt keine Host-Netzwerk-
 Freigabe, privilegierten Container oder Schreibrechte auf Medien.
 

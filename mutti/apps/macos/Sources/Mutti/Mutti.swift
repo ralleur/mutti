@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import AppKit
 import CoreText
+import ServiceManagement
 import SwiftUI
 import WebKit
 import Darwin
@@ -18,15 +19,24 @@ struct MuttiApp: App {
             ContentView(server: delegate.server).frame(minWidth: 820, minHeight: 660)
         }.defaultSize(width: 1080, height: 820)
         .commands { CommandGroup(replacing: .newItem) {} }
-        MenuBarExtra("Mutti", systemImage: "externaldrive.fill") { MuttiMenu() }
+        MenuBarExtra("Mutti", systemImage: "externaldrive.fill") { MuttiMenu(server: delegate.server) }
     }
 }
 
 struct MuttiMenu: View {
+    @ObservedObject var server: ServerController
     @Environment(\.openWindow) private var openWindow
     var body: some View {
+        // A plain Text inside a menu renders as a disabled status line.
+        Text(LocalizedStringKey(server.statusText))
+        Divider()
+        Toggle("Bei der Anmeldung starten", isOn: $server.launchAtLoginSetting)
+        Toggle("Mac wach halten, solange Mutti läuft", isOn: $server.keepAwake)
+        if let settingsError = server.settingsError { Text(settingsError) }
+        Divider()
         Button("Mutti öffnen") { openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true) }
         Divider()
+        // Quitting goes through the app delegate so the confirmation and the clean stop apply.
         Button("Mutti beenden") { NSApp.terminate(nil) }
     }
 }
@@ -34,14 +44,78 @@ struct MuttiMenu: View {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let server = ServerController()
-    func applicationDidFinishLaunching(_ notification: Notification) { server.start() }
-    func applicationWillTerminate(_ notification: Notification) { server.stop() }
+    /// Set when the system announced a logout, restart or shutdown; the quit confirmation is skipped then.
+    /// Nothing announces a cancelled logout, so the flag expires on its own after a while.
+    private var poweringOff = false
+    private var poweringOffExpiry: Task<Void, Never>?
+    private static let poweringOffWindow: Duration = .seconds(90)
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(workspaceWillPowerOff(_:)), name: NSWorkspace.willPowerOffNotification, object: nil)
+        server.start()
+    }
+    /// Login items can also be changed in System Settings; pick that up when the user comes back.
+    func applicationDidBecomeActive(_ notification: Notification) { server.refreshLaunchAtLogin() }
+    @objc private func workspaceWillPowerOff(_ notification: Notification) {
+        poweringOff = true
+        poweringOffExpiry?.cancel()
+        poweringOffExpiry = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: AppDelegate.poweringOffWindow)
+            guard !Task.isCancelled else { return }
+            self?.poweringOff = false
+        }
+    }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if server.ready && server.setupCompleted && !poweringOff {
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = ServerController.localized("Mutti beenden?")
+            alert.informativeText = ServerController.localized("Gekoppelte Geräte können Mutti nicht erreichen, solange die App beendet ist.")
+            alert.addButton(withTitle: ServerController.localized("Beenden"))
+            alert.addButton(withTitle: ServerController.localized("Abbrechen"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+        }
+        // Without a running manager the stop completes synchronously; reply(toApplicationShouldTerminate:)
+        // must only be sent after .terminateLater was returned, so answer directly in that case.
+        guard server.isManagerRunning else { server.stop(); return .terminateNow }
+        server.stop { NSApp.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
+    }
+    func applicationWillTerminate(_ notification: Notification) { server.stopWithoutWaiting() }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+}
+
+/// Decoded from the manager's /api/state. The availability fields are optional so that an
+/// older manager without them still decodes.
+struct ManagerState: Decodable {
+    var ready: Bool
+    var setupComplete: Bool
+    var newSetup: Bool
+    var phase: String
+    var message: String
+    var active: String
+    var restarts: Int?
+    var connectState: String?
+    var connectMessage: String?
+    /// Set while the manager refuses a replaced package; Jellyfin is not relaunched then.
+    var serviceMessage: String?
+    var update: UpdateInfo?
+    /// Jellyfin crashed and the manager relaunches it on its own: not ready, but not an error.
+    var isRestarting: Bool { phase == "restarting" }
+    var isError: Bool { phase == "error" }
+    var connectFailed: Bool { connectState == "failed" }
+    /// An update failed its checks; the owner may restore the backup taken before it.
+    var isBlocked: Bool { phase == "update_blocked" }
+}
+
+/// Update guard state from /api/state: `pending` until the first start after an update is verified.
+struct UpdateInfo: Decodable {
+    var state: String
+    var snapshot: String?
 }
 
 @MainActor
 final class ServerController: ObservableObject {
-    @Published var ready = false
+    @Published var ready = false { didSet { updateActivity() } }
     @Published private(set) var setupCompleted = false
     @Published var showOnboarding = true
     @Published var importEntry = false
@@ -52,35 +126,73 @@ final class ServerController: ObservableObject {
     @Published private(set) var progressMessage: String?
     /// Set while an update is blocked and a matching pre-update backup exists.
     @Published private(set) var blockedSnapshot: String?
+    /// The manager relaunches Jellyfin after a crash. Shown with the manager's message, without a restart button.
+    @Published private(set) var restarting = false
+    /// Manager message that accompanies a restart; nil otherwise.
+    @Published private(set) var notice: String?
+    /// Shown under the header while Connect failed to start; the library stays usable meanwhile.
+    @Published private(set) var connectMessage: String?
+    /// True from stop() until the manager process is gone and the cleanup ran.
+    @Published private(set) var isStopping = false
+    /// Explains a failed launch-at-login change. Kept apart from `error`, which the readiness poll owns
+    /// and clears on every poll while the server is ready.
+    @Published private(set) var settingsError: String?
+    @Published private(set) var launchAtLogin: Bool
+    @Published var keepAwake: Bool {
+        didSet {
+            UserDefaults.standard.set(keepAwake, forKey: ServerController.keepAwakeKey)
+            updateActivity()
+        }
+    }
     let address = URL(string: "http://127.0.0.1:18596/web/")!
     let managementAddress = URL(string: "http://127.0.0.1:18596/web/#/mutti")!
     let onboardingAddress = URL(string: "http://127.0.0.1:18594/")!
     let connectAddress = URL(string: "http://127.0.0.1:18595/")!
+    private static let keepAwakeKey = "MuttiKeepAwake"
+    /// Polls (about one per second) after which a slow first start is announced, and after which it is abandoned.
+    private static let slowStartPolls = 90
+    private static let abandonStartPolls = 900
     private var child: Process?
     private var log: FileHandle?
     private var readiness: Task<Void, Never>?
     private var lockFD: Int32 = -1
     private var stopping = false
+    /// Completion of the most recent stop request; runs once the in-flight stop has finished.
+    private var pendingStopCompletion: (@MainActor @Sendable () -> Void)?
     private var launchID: UUID?
+    private var activity: NSObjectProtocol?
     private(set) var dataDirectory: URL?
     private(set) var nativeImportClient: NativeImportClient?
-    private struct UpdateInfo: Decodable {
-        var state: String
-        var snapshot: String?
+
+    init() {
+        keepAwake = UserDefaults.standard.object(forKey: ServerController.keepAwakeKey) as? Bool ?? true
+        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
-    private struct ManagerState: Decodable {
-        var ready: Bool
-        var setupComplete: Bool
-        var newSetup: Bool
-        var phase: String
-        var message: String
-        var serviceMessage: String?
-        var active: String
-        var update: UpdateInfo?
+
+    nonisolated static func localized(_ key: String) -> String { NSLocalizedString(key, comment: "Mutti server status") }
+
+    /// True while a manager process exists, including during an asynchronous stop.
+    var isManagerRunning: Bool { child?.isRunning == true }
+
+    /// Key for the menu bar status line; localised by the view.
+    var statusText: String {
+        if isStopping { return "Wird beendet …" }
+        if restarting { return "Server wird neu gestartet …" }
+        if ready { return setupCompleted ? "Bereit" : "Einrichtung läuft" }
+        if error != nil && !starting { return "Fehler" }
+        return "Wird gestartet …"
     }
+
+    /// Read-write view of the login item for a Toggle. The getter asks the system directly so the
+    /// menu shows changes made in System Settings; writes go through setLaunchAtLogin.
+    var launchAtLoginSetting: Bool {
+        get { SMAppService.mainApp.status == .enabled }
+        set { setLaunchAtLogin(newValue) }
+    }
+
     func start() {
         guard child == nil, !starting else { return }
-        error = nil; starting = true; stopping = false; setupCompleted = false; showOnboarding = true
+        error = nil; starting = true; stopping = false; setupCompleted = false; showOnboarding = true; restarting = false; notice = nil; connectMessage = nil
         let identifier = UUID(); launchID = identifier
         do {
             let fm = FileManager.default
@@ -107,7 +219,7 @@ final class ServerController: ObservableObject {
             }
             guard let resources = Bundle.main.resourceURL else { throw Failure("Das App-Paket ist unvollständig.") }
             for path in ["server/jellyfin", "ffmpeg/ffmpeg", "migrate/mutti-migrate", "connect/mutti-connect"] {
-                guard fm.isExecutableFile(atPath: resources.appending(path: path).path) else { throw Failure("Das App-Paket ist unvollständig. Bitte Mutti erneut installieren.") }
+                guard fm.isExecutableFile(atPath: resources.appending(path: path).path) else { throw Failure("Das App-Paket ist unvollständig. Bitte baue oder installiere Mutti erneut.") }
             }
             try fm.createDirectory(at: root.appending(path: "logs"), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             let logURL = root.appending(path: "logs/launcher.log")
@@ -135,8 +247,9 @@ final class ServerController: ObservableObject {
             process.standardOutput = log; process.standardError = log
             process.terminationHandler = { [weak self] _ in Task { @MainActor [weak self] in
                 guard let self, self.launchID == identifier, !self.stopping else { return }
-                self.ready = false; self.setupCompleted = false; self.starting = false; self.child = nil; self.nativeImportClient = nil; self.readiness?.cancel(); self.releaseLock()
-                self.error = NSLocalizedString("Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll.", comment: "Mutti server status")
+                self.ready = false; self.setupCompleted = false; self.starting = false; self.restarting = false; self.notice = nil; self.connectMessage = nil
+                self.child = nil; self.nativeImportClient?.release(); self.nativeImportClient = nil; self.readiness?.cancel(); self.releaseLock()
+                self.error = ServerController.localized("Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll.")
             } }
             try process.run(); child = process
             readiness = Task { [weak self] in
@@ -153,10 +266,11 @@ final class ServerController: ObservableObject {
                         self.importing = ["checking", "backup", "importing", "verifying", "activating"].contains(state.phase)
                         // The first start after an update may migrate Jellyfin's data for
                         // longer; the manager itself gives it 20 minutes.
-                        waiting = state.phase == "update" || state.phase == "update_blocked" || state.update?.state == "pending"
+                        waiting = state.phase == "update" || state.isBlocked || state.update?.state == "pending"
                         self.progressMessage = state.phase == "update" && !state.message.isEmpty ? state.message : nil
-                        self.blockedSnapshot = state.phase == "update_blocked" ? state.update?.snapshot : nil
-                        self.ready = state.ready || self.importing
+                        self.blockedSnapshot = state.isBlocked ? state.update?.snapshot : nil
+                        self.restarting = state.isRestarting
+                        self.ready = (state.ready || self.importing) && !state.isRestarting
                         self.setupCompleted = state.setupComplete && !self.importing
                         self.dataDirectory = URL(fileURLWithPath: state.active, isDirectory: true)
                         if !observed && state.ready {
@@ -165,21 +279,35 @@ final class ServerController: ObservableObject {
                         }
                         if state.newSetup { self.showOnboarding = false }
                         if self.ready { self.starting = false; self.error = nil }
-                        else if state.phase == "error" || state.phase == "update_blocked" { self.starting = false; self.error = state.message }
-                        else if let message = state.serviceMessage, !message.isEmpty {
-                            self.starting = false; self.error = message
-                        }
+                        else if state.isError || state.isBlocked { self.starting = false; self.error = state.message }
+                        else if let message = state.serviceMessage, !message.isEmpty { self.starting = false; self.error = message }
+                        else if state.isRestarting { self.error = nil }
+                        self.notice = state.isRestarting && !state.message.isEmpty ? state.message : nil
+                        if state.connectFailed {
+                            let message = state.connectMessage ?? ""
+                            self.connectMessage = message.isEmpty ? ServerController.localized("Der Fernzugriff ist nicht verfügbar.") : message
+                        } else { self.connectMessage = nil }
                     }
+                    // A pre-update backup or a blocked update does not count against the start.
                     attempts = waiting ? 0 : attempts + 1
-                    if !observed && attempts > 90 {
-                        self.stop(); self.error = NSLocalizedString("Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut.", comment: "Mutti server status"); return
+                    if !observed && !self.ready {
+                        // A first start after an update may run database migrations for minutes:
+                        // announce the delay, keep waiting, and only abandon the start much later.
+                        if attempts >= ServerController.slowStartPolls && self.error == nil {
+                            self.error = ServerController.localized("Der Start dauert länger als gewohnt. Nach einem Update kann die Bibliothek einige Minuten aktualisiert werden.")
+                        }
+                        if attempts > ServerController.abandonStartPolls {
+                            self.stop(); self.error = ServerController.localized("Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut."); return
+                        }
                     }
                     try? await Task.sleep(for: .seconds(1))
                 }
             }
         } catch { stop(); self.error = error.localizedDescription }
     }
-    func restart() { stop(); start() }
+
+    func restart() { stop { [weak self] in self?.start() } }
+
     /// Restores the backup taken before the update, after a native confirmation.
     func rollback(window: NSWindow?) {
         guard let snapshot = blockedSnapshot, let client = nativeImportClient else { return }
@@ -191,17 +319,106 @@ final class ServerController: ObservableObject {
             } catch { self.error = error.localizedDescription }
         }
     }
-    func stop() {
+
+    /// Stops the manager without blocking the main thread. The lifeline is released first (the
+    /// manager treats EOF on stdin as "parent is gone" and shuts down gracefully), then SIGTERM is
+    /// sent. A detached task polls the pid for up to 35 seconds; afterwards the manager's whole
+    /// process group is killed. Cleanup and `completion` run on the main actor once the process
+    /// is gone. Without a running manager the cleanup and `completion` run synchronously.
+    ///
+    /// A stop is single-flight: while one is in flight, a further call only replaces what happens
+    /// afterwards (the latest request wins, so a quit after a restart does not launch a manager that
+    /// is cut off right away). The cleanup therefore never runs twice and cannot tear down a manager
+    /// that a completion launched in the meantime.
+    func stop(completion: (@MainActor @Sendable () -> Void)? = nil) {
         stopping = true; launchID = nil; readiness?.cancel(); readiness = nil
-        if let child, child.isRunning {
-            child.terminate()
-            // The manager first cancels staging, then stops Connect and Jellyfin.
-            let deadline = Date().addingTimeInterval(35)
-            while child.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
-            if child.isRunning { kill(child.processIdentifier, SIGKILL); child.waitUntilExit() }
+        ready = false; setupCompleted = false; starting = false; restarting = false; notice = nil; connectMessage = nil
+        nativeImportClient?.release()
+        if isStopping { pendingStopCompletion = completion; return }
+        guard let child, child.isRunning else {
+            finishStop(); completion?(); return
         }
-        child = nil; nativeImportClient = nil; try? log?.close(); log = nil; ready = false; setupCompleted = false; starting = false; releaseLock()
+        isStopping = true
+        pendingStopCompletion = completion
+        let pid: pid_t = child.processIdentifier
+        // The manager first cancels staging, then stops Connect and Jellyfin.
+        kill(pid, SIGTERM)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var polls = 0
+            while polls < 350, kill(pid, 0) == 0 {
+                try? await Task.sleep(for: .milliseconds(100))
+                polls += 1
+            }
+            if kill(pid, 0) == 0 {
+                // The manager runs in its own process group; take Jellyfin, ffmpeg and Connect down with it
+                // so nothing orphaned keeps the loopback ports.
+                kill(-pid, SIGKILL)
+                kill(pid, SIGKILL)
+            }
+            await MainActor.run { self?.completeStop() }
+        }
     }
+
+    /// Runs once the in-flight stop's process is gone: cleans up and hands over to the latest completion.
+    private func completeStop() {
+        finishStop()
+        isStopping = false
+        let completion = pendingStopCompletion
+        pendingStopCompletion = nil
+        completion?()
+    }
+
+    /// Best-effort fallback for applicationWillTerminate: asks the manager to shut down without waiting.
+    func stopWithoutWaiting() {
+        stopping = true; launchID = nil; readiness?.cancel(); readiness = nil
+        nativeImportClient?.release()
+        if let child, child.isRunning { kill(child.processIdentifier, SIGTERM) }
+        endActivity(); releaseLock()
+    }
+
+    private func finishStop() {
+        child = nil; nativeImportClient = nil; try? log?.close(); log = nil
+        ready = false; setupCompleted = false; starting = false; restarting = false; notice = nil; connectMessage = nil
+        endActivity(); releaseLock()
+    }
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        settingsError = nil
+        do {
+            if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            if enabled && SMAppService.mainApp.status == .requiresApproval {
+                // The user switched Mutti off under Login Items earlier; register() succeeds, but the
+                // system keeps the item off until it is allowed there again.
+                settingsError = ServerController.localized("Mutti muss in den Systemeinstellungen unter Anmeldeobjekte erlaubt werden.")
+                SMAppService.openSystemSettingsLoginItems()
+            }
+        } catch {
+            settingsError = ServerController.localized("Der Start bei der Anmeldung konnte nicht geändert werden. Prüfe die Anmeldeobjekte in den Systemeinstellungen.")
+        }
+        refreshLaunchAtLogin()
+    }
+
+    /// Re-reads the login item status; the user can change it in System Settings as well.
+    func refreshLaunchAtLogin() {
+        let enabled = SMAppService.mainApp.status == .enabled
+        if launchAtLogin != enabled { launchAtLogin = enabled }
+    }
+
+    /// Holds a system activity while the server is ready and the user wants the Mac to stay awake.
+    private func updateActivity() {
+        let wanted = ready && keepAwake
+        if wanted {
+            guard activity == nil else { return }
+            activity = ProcessInfo.processInfo.beginActivity(options: [.idleSystemSleepDisabled], reason: ServerController.localized("Mutti stellt Medien bereit"))
+        } else { endActivity() }
+    }
+
+    private func endActivity() {
+        guard let activity else { return }
+        self.activity = nil
+        ProcessInfo.processInfo.endActivity(activity)
+    }
+
     func saveConnectSettings(_ settings: ConnectSettings) throws {
         guard ready && setupCompleted else { throw Failure("Bitte zuerst die Einrichtung abschließen.") }
         guard let root = dataDirectory else { return }
@@ -218,7 +435,7 @@ final class ServerController: ObservableObject {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path.path)
     }
     func releaseLock() { if lockFD >= 0 { flock(lockFD, LOCK_UN); close(lockFD); lockFD = -1 } }
-    struct Failure: LocalizedError { let message: String; init(_ message: String) { self.message = NSLocalizedString(message, comment: "Mutti server status") }; var errorDescription: String? { message } }
+    struct Failure: LocalizedError { let message: String; init(_ message: String) { self.message = ServerController.localized(message) }; var errorDescription: String? { message } }
 }
 
 struct ContentView: View {
@@ -242,6 +459,8 @@ struct ContentView: View {
             }
             if server.ready {
                 if let error = server.error { Text(error).padding().foregroundStyle(.orange) }
+                if let connectMessage = server.connectMessage { Text(connectMessage).padding().foregroundStyle(.orange) }
+                if let settingsError = server.settingsError { Text(settingsError).padding().foregroundStyle(.orange) }
                 let destination = server.showOnboarding ? (server.importEntry ? URL(string: "http://127.0.0.1:18594/#import")! : server.onboardingAddress) : (server.setupCompleted ? server.managementAddress : server.address)
                 AdminView(address: destination, nativeImportClient: server.nativeImportClient, onNavigate: { action in
                     if action == "import" { server.importEntry = true; server.showOnboarding = true }
@@ -251,16 +470,25 @@ struct ContentView: View {
             else {
                 VStack(spacing: 24) {
                     Text("Deine Medien.\nGut zu Hause.").font(.custom("Sora-Bold", size: 38)).multilineTextAlignment(.center)
-                    if let error = server.error {
+                    if server.restarting {
+                        // The manager relaunches Jellyfin on its own; no restart button here.
+                        if let notice = server.notice { Text(notice).multilineTextAlignment(.center).frame(maxWidth: 480).foregroundStyle(.orange) }
+                        ProgressView("Server wird neu gestartet …")
+                    } else if server.isStopping {
+                        // Quit or restart in progress: no restart button until the old manager is gone.
+                        ProgressView("Wird beendet …")
+                    } else if let error = server.error {
                         Text(error).multilineTextAlignment(.center).frame(maxWidth: 480)
                         if server.blockedSnapshot != nil {
                             Button("Sicherung vor dem Update wiederherstellen") { server.rollback(window: NSApp.keyWindow) }.buttonStyle(.borderedProminent)
-                        } else {
-                            Button("Erneut starten", action: server.restart).buttonStyle(.borderedProminent)
                         }
+                        // During a slow first start the text is only a notice; the start continues.
+                        else if server.starting { ProgressView("Mutti wird gestartet …") }
+                        else { Button("Erneut starten", action: server.restart).buttonStyle(.borderedProminent) }
                     } else if let message = server.progressMessage {
                         ProgressView(message)
                     } else { ProgressView("Mutti wird gestartet …") }
+                    if let settingsError = server.settingsError { Text(settingsError).multilineTextAlignment(.center).frame(maxWidth: 480).foregroundStyle(.orange) }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).padding(32)
             }
         }.background(Color(red: 31/255, green: 31/255, blue: 31/255))
