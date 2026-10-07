@@ -415,7 +415,7 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	if cjk.MatchString(r.Raw) {
 		add("foreign script")
 	}
-	if lang.claimsChange(answer) {
+	if lang.claimsChange(answer, c.Prompt) {
 		add("claims executed change")
 	}
 	for i, want := range ch.Calls {

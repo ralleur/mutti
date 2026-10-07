@@ -40,15 +40,20 @@ type attestation struct {
 	dir       string
 	digest    string // engine directory digest, "" while unknown
 	starts    int    // engine starts covered by digest
+	dirState  string // file states of the engine directory covered by digest
 	sandbox   bool
 	hardware  string
 	osBuild   string
 	adapter   string
 	computing bool
-	// models maps a catalog model ID to the file signature (paths, sizes,
-	// modification times, inodes) at which its files were last verified.
+	// models maps a catalog model ID to the file states (path, mode, size,
+	// modification and change time, device, inode) at which its files were
+	// last verified.
 	models    map[string]string
 	verifying map[string]bool
+	// failed remembers the file state a verification rejected, so the same
+	// files are not hashed again on every request.
+	failed map[string]string
 	// hashing serializes file hashing, so concurrent requests wait for one
 	// measurement and then use its result instead of hashing again.
 	hashing sync.Mutex
@@ -67,13 +72,14 @@ func newAttestation(e *engine) *attestation {
 		hw, osb := hardwareProfile(), osBuild()
 		adapter, _ := executableDigest()
 		sandbox := e.sandbox && verifySandbox()
+		state := directoryState(a.dir)
 		digest, err := directoryDigest(a.dir)
 		a.mu.Lock()
 		a.hardware, a.osBuild, a.adapter, a.sandbox = hw, osb, adapter, sandbox
-		if err == nil {
+		if err == nil && state != "" && state == directoryState(a.dir) {
 			a.digest = digest
 		}
-		a.starts = starts
+		a.starts, a.dirState = starts, state
 		a.computing = false
 		a.mu.Unlock()
 	}()
@@ -81,56 +87,110 @@ func newAttestation(e *engine) *attestation {
 }
 
 // bindingFor returns the measured deployment for one model. Missing parts
-// stay empty and therefore never match a record: an engine started since the
-// last measurement, or model files not verified at their current state.
+// stay empty and therefore never match a record: an engine directory that
+// changed or an engine started since the last measurement (re-measured here
+// before answering), or model files not verified at their current state
+// (verified again in the background).
 func (a *attestation) bindingFor(model CatalogModel) qualificationBinding {
-	signature, _ := a.modelSignature(model)
+	if a.engineStale() {
+		a.recheck()
+	}
+	signature, _, _ := a.modelSignature(model)
 	a.mu.Lock()
 	b := qualificationBinding{HardwareProfile: a.hardware, OSBuild: a.osBuild, AdapterDigest: a.adapter}
-	stale := !a.computing && a.dir != "" && a.starts != a.engine.startCount()
-	if managed, binary := a.engine.managedBinary(); managed && binary != "" && filepath.Dir(binary) == a.dir && a.sandbox && !stale && !a.computing {
+	if managed, binary := a.engine.managedBinary(); managed && binary != "" && filepath.Dir(binary) == a.dir && a.sandbox && !a.computing &&
+		a.starts == a.engine.startCount() && a.dirState != "" {
 		b.EngineDigest = a.digest
 	}
-	if signature != "" && a.models[model.ID] == signature {
+	verified := signature != "" && a.models[model.ID] == signature
+	if verified {
 		b.ModelDigest = model.Digest
 	}
 	a.mu.Unlock()
-	if stale {
-		go a.recheck()
+	if signature != "" && !verified {
+		a.prepareModel(model) // e.g. after a new download or adoption
+	}
+	// The directory may have changed while the binding was assembled.
+	if b.EngineDigest != "" && a.engineStale() {
+		b.EngineDigest = ""
 	}
 	return b
 }
 
-// modelSignature describes the current state of a model's files without
-// reading them: manifest and blob paths, sizes, modification times, inodes.
-func (a *attestation) modelSignature(model CatalogModel) (string, []string) {
-	if a == nil || a.engine == nil || model.ID == "" {
-		return "", nil
+// engineStale: the engine was started or its directory changed (any file
+// state, incl. ones rewritten in place) since the measurement.
+func (a *attestation) engineStale() bool {
+	if a == nil || a.dir == "" {
+		return false
 	}
-	files, err := modelFiles(a.engine.modelsDir(), model)
+	a.mu.Lock()
+	computing, starts, state := a.computing, a.starts, a.dirState
+	a.mu.Unlock()
+	return !computing && (starts != a.engine.startCount() || state != directoryState(a.dir))
+}
+
+// fileState describes a file without reading it. A rewrite in place changes
+// the status-change time even if the modification time is set back.
+func fileState(path string) (string, bool) {
+	info, err := os.Lstat(path)
 	if err != nil {
-		return "", nil
+		return "", false
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", false
+	}
+	sec, nsec := ctime(st)
+	return fmt.Sprintf("%s|%o|%d|%d|%d.%d|%d|%d\n", path, info.Mode(), info.Size(), info.ModTime().UnixNano(), sec, nsec, st.Dev, st.Ino), true
+}
+
+// directoryState is the file state of everything below dir ("" if unreadable).
+func directoryState(dir string) string {
+	var b strings.Builder
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		s, ok := fileState(path)
+		if !ok {
+			return errors.New("unreadable")
+		}
+		b.WriteString(s)
+		return nil
+	})
+	if err != nil {
+		return ""
+	}
+	return b.String()
+}
+
+// modelSignature returns the state of a model's files, the files and the
+// manifest bytes the file list was parsed from.
+func (a *attestation) modelSignature(model CatalogModel) (string, []string, []byte) {
+	if a == nil || a.engine == nil || model.ID == "" {
+		return "", nil, nil
+	}
+	files, manifest, err := modelFiles(a.engine.modelsDir(), model)
+	if err != nil {
+		return "", nil, nil
 	}
 	var b strings.Builder
 	for _, f := range files {
-		info, err := os.Stat(f)
-		if err != nil || !info.Mode().IsRegular() {
-			return "", nil
+		s, ok := fileState(f)
+		if !ok {
+			return "", nil, nil
 		}
-		ino := uint64(0)
-		if st, ok := info.Sys().(*syscall.Stat_t); ok {
-			ino = uint64(st.Ino)
-		}
-		fmt.Fprintf(&b, "%s|%d|%d|%d\n", f, info.Size(), info.ModTime().UnixNano(), ino)
+		b.WriteString(s)
 	}
-	return b.String(), files
+	return b.String(), files, manifest
 }
 
-// verifyModel hashes the manifest (must equal the catalog digest) and every
-// blob (must equal its content address). It blocks; results are cached by
-// the file signature, so a swapped or changed file is hashed again.
+// verifyModel checks the manifest bytes the blob list came from (equal to
+// the catalog digest) and every blob (equal to its content address). The
+// result is cached only if no file state changed while hashing, so a file
+// swapped during or after the check is hashed again. It blocks.
 func (a *attestation) verifyModel(model CatalogModel) error {
-	signature, files := a.modelSignature(model)
+	signature, files, manifest := a.modelSignature(model)
 	if signature == "" {
 		return errors.New("model files missing")
 	}
@@ -147,15 +207,22 @@ func (a *attestation) verifyModel(model CatalogModel) error {
 	if cached() {
 		return nil
 	}
-	if err := verifyModelFiles(files, model); err != nil {
-		a.mu.Lock()
-		delete(a.models, model.ID)
-		a.mu.Unlock()
-		return err
+	err := verifyModelFiles(manifest, files[1:], model)
+	if after, _, _ := a.modelSignature(model); err == nil && after != signature {
+		err = errors.New("model files changed during the check")
 	}
 	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.failed == nil {
+		a.failed = map[string]string{}
+	}
+	if err != nil {
+		delete(a.models, model.ID)
+		a.failed[model.ID] = signature
+		return err
+	}
+	delete(a.failed, model.ID)
 	a.models[model.ID] = signature
-	a.mu.Unlock()
 	return nil
 }
 
@@ -165,8 +232,9 @@ func (a *attestation) prepareModel(model CatalogModel) {
 	if a == nil || model.ID == "" {
 		return
 	}
+	signature, _, _ := a.modelSignature(model)
 	a.mu.Lock()
-	if a.verifying[model.ID] {
+	if a.verifying[model.ID] || (signature != "" && a.failed[model.ID] == signature) {
 		a.mu.Unlock()
 		return
 	}
@@ -180,13 +248,14 @@ func (a *attestation) prepareModel(model CatalogModel) {
 	}()
 }
 
-// modelFiles returns the manifest followed by its config and layer blobs.
-func modelFiles(modelsDir string, model CatalogModel) ([]string, error) {
+// modelFiles returns the manifest followed by its config and layer blobs,
+// and the manifest bytes the list was parsed from.
+func modelFiles(modelsDir string, model CatalogModel) ([]string, []byte, error) {
 	name, tag, _ := strings.Cut(model.ID, ":")
 	manifest := filepath.Join(modelsDir, "manifests", "registry.ollama.ai", "library", name, tag)
 	raw, err := os.ReadFile(manifest)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var m struct {
 		Config struct {
@@ -197,7 +266,7 @@ func modelFiles(modelsDir string, model CatalogModel) ([]string, error) {
 		} `json:"layers"`
 	}
 	if json.Unmarshal(raw, &m) != nil || m.Config.Digest == "" {
-		return nil, errors.New("invalid manifest")
+		return nil, nil, errors.New("invalid manifest")
 	}
 	files := []string{manifest}
 	for _, d := range append([]string{m.Config.Digest}, func() []string {
@@ -209,21 +278,18 @@ func modelFiles(modelsDir string, model CatalogModel) ([]string, error) {
 	}()...) {
 		blob := strings.Replace(d, ":", "-", 1)
 		if !strings.HasPrefix(blob, "sha256-") || strings.ContainsAny(blob, "/\\") {
-			return nil, errors.New("invalid layer digest")
+			return nil, nil, errors.New("invalid layer digest")
 		}
 		files = append(files, filepath.Join(modelsDir, "blobs", blob))
 	}
-	return files, nil
+	return files, raw, nil
 }
 
-func verifyModelFiles(files []string, model CatalogModel) error {
-	if len(files) == 0 {
-		return errors.New("no model files")
-	}
-	if sum, err := fileDigest(files[0]); err != nil || sum != model.Digest {
+func verifyModelFiles(manifest []byte, blobs []string, model CatalogModel) error {
+	if sum := sha256.Sum256(manifest); hex.EncodeToString(sum[:]) != model.Digest {
 		return errors.New("model manifest does not match the catalog digest")
 	}
-	for _, f := range files[1:] {
+	for _, f := range blobs {
 		sum, err := fileDigest(f)
 		if err != nil || "sha256-"+sum != filepath.Base(f) {
 			return errors.New("model file does not match its digest")
@@ -241,18 +307,20 @@ func (a *attestation) recheck() {
 	a.hashing.Lock()
 	defer a.hashing.Unlock()
 	starts := a.engine.startCount()
+	state := directoryState(a.dir)
 	a.mu.Lock()
-	current := a.starts == starts && !a.computing
+	current := a.starts == starts && a.dirState == state && !a.computing
 	a.mu.Unlock()
 	if current {
 		return
 	}
 	digest, err := directoryDigest(a.dir)
-	a.mu.Lock()
-	if err != nil {
+	// A directory that changed while it was hashed is not measured.
+	if err != nil || state == "" || directoryState(a.dir) != state {
 		digest = ""
 	}
-	a.digest, a.starts = digest, starts
+	a.mu.Lock()
+	a.digest, a.starts, a.dirState = digest, starts, state
 	a.mu.Unlock()
 }
 

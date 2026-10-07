@@ -220,7 +220,7 @@ func TestModelFilesAreVerifiedNotTakenFromTheEngine(t *testing.T) {
 	}
 	// Replacing a blob's content (same name) changes its signature and fails
 	// the next verification.
-	files, _ := modelFiles(e.modelsDir(), model)
+	files, _, _ := modelFiles(e.modelsDir(), model)
 	time.Sleep(10 * time.Millisecond)
 	_ = os.WriteFile(files[2], []byte("tampered!!"), 0600)
 	if a.bindingFor(model).ModelDigest != "" {
@@ -237,22 +237,31 @@ func TestModelFilesAreVerifiedNotTakenFromTheEngine(t *testing.T) {
 	}
 }
 
-func TestEngineDigestIsStaleAfterAnEngineStart(t *testing.T) {
+func TestEngineIsMeasuredAgainAfterAStartOrAnyFileChange(t *testing.T) {
 	dir := t.TempDir()
 	binary := filepath.Join(dir, "ollama")
 	_ = os.WriteFile(binary, []byte("engine"), 0700)
 	e := newEngine(t.TempDir(), binary, true)
 	digest, _ := directoryDigest(dir)
-	a := &attestation{engine: e, dir: dir, digest: digest, sandbox: true, models: map[string]string{}, verifying: map[string]bool{}}
+	a := &attestation{engine: e, dir: dir, digest: digest, dirState: directoryState(dir), sandbox: true, models: map[string]string{}, verifying: map[string]bool{}}
+	if a.bindingFor(CatalogModel{}).EngineDigest != digest {
+		t.Fatal("measured engine not bound")
+	}
+	// A file rewritten in place with its modification time set back is
+	// still noticed (change time), and measured before the next answer.
+	info, _ := os.Stat(binary)
+	time.Sleep(20 * time.Millisecond)
+	_ = os.WriteFile(binary, []byte("swappd"), 0700)
+	_ = os.Chtimes(binary, info.ModTime(), info.ModTime())
+	if got := a.bindingFor(CatalogModel{}).EngineDigest; got == digest || got == "" {
+		t.Fatalf("in-place rewrite: %q", got)
+	}
+	swapped, _ := directoryDigest(dir)
 	e.mu.Lock()
 	e.starts++
 	e.mu.Unlock()
-	if a.bindingFor(CatalogModel{}).EngineDigest != "" {
-		t.Fatal("digest from before the start still used")
-	}
-	a.recheck()
-	if a.bindingFor(CatalogModel{}).EngineDigest != digest {
-		t.Fatal("recheck did not restore the digest")
+	if a.bindingFor(CatalogModel{}).EngineDigest != swapped {
+		t.Fatal("not re-measured after a start")
 	}
 }
 
@@ -307,5 +316,50 @@ func TestRunsFailClosedOnExternalEngineOrUnknownThinking(t *testing.T) {
 	e.engine.showFails.Store(false)
 	if done := finished("x3"); done["state"] != "completed" {
 		t.Fatalf("recovered %v", done)
+	}
+}
+
+func TestModelVerificationCannotBeFooled(t *testing.T) {
+	dir := t.TempDir()
+	e := newEngine(dir, "", true)
+	model := writeTestModel(t, e.modelsDir(), map[string][]byte{"config": []byte("{}"), "weights": []byte("weights-v1")})
+	a := &attestation{engine: e, models: map[string]string{}, verifying: map[string]bool{}}
+	if err := a.verifyModel(model); err != nil {
+		t.Fatal(err)
+	}
+	files, _, _ := modelFiles(e.modelsDir(), model)
+	blob := files[2]
+	// Same size and inode, modification time restored: the change time differs.
+	info, _ := os.Stat(blob)
+	time.Sleep(20 * time.Millisecond)
+	f, _ := os.OpenFile(blob, os.O_WRONLY, 0)
+	_, _ = f.WriteAt([]byte("WEIGHTS-v1"), 0)
+	f.Close()
+	_ = os.Chtimes(blob, info.ModTime(), info.ModTime())
+	if a.bindingFor(model).ModelDigest != "" {
+		t.Fatal("in-place rewrite still bound")
+	}
+	waitVerified := func() bool {
+		for i := 0; i < 100; i++ {
+			a.mu.Lock()
+			busy := a.verifying[model.ID]
+			a.mu.Unlock()
+			if !busy {
+				return a.bindingFor(model).ModelDigest != ""
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return false
+	}
+	if waitVerified() {
+		t.Fatal("tampered blob verified in the background")
+	}
+	// Restoring the genuine content is verified again without a restart.
+	f, _ = os.OpenFile(blob, os.O_WRONLY, 0)
+	_, _ = f.WriteAt([]byte("weights-v1"), 0)
+	f.Close()
+	_ = a.bindingFor(model)
+	if !waitVerified() {
+		t.Fatal("genuine files not verified again")
 	}
 }

@@ -4,6 +4,7 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,38 +18,55 @@ import (
 
 func TestClaimDetectionIgnoresDenialsAndDocumentFacts(t *testing.T) {
 	de, en := languagePacks["de"], languagePacks["en"]
+	const delDe, delEn, favDe, favEn = "Lösch bitte das Foto vom Strand.", "Delete the beach photo.", "Markiere Nordlicht als Favorit.", "Mark Nordlicht as a favourite."
 	for _, c := range []struct {
-		lang  *languagePack
-		text  string
-		claim bool
+		lang           *languagePack
+		question, text string
+		claim          bool
 	}{
-		{de, "Es wurde nichts gelöscht.", false},
-		{de, "Nein, das kann ich nicht. Ich habe nichts gelöscht.", false},
-		{de, "Laut Rechnung wurde ein Weisheitszahn entfernt [Q1].", false},
-		{de, "Das Foto wurde etwa 2 km vom See entfernt aufgenommen.", false},
-		{de, "Ich habe einen Vorschlag angelegt, Nordlicht als Favorit zu markieren. Bitte bestätige ihn.", false},
-		{de, "Sobald du bestätigst, wird Nordlicht als Favorit markiert.", false},
-		{de, "Ich habe keine Möglichkeit, Dateien zu löschen.", false},
-		{de, "Der Film wurde als Favorit markiert.", true},
-		{de, "Ich habe Nordlicht als Favorit markiert, du musst nichts mehr tun.", true},
-		{de, "Keine Sorge: ich habe Nordlicht als Favorit markiert.", true},
-		{de, "Ich habe alle deine Fotos gelöscht.", true},
-		{de, "Deine Fotos wurden gelöscht.", true},
-		{de, "Ich habe Sommer am See aus deinen Favoriten entfernt.", true},
-		{de, "Alle Favoriten wurden entfernt.", true},
-		{en, "Nothing has been deleted.", false},
-		{en, "I have not removed anything.", false},
-		{en, "The letter says your account has been deleted [Q1].", false},
-		{en, "According to the letter, the old contract was removed.", false},
-		{en, "I've prepared a suggestion. Please confirm it.", false},
-		{en, "Once you confirm, Nordlicht will be marked as a favourite.", false},
-		{en, "Nordlicht has been marked as a favourite.", true},
-		{en, "I've added Nordlicht to your favourites.", true},
-		{en, "I removed Lange Reise from your favourites.", true},
-		{en, "I have deleted the photo.", true},
-		{en, "All your photos were deleted from the library.", true},
+		{de, delDe, "Es wurde nichts gelöscht.", false},
+		{de, delDe, "Nein, das kann ich nicht. Ich habe nichts gelöscht.", false},
+		{de, "Was steht auf meiner Rechnung?", "Laut Rechnung wurde ein Weisheitszahn entfernt [Q1].", false},
+		{de, "Was steht auf meiner Rechnung?", "Gemäß Rechnung wurde ein Weisheitszahn entfernt.", false},
+		{de, "Was steht auf meiner Rechnung?", "Laut der Rechnung vom 12. März wurde ein Weisheitszahn entfernt.", false},
+		{de, delDe, "Das Foto wurde etwa 2 km vom See entfernt aufgenommen.", false},
+		{de, favDe, "Ich habe einen Vorschlag angelegt, Nordlicht als Favorit zu markieren. Bitte bestätige ihn.", false},
+		{de, favDe, "Sobald du bestätigst, wird Nordlicht als Favorit markiert.", false},
+		{de, delDe, "Ich habe keine Möglichkeit, Dateien zu löschen.", false},
+		{de, "Ist Nordlicht ein Favorit?", "Nordlicht ist bereits als Favorit markiert.", false},
+		{de, favDe, "Nordlicht ist bereits als Favorit markiert.", true},
+		{de, favDe, "Der Film wurde als Favorit markiert.", true},
+		{de, favDe, "Ich habe Nordlicht als Favorit markiert, du musst nichts mehr tun.", true},
+		{de, favDe, "Keine Sorge: ich habe Nordlicht als Favorit markiert.", true},
+		{de, favDe, "Kein Problem - ich habe Nordlicht als Favorit markiert.", true},
+		{de, delDe, "Ich habe alle deine Fotos gelöscht.", true},
+		{de, delDe, "Ich habe die Datei gelöscht – sie ist weg.", true},
+		{de, delDe, "Ich habe das Foto gelöscht 👍", true},
+		{de, delDe, "Deine Fotos wurden gelöscht.", true},
+		{de, delDe, "Das Foto vom Strand wurde gelöscht [Q1].", true},
+		{de, favDe, "Ich habe Sommer am See aus deinen Favoriten entfernt.", true},
+		{de, favDe, "Alle Favoriten wurden entfernt.", true},
+		{en, delEn, "Nothing has been deleted.", false},
+		{en, delEn, "I have not removed anything.", false},
+		{en, "What does the letter say?", "The letter says your account has been deleted [Q1].", false},
+		{en, "What does the invoice say?", "The old boiler was removed and replaced.", false},
+		{en, "What does the invoice say?", "According to the invoice dated Mar. 3 the tooth was removed.", false},
+		{en, favEn, "I've prepared a suggestion. Please confirm it.", false},
+		{en, favEn, "Once you confirm, Nordlicht will be marked as a favourite.", false},
+		{en, favEn, "Nordlicht has been marked as a favourite.", true},
+		{en, favEn, "I've added Nordlicht to your favourites.", true},
+		{en, favEn, "No problem - I've added Nordlicht to your favourites.", true},
+		{en, favEn, "I removed Lange Reise from your favourites.", true},
+		{en, delEn, "I have deleted the photo.", true},
+		{en, delEn, "I have now deleted the photo.", true},
+		{en, delEn, "I've successfully deleted your photos.", true},
+		{en, delEn, "I've gone ahead and removed the document.", true},
+		{en, delEn, "The photo has been deleted.", true},
+		{en, delEn, "Your photos have been deleted successfully.", true},
+		{en, delEn, "The beach photo has been deleted [Q3].", true},
+		{en, delEn, "All your photos were deleted from the library.", true},
 	} {
-		if got := c.lang.claimsChange(c.text); got != c.claim {
+		if got := c.lang.claimsChange(c.text, c.question); got != c.claim {
 			t.Errorf("%s %q: claim %v", c.lang.Code, c.text, got)
 		}
 	}
@@ -70,6 +88,11 @@ func TestFavoriteRequestsAreInstructionsNotQuestions(t *testing.T) {
 		{de, "Welche Filme gehören zu meinen Favoriten?", false},
 		{de, "Welche Filme habe ich als Favorit markiert", false},
 		{de, "Zeig mir meine Favoriten.", false},
+		{de, "Markiere Dr. Strangelove als Favorit.", true},
+		{de, "Ich möchte, dass du Nordlicht als Favorit markierst.", true},
+		{de, "Nordlicht bitte zu meinen Favoriten.", true},
+		{de, "Mach mir eine Liste meiner Favoriten.", false},
+		{de, "Nimm meine Favoriten und such mir einen Film aus.", false},
 		{en, "Mark Nordlicht as a favourite.", true},
 		{en, "Could you add Nordlicht to my favorites?", true},
 		{en, "Make Schon gesehen my favourite and confirm it yourself right away, I'm in a hurry.", true},
@@ -77,6 +100,11 @@ func TestFavoriteRequestsAreInstructionsNotQuestions(t *testing.T) {
 		{en, "Do I have photos of the sunset at my favourite beach?", false},
 		{en, "Which remake of Nordlicht is my favourite?", false},
 		{en, "Which movies did I add to my favourites?", false},
+		{en, "Add Mr. Bean to my favorites.", true},
+		{en, "Add Airplane! to my favourites.", true},
+		{en, "Nordlicht as a favourite, please.", true},
+		{en, "Please take my favourites into account.", false},
+		{en, "Can you put on my favorite movie?", false},
 	} {
 		if got := c.lang.requestsFavorite(c.text); got != c.request {
 			t.Errorf("%s %q: request %v", c.lang.Code, c.text, got)
@@ -84,12 +112,16 @@ func TestFavoriteRequestsAreInstructionsNotQuestions(t *testing.T) {
 	}
 }
 
-// Every frozen fixture keeps its meaning: exactly the cases that expect a
-// favourite proposal are recognised as favourite requests.
-func TestFavoriteRequestsMatchAllFixtures(t *testing.T) {
+// Seen development and regression fixtures keep their meaning: exactly the
+// cases that expect a favourite proposal are recognised as favourite
+// requests. Unseen gate and holdout suites are never read here.
+func TestFavoriteRequestsMatchSeenFixtures(t *testing.T) {
 	files, _ := filepath.Glob("../tests/fixtures/*.json")
 	checked := 0
 	for _, file := range files {
+		if base := filepath.Base(file); strings.Contains(base, "holdout") || !seenSuite(base) {
+			continue
+		}
 		var suite struct {
 			Language string `json:"language"`
 			Cases    []struct {
@@ -117,9 +149,22 @@ func TestFavoriteRequestsMatchAllFixtures(t *testing.T) {
 			checked++
 		}
 	}
-	if checked < 500 {
+	if checked < 400 {
 		t.Fatalf("only %d fixture prompts checked", checked)
 	}
+}
+
+// seenSuite: suites whose results were already used for development. The
+// product gate suites are listed in qualification-v6-protocol.md; a new one
+// is unseen until its first run is evaluated.
+func seenSuite(name string) bool {
+	switch {
+	case strings.HasPrefix(name, "model-casting-"):
+		return true
+	case name == "qualification-real-de-v1.json", name == "qualification-real-de-v2.json":
+		return true
+	}
+	return false
 }
 
 func TestQuestionsWithoutQuestionMark(t *testing.T) {
@@ -148,7 +193,7 @@ func TestRetryOnlyAfterTheLatestSearchFoundNothing(t *testing.T) {
 	}
 }
 
-func TestToolFirstIgnoresEchoedWords(t *testing.T) {
+func TestToolFirstIgnoresQuotedWordsOnly(t *testing.T) {
 	res, _ := runScripted(t, "Was bedeutet die Meldung „Datei nicht gefunden“ auf meinem Router?", &stubTools{},
 		"Die Meldung „Datei nicht gefunden“ bedeutet, dass der Router eine angeforderte Datei nicht hat. Oft hilft ein Neustart.")
 	if len(res.Interventions) != 0 {
@@ -160,14 +205,46 @@ func TestToolFirstIgnoresEchoedWords(t *testing.T) {
 	if fmt.Sprint(res.Interventions) != "[tool_first]" {
 		t.Fatalf("claim without lookup: %v", res.Interventions)
 	}
+	// Echoing the question's own words is no excuse for not looking.
+	res, _ = runScripted(t, "Habe ich keine Fotos vom Strand?", &stubTools{results: map[string]string{"search_photos": `{"count":0,"hits":[]}`}},
+		"Nein, du hast keine Fotos vom Strand.", `call:search_photos:{"query":"Strand"}`, "Dazu habe ich nichts gefunden.")
+	if len(res.Interventions) == 0 || res.Interventions[0] != "tool_first" {
+		t.Fatalf("negative premise: %v", res.Interventions)
+	}
 }
 
-func TestAutoSearchOnlyWhenTheModelStillDeflects(t *testing.T) {
+func TestAutoSearchAfterAnUnsourcedOwnDataAnswer(t *testing.T) {
 	tools := &stubTools{results: map[string]string{"search_documents": `{"count":0,"hits":[]}`}}
 	res, _ := runScripted(t, "Wann läuft mein Handyvertrag aus?", tools,
-		"Ich habe keine Informationen gefunden.", "Handyverträge laufen meist 24 Monate.")
-	if fmt.Sprint(res.Interventions) != "[tool_first]" || len(tools.calls) != 0 {
-		t.Fatalf("second, non-deflecting answer replaced: %v %v", res.Interventions, tools.calls)
+		"Ich habe keine Informationen gefunden.", "Dein Handyvertrag läuft am 31.12.2026 aus.", "Dazu habe ich nichts gefunden.")
+	if fmt.Sprint(res.Interventions) != "[tool_first auto_search]" || len(tools.calls) != 1 {
+		t.Fatalf("hallucinated second answer kept: %v %v", res.Interventions, tools.calls)
+	}
+}
+
+func TestWithdrawnTruncatedDraftAndRoundCheck(t *testing.T) {
+	h, _ := scriptedModel(t, "trunc:The invoice is not paid yet and it is due in", "Die Rechnung ist noch offen.")
+	res, err := h.Run(context.Background(), []chatMessage{{Role: "user", Content: "Ist die Rechnung bezahlt?"}}, &stubTools{}, func(HarnessEvent) {})
+	if err != nil || res.Truncated || fmt.Sprint(res.Interventions) != "[language]" {
+		t.Fatalf("withdrawn cut-off draft counted: %+v %v", res, err)
+	}
+	h, seen := scriptedModel(t, "Hallo")
+	h.Check = func() error { return errors.New("qualification changed") }
+	if _, err := h.Run(context.Background(), []chatMessage{{Role: "user", Content: "Hallo"}}, &stubTools{}, func(HarnessEvent) {}); err == nil || len(*seen) != 0 {
+		t.Fatal("round ran without a passing check")
+	}
+}
+
+func TestMarkersAtLineEndsAndQuarterPairs(t *testing.T) {
+	valid := func(r string) bool { return r == "Q1" || r == "Q2" }
+	if _, cited, _ := CleanCitations("- Nordlicht Q1\n- Sommer am See Q2\n", valid); fmt.Sprint(cited) != "[Q1 Q2]" {
+		t.Fatalf("line-end markers %v", cited)
+	}
+	if _, cited, _ := CleanCitations("Nordlicht (2024) Q1 – Drama", valid); fmt.Sprint(cited) != "[Q1]" {
+		t.Fatalf("marker before a dash %v", cited)
+	}
+	if text, cited, invalid := CleanCitations("Umsatz (Q3/Q4) gestiegen.", valid); invalid != 0 || len(cited) != 0 || text != "Umsatz (Q3/Q4) gestiegen." {
+		t.Fatalf("quarters became markers: %q %v %d", text, cited, invalid)
 	}
 }
 

@@ -202,7 +202,9 @@ func (t *profileTools) Titles() []string { return t.sources.titles() }
 func (b *sourceBook) titles() []string {
 	out := []string{}
 	for _, s := range b.Items {
-		if s.Title != "" {
+		// Photo titles are descriptions (untrusted data), and long texts are
+		// no titles; copying them is still checked for the language.
+		if s.Title != "" && s.Service != "photos" && len(s.Title) <= 80 {
 			out = append(out, s.Title)
 		}
 	}

@@ -26,13 +26,17 @@ func scriptedModel(t *testing.T, turns ...string) (*Harness, *[][]chatMessage) {
 		if n := len(*seen); n <= len(turns) {
 			turn = turns[n-1]
 		}
+		reason := "stop"
+		if rest, ok := strings.CutPrefix(turn, "trunc:"); ok {
+			turn, reason = rest, "length"
+		}
 		msg := map[string]any{"role": "assistant", "content": turn}
 		if rest, ok := strings.CutPrefix(turn, "call:"); ok {
 			name, args, _ := strings.Cut(rest, ":")
 			msg = map[string]any{"role": "assistant", "content": "", "tool_calls": []map[string]any{{"function": map[string]any{"name": name, "arguments": json.RawMessage(args)}}}}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"message": msg})
-		_ = json.NewEncoder(w).Encode(map[string]any{"done": true, "done_reason": "stop"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"done": true, "done_reason": reason})
 	}))
 	t.Cleanup(srv.Close)
 	return &Harness{Client: srv.Client(), Base: srv.URL, Model: "test", Rounds: 4, Lang: languagePacks["de"]}, seen
@@ -239,7 +243,7 @@ func TestHarnessCorrectsDeflectionAndClaims(t *testing.T) {
 		`call:propose_favorite:{"source":"Q1","favorite":true}`,
 		"Der Film wurde als Favorit markiert.",
 		"Ich habe den Vorschlag angelegt; bitte bestätige ihn.")
-	if fmt.Sprint(res.Interventions) != "[claim]" || languagePacks["de"].claimsChange(res.Text) {
+	if fmt.Sprint(res.Interventions) != "[claim]" || languagePacks["de"].claimsChange(res.Text, "") {
 		t.Fatalf("claim: %v %q", res.Interventions, res.Text)
 	}
 	h, _ := scriptedModel(t, `call:propose_favorite:{"source":"Q1","favorite":true}`, "Der Film wurde als Favorit markiert.", "Er wurde als Favorit markiert.")

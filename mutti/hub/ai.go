@@ -831,7 +831,10 @@ func (a *AI) process(parent context.Context, l *liveRun) {
 		return
 	}
 	h := &Harness{Client: a.engine.stream, Base: base, Model: model.ID, Think: thinkFlag, Lang: lang,
-		Options: map[string]any{"num_ctx": model.ContextTokens, "temperature": model.Temperature, "seed": 42, "num_predict": 1024}}
+		Options: map[string]any{"num_ctx": model.ContextTokens, "temperature": model.Temperature, "seed": 42, "num_predict": 1024},
+		// Every model round re-checks the qualification of this exact
+		// deployment (engine restarts or file changes during a run).
+		Check: func() error { _, err := a.qualifyModel(assistantTask, lang, model.ID); return err }}
 	result, err := h.Run(ctx, messages, tools, func(ev HarnessEvent) {
 		switch ev.Type {
 		case "delta":
