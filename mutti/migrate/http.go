@@ -101,14 +101,20 @@ func (m *Manager) Handler() (http.Handler, error) {
 			http.Error(w, "Ungültige Anfrage.", 400)
 			return
 		}
+		// Check and claim in one step, so two requests never restore at once.
 		m.mu.Lock()
 		blocked := m.state.Phase == "update_blocked"
+		if blocked {
+			m.state.Phase, m.state.Message = "update", "Die Sicherung vor dem Update wird wiederhergestellt …"
+		}
 		m.mu.Unlock()
 		if !blocked {
 			http.Error(w, "Eine Wiederherstellung vor dem Update ist nur bei gesperrtem Start möglich.", 409)
 			return
 		}
 		if err := m.rollbackUpdate(input.Snapshot); err != nil {
+			// Still blocked: the owner can retry; an interrupted rollback resumes.
+			m.setPhase("update_blocked", err.Error())
 			http.Error(w, err.Error(), 409)
 			return
 		}

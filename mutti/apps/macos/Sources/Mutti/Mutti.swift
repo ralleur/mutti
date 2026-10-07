@@ -151,7 +151,9 @@ final class ServerController: ObservableObject {
                        (response as? HTTPURLResponse)?.statusCode == 200,
                        let state = try? JSONDecoder().decode(ManagerState.self, from: data) {
                         self.importing = ["checking", "backup", "importing", "verifying", "activating"].contains(state.phase)
-                        waiting = state.phase == "update" || state.phase == "update_blocked"
+                        // The first start after an update may migrate Jellyfin's data for
+                        // longer; the manager itself gives it 20 minutes.
+                        waiting = state.phase == "update" || state.phase == "update_blocked" || state.update?.state == "pending"
                         self.progressMessage = state.phase == "update" && !state.message.isEmpty ? state.message : nil
                         self.blockedSnapshot = state.phase == "update_blocked" ? state.update?.snapshot : nil
                         self.ready = state.ready || self.importing

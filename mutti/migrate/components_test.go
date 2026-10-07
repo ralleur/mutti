@@ -56,7 +56,7 @@ func TestComponentListDetectsEveryChange(t *testing.T) {
 			writePackage(t, dir)
 			_, _ = WriteComponents(dir)
 			change()
-			if _, err := verifyComponents(dir, nil); err == nil || errors.Is(err, os.ErrNotExist) {
+			if _, err := verifyComponents(dir, nil); err == nil || errors.Is(err, errNoComponentList) {
 				t.Fatalf("%s not detected: %v", name, err)
 			}
 		})
@@ -66,7 +66,7 @@ func TestComponentListDetectsEveryChange(t *testing.T) {
 	if _, err := WriteComponents(outside); err == nil {
 		t.Fatal("link out of the package listed")
 	}
-	if _, err := verifyComponents(t.TempDir(), nil); !errors.Is(err, os.ErrNotExist) {
+	if _, err := verifyComponents(t.TempDir(), nil); !errors.Is(err, errNoComponentList) {
 		t.Fatalf("missing list: %v", err)
 	}
 }

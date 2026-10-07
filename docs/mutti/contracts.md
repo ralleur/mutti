@@ -233,8 +233,11 @@ redownloadable. An old binary alone is not a database rollback.
 ### Updates and rollback (P3, Mac)
 
 The service manager records the data version (`data-version.json`: schema,
-Jellyfin version, build, product version, component-list digest, signed,
-channel) after a verified start.
+Jellyfin version, build, commit time of the server sources, product version,
+component-list digest, signed, channel) after a verified start. Builds of the
+same Jellyfin release are ordered by the commit time of their sources; a
+package without a version file never starts unguarded once a component list
+or recorded data exists.
 
 - The build lists every file and link under `Contents/Resources` with its
   SHA-256 (`components.json`, written last before code signing; links must
@@ -244,7 +247,12 @@ channel) after a verified start.
   the manager checks the whole set (about 0.4 s for the 804 MB package): a
   changed, missing or additional file, a foreign or unknown-key signature, or
   a `release` channel build without a valid signature blocks the start before
-  anything is touched. Development builds without a list or signature run and
+  anything is touched. A package replaced while Mutti runs is not relaunched
+  (server, modules, Connect) until Mutti is opened again. Finder metadata
+  (`.DS_Store`, `._*`) is ignored; links must resolve inside the package.
+  The channel is declared by the package itself: the signature requirement
+  catches unsigned release builds, not a deliberately modified package; that
+  protection is the macOS code signature of a released app. Development builds without a list or signature run and
   are recorded as unsigned. Two builds of the same commit with different
   files count as different builds (snapshot before the second one starts).
 
@@ -257,20 +265,30 @@ channel) after a verified start.
   device state still parse; then `verified` and the new data version is
   recorded. A crash loop or 20 minutes without verification is `failed`; the
   same build retries, an older build is `blocked`.
-- Data written by a newer Jellyfin is never started by an older package
-  (`blocked`, downgrade lock). Only the native owner app can roll back, only
+- Data written by a newer Jellyfin or by a build from newer sources of the
+  same release is never started by an older package (`blocked`, downgrade
+  lock). A data folder that is a link elsewhere blocks the update (it could
+  not be snapshotted). Only the native owner app can roll back, only
   while blocked and only with exactly the snapshot's version.
-- Rollback moves the current state aside (`before-rollback-*`, never
-  deleted) and restores the snapshot. Withdrawals made after the snapshot
-  stay in force: a device, module grant, enabled module or profile link
-  survives only if it also exists in the replaced state; an unreadable
-  replaced state counts as withdrawn. Devices paired after the snapshot must
-  pair again. Jellyfin's own users and sessions return to the snapshot;
-  remote access only works through a paired device.
-- Not yet implemented: a native UI for the blocked state, restore of a
-  snapshot onto an empty second target, and the release key itself (no key
-  is trusted yet, so every current package is an unsigned development
-  build).
+- Rollback is resumable: it records the access in force, persists
+  `rolling_back` with the folder for the replaced data, moves the whole data
+  stage aside (`before-rollback-*`, never deleted), restores the snapshot
+  (only listed files and links, active path validated), points the active
+  instance back to the snapshot's one and then applies withdrawals. An
+  interrupted rollback blocks the start until it is completed. Withdrawals
+  made after the snapshot stay in force: a device survives only with the same
+  profile and session, a module grant or enabled module only if still in
+  force, a profile link only if unchanged; an unreadable replaced state counts
+  as withdrawn. Devices paired after the snapshot must pair again.
+  Limitation: Jellyfin's own users and sessions return to the snapshot, so a
+  user disabled inside Jellyfin after the snapshot is active again while a
+  device paired before stays paired.
+- Snapshots kept: the newest two, the one the update record refers to and
+  the newest of every Jellyfin release.
+- The native Mac app shows the pre-update backup and the blocked state and
+  offers the rollback. Not yet implemented: restore of a snapshot onto an
+  empty second target, and the release key itself (no key is trusted yet, so
+  every current package is an unsigned development build).
 
 ## Open decisions
 

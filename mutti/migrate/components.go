@@ -30,6 +30,10 @@ const (
 	signatureFile  = "components.sig"
 )
 
+// errNoComponentList: the package has no components.json at all (a
+// development build). Any other problem reading the package is a defect.
+var errNoComponentList = errors.New("no component list")
+
 // trustedComponentKeys are the release keys (key ID -> Ed25519 public key,
 // base64). The private keys live outside the repository; until the owner
 // creates the release key, every package is an unsigned development build.
@@ -56,13 +60,21 @@ type componentCheck struct {
 // scanComponents walks the resources without the manifest and signature.
 func scanComponents(resources string) (componentManifest, error) {
 	m := componentManifest{Schema: 1, Files: map[string]string{}, Links: map[string]string{}}
-	err := filepath.WalkDir(resources, func(path string, d fs.DirEntry, err error) error {
+	root, err := filepath.EvalSymlinks(resources)
+	if err != nil {
+		return m, err
+	}
+	err = filepath.WalkDir(resources, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		rel, _ := filepath.Rel(resources, path)
 		rel = filepath.ToSlash(rel)
 		if rel == "." || rel == componentsFile || rel == signatureFile {
+			return nil
+		}
+		// Finder and non-APFS volumes add metadata files; they are never run.
+		if name := d.Name(); name == ".DS_Store" || strings.HasPrefix(name, "._") {
 			return nil
 		}
 		switch {
@@ -74,6 +86,11 @@ func scanComponents(resources string) (componentManifest, error) {
 			// A link may only point inside the package; its target is hashed there.
 			inside := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(rel), target)))
 			if filepath.IsAbs(target) || inside == ".." || strings.HasPrefix(inside, "../") {
+				return fmt.Errorf("%s points outside the package", rel)
+			}
+			// Chains of links are resolved, not only read lexically.
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil || (resolved != root && !strings.HasPrefix(resolved, root+string(filepath.Separator))) {
 				return fmt.Errorf("%s points outside the package", rel)
 			}
 			m.Links[rel] = target
@@ -132,7 +149,7 @@ func VerifyComponentSet(resources string) (digest string, signed bool, err error
 }
 
 // VerifyComponents checks every file, link and the signature if present. A
-// missing manifest is reported as such (os.ErrNotExist); any difference,
+// missing manifest is reported as errNoComponentList; any difference,
 // missing or additional file, or a signature that does not verify is an error.
 func VerifyComponents(resources string) (componentCheck, error) {
 	return verifyComponents(resources, trustedComponentKeys)
@@ -140,8 +157,11 @@ func VerifyComponents(resources string) (componentCheck, error) {
 
 func verifyComponents(resources string, trusted map[string]string) (componentCheck, error) {
 	raw, err := os.ReadFile(filepath.Join(resources, componentsFile))
+	if os.IsNotExist(err) {
+		return componentCheck{}, errNoComponentList
+	}
 	if err != nil {
-		return componentCheck{}, err
+		return componentCheck{}, errors.New("the component list cannot be read")
 	}
 	var want componentManifest
 	if err = json.Unmarshal(raw, &want); err != nil || want.Schema != 1 || len(want.Files) == 0 {
@@ -151,7 +171,9 @@ func verifyComponents(resources string, trusted map[string]string) (componentChe
 	check := componentCheck{Digest: hex.EncodeToString(sum[:])}
 	got, err := scanComponents(resources)
 	if err != nil {
-		return check, err
+		// Not wrapped: a file vanishing during the scan is a defect, never
+		// "no component list".
+		return check, fmt.Errorf("the package cannot be read completely: %v", err)
 	}
 	var diffs []string
 	for path, h := range want.Files {

@@ -45,9 +45,11 @@ type State struct {
 	Update *UpdateState `json:"update,omitempty"`
 }
 type Manager struct {
-	Options          Options
-	mu               sync.Mutex
-	change           sync.Mutex
+	Options Options
+	mu      sync.Mutex
+	change  sync.Mutex
+	// admitted is the package version prepareStart accepted for this run.
+	admitted         dataVersion
 	state            State
 	child, connect   *process
 	hub              *process
@@ -180,7 +182,28 @@ func (m *Manager) setPhase(phase, message string) {
 	}
 	m.mu.Unlock()
 }
+
+// errPackageReplaced: the package changed while Mutti runs; nothing of it
+// is started until Mutti is opened again and checks it.
+var errPackageReplaced = errors.New("Das Mutti-Paket wurde während des Betriebs ersetzt. Bitte Mutti beenden und neu öffnen; bis dahin wird nichts neu gestartet.")
+
+// packageReplaced compares the package with the version admitted at start
+// (cheap: version files and the component list digest).
+func (m *Manager) packageReplaced() bool {
+	m.mu.Lock()
+	admitted := m.admitted
+	m.mu.Unlock()
+	if admitted.Jellyfin == "" {
+		return false
+	}
+	now, ok := m.Options.packageVersion()
+	return !ok || now.Jellyfin != admitted.Jellyfin || now.Build != admitted.Build || now.Components != admitted.Components
+}
+
 func (m *Manager) launch(root string) error {
+	if m.packageReplaced() {
+		return errPackageReplaced
+	}
 	_, port, e := net.SplitHostPort(m.api.Base.Host)
 	if e != nil {
 		return e
@@ -275,6 +298,8 @@ func (m *Manager) Run(ctx context.Context) error {
 			if m.recovery.allow(time.Now()) {
 				if e := m.launch(active); e == nil {
 					message = "Mutti wird nach einem unerwarteten Ende neu gestartet …"
+				} else if errors.Is(e, errPackageReplaced) {
+					message = e.Error()
 				}
 			} else if update != nil && update.State == "pending" {
 				// Repeated crashes right after an update: report it as failed
@@ -289,7 +314,13 @@ func (m *Manager) Run(ctx context.Context) error {
 			m.state.ServiceMessage = ""
 			m.mu.Unlock()
 		}
-		if ready && info.StartupWizardCompleted && m.Options.Hub != "" && !m.hub.running() && time.Since(m.hubStarted) > 10*time.Second {
+		replaced := m.packageReplaced()
+		if replaced {
+			m.mu.Lock()
+			m.state.ServiceMessage = errPackageReplaced.Error()
+			m.mu.Unlock()
+		}
+		if !replaced && ready && info.StartupWizardCompleted && m.Options.Hub != "" && !m.hub.running() && time.Since(m.hubStarted) > 10*time.Second {
 			// Optional modules run in their own process: a failing module never
 			// stops Jellyfin, Connect or playback and is retried with a pause.
 			m.hubStarted = time.Now()
@@ -298,7 +329,7 @@ func (m *Manager) Run(ctx context.Context) error {
 				m.hub = nil
 			}
 		}
-		if ready && info.StartupWizardCompleted && m.Options.Connect != "" {
+		if !replaced && ready && info.StartupWizardCompleted && m.Options.Connect != "" {
 			settings, _ := os.ReadFile(filepath.Join(active, "connect-settings.json"))
 			if !m.connect.running() || string(settings) != string(m.connectSettings) {
 				m.connect.stop()
