@@ -407,3 +407,9 @@ func TestReasoningTagsNeverReachTheUser(t *testing.T) {
 		t.Fatal("reasoning tags not scored")
 	}
 }
+
+func TestScoringIgnoresMarkdownEmphasis(t *testing.T) {
+	if !containsFold("Du hast ihn noch **nicht** gesehen.", "noch nicht") || !containsFold("Betrag: `128,40 EUR`", "128,40") {
+		t.Fatal("emphasis breaks the text check")
+	}
+}

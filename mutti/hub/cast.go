@@ -411,8 +411,12 @@ func castOne(ctx context.Context, h *Harness, f *castFixture, c castCase, model 
 	return r
 }
 
+// markdownEmphasis is formatting, not wording: "noch **nicht** gesehen"
+// says "noch nicht gesehen".
+var markdownEmphasis = strings.NewReplacer("**", "", "__", "", "*", "", "`", "")
+
 func containsFold(hay, needle string) bool {
-	return strings.Contains(strings.ToLower(hay), strings.ToLower(needle))
+	return strings.Contains(strings.ToLower(markdownEmphasis.Replace(hay)), strings.ToLower(markdownEmphasis.Replace(needle)))
 }
 
 func score(c castCase, f *castFixture, data castData, book *sourceBook, r castResult, lang *languagePack) []string {

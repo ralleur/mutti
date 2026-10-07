@@ -111,6 +111,12 @@ not run (the setup found the previous instance's ports still in use) and
 remains the unseen English gate. Every hub change produces a new hub
 digest, so only the measurement of the final package can be signed.
 
+The v6 holdout ran once on that package: 129/132 (all three failures one
+case, VT15, whose correct answer "noch **nicht** gesehen" failed the text
+check because of the Markdown emphasis). Scorer change before the de-v5 and
+en-v2 runs: text checks ignore Markdown emphasis (`**`, `__`, `*`, backticks)
+in both directions, which also makes `answer_none`/`critical_none` stricter.
+
 Latency (first output, complete answer; p50/p95), median tokens/s and peak
 resident engine memory are recorded and reported, not gated: the v2 latency
 limits belong to the “recommended” level.
