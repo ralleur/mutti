@@ -150,6 +150,18 @@ Messsonde Wiedergabe mit Rückfall auf progressiven Transcode;
 - **Entwicklungsregression auf dem Mac (Inferenz):** v6-dev-6 (Harness nach
   der Nacht) 60/60; v6-dev-7 auf dem endgültigen Harness (`fa9f332224`) 60/60,
   Median 58 Token/s – Voraussetzung für die Gate-Läufe erfüllt.
+- **Messtag 1, Paket `c365b6256` (07.10.2026):** real-de-v4: alle
+  Medienaufgaben und content.assist über der Schwelle, documents.read 21/27
+  und photos.search 12/15 darunter, 0 kritisch; Wiedergabe leer/unter
+  KI-Last in Ordnung. Ursachen: ein Fehler im Satz (OCR-Kopie nicht
+  zugelassen), Teilwortsuche fehlte („Arztrechnung“), Fotos früherer
+  nativer Tests in der Testumgebung; außerdem `</think>`-Lecks in ~15 % der
+  Antworten. Behoben in `f1ae8dbd43`; de-v4 damit gesehen, neues Gate
+  real-de-v5. real-en-v2 lief wegen belegter Ports nicht und bleibt
+  ungesehen. [Messungen](evidence/qualification-v6-2026-10-06.md).
+- **P4 DE/EN Manager** (`7d3c46f5e6`, gemergt): Zustand, Update-/Import-
+  meldungen und alle Fehlerantworten des Managers in der Sprache der
+  Anfrage; vollständige Tabelle per AST-Test.
 - Folge: Der Harness hat sich nach v6-dev-5 geändert; **die Wirkung auf das
   Modell ist ungemessen.** `qualification-session.py` misst deshalb zuerst den
   v6-Entwicklungssatz und bricht vor den Gate-Sätzen ab, wenn er nicht 60/60
