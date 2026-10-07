@@ -174,21 +174,31 @@ Implemented P0 boundaries:
 - Confirmation rechecks the action grant; proposals carry its ID and binding
   hash. Missing/changed grants cannot execute, but rejection remains possible.
 - Capabilities expose `qualification_required` instead of ready/chat/favorite.
-- Production has an empty immutable policy. No API, environment flag, hub.json
-  field or model-selection action can add grants. The current deployments are
-  deliberately blocked, including conversational inference, because history and
-  attachments may contain private content.
+- Production grants come only from the signed records file shipped in the app.
+  No API, environment flag, hub.json field or model-selection action can add
+  grants. Without a matching record every deployment is blocked, including
+  conversational inference, because history and attachments may contain
+  private content.
 - Synthetic test grants exist only in `_test.go`. The isolated casting harness
   may exercise fake backends; this never qualifies a product deployment.
 
-Before the first promotion, implement a trusted runtime attestor (actual engine
-and runners, OS/hardware/accelerator, adapter build, effective inference settings)
-and authenticated reviewed evidence loading/revocation. Unknown/external engine
-identity remains denied. The current code deliberately does not infer hardware
-identity from RAM or accept a server's claimed version as artifact proof.
-This promotion infrastructure and a successful model measurement are release
-work, not fabricated P0 evidence. Qualification validates exact evidence matching;
-it is not a general proof of model correctness or a signed-evidence verifier yet.
+P2 (implemented, nothing promoted yet): the hub measures its own deployment —
+engine directory digest (bundled engine incl. MLX kernels, links must stay
+inside it, re-measured after every engine start), sandbox network lock, exact
+Mac model/chip/cores/memory, macOS build and its own executable digest. Model
+files are verified on disk: manifest digest equals the catalog digest and
+every blob equals its content address, re-hashed when a file changes. An
+external engine, an unverified model or an engine started since the last
+measurement leaves the binding incomplete, so nothing matches. A run uses the
+managed engine's address only and fails if thinking support cannot be
+determined (the qualified setting is thinking off). Records are signed with
+Ed25519 (trusted key IDs compiled in, keys outside the repository), can be
+revoked and expire. The binding also contains the answer language: the model
+contract is English (`mutti-assistant-v6`), German and English are answer-
+language options, each qualified separately. Qualification validates exact
+evidence matching for measured tasks; it is not a general proof of model
+correctness. Protocol and measurements:
+[qualification-v6-protocol](evidence/qualification-v6-protocol.md).
 
 The German `mutti-assistant-v3` and its frozen casting suites remain unchanged
 legacy measurement inputs. The current German product prompt is
@@ -212,6 +222,33 @@ mounts, resource budgets, health, backup/restore and migration contracts. Missin
 mounts are unavailable, never empty. Backups include originals, consistent DB
 state, ACLs and mappings in a common recovery manifest; model blobs may be
 redownloadable. An old binary alone is not a database rollback.
+
+### Updates and rollback (P3, Mac)
+
+The service manager records the data version (`data-version.json`: schema,
+Jellyfin version, build, product version) after a verified start.
+
+- A start with a different build first takes an offline snapshot of the
+  stopped instance (config, data, Connect state, setup state) and the module
+  data (without downloaded models, temporary files and transcodes), hashed and
+  made visible atomically; APFS clones keep it cheap. No space, no update:
+  the previous state stays untouched. Interrupted snapshots are discarded.
+- The update is `pending` until the new version is set up and its module and
+  device state still parse; then `verified` and the new data version is
+  recorded. A crash loop or 20 minutes without verification is `failed`; the
+  same build retries, an older build is `blocked`.
+- Data written by a newer Jellyfin is never started by an older package
+  (`blocked`, downgrade lock). Only the native owner app can roll back, only
+  while blocked and only with exactly the snapshot's version.
+- Rollback moves the current state aside (`before-rollback-*`, never
+  deleted) and restores the snapshot. Withdrawals made after the snapshot
+  stay in force: a device, module grant, enabled module or profile link
+  survives only if it also exists in the replaced state; an unreadable
+  replaced state counts as withdrawn. Devices paired after the snapshot must
+  pair again. Jellyfin's own users and sessions return to the snapshot;
+  remote access only works through a paired device.
+- Not yet implemented: signed component sets, a native UI for the blocked
+  state, and restore of a snapshot onto an empty second target.
 
 ## Open decisions
 

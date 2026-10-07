@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """One measurement day for P2 (inference heavy; run only when the fan may run).
 
-Builds the Mac package (unless --skip-build), then runs the frozen product
+Builds the Mac package (unless --skip-build), re-runs the v6 casting dev set
+as a regression check (the harness changed after v6-dev-5; a regression stops
+the session before any gate suite is seen), then runs the frozen product
 suites on real adapters (German gate, English gate, with playback headroom
 measured idle and under AI load), and the unseen v6 casting holdout. Writes
 everything below build/qualification-session-<timestamp>/ and prints a
@@ -25,6 +27,8 @@ parser.add_argument('--model', default='qwen3.8:27b-mlx')
 parser.add_argument('--suites', default='qualification-real-de-v3.json,qualification-real-en-v1.json')
 parser.add_argument('--skip-build', action='store_true')
 parser.add_argument('--skip-holdout', action='store_true')
+parser.add_argument('--skip-dev', action='store_true', help='skip the dev regression (only if it already passed on this build)')
+parser.add_argument('--dev-min', type=int, default=60, help='dev cases that must pass (of 60)')
 args = parser.parse_args()
 repo = Path(__file__).resolve().parents[2]
 session = repo / 'build' / time.strftime('qualification-session-%Y%m%d-%H%M')
@@ -48,16 +52,33 @@ if not args.skip_build:
             env['MUTTI_DOTNET'] = str(dotnet)
     if run('build-mac', ['bash', 'mutti/packaging/build-mac.sh'], env) != 0:
         sys.exit('build failed')
+cast = session / 'mutti-cast'
+subprocess.call(['go', 'build', '-o', str(cast), './cmd/mutti-cast'], cwd=repo / 'mutti/hub')
+
+
+def casting(name, fixture, repetitions):
+    return run(name, [str(cast), '-fixture', f'mutti/tests/fixtures/{fixture}', '-rubric', 'docs/mutti/evidence/qualification-v6-protocol.md',
+                      '-models', args.model, '-ollama', str(app / 'Contents/Resources/ai-engine/ollama'), '-store', str(args.models.parent),
+                      '-output', str(session / name), '-repetitions', str(repetitions)])
+
+
+if not args.skip_dev:
+    casting('casting-v6-dev', 'model-casting-v6-dev.json', 1)
+    summary = session / 'casting-v6-dev' / 'summary.json'
+    passed = total = 0
+    if summary.exists():
+        for counts in json.loads(summary.read_text()).get(args.model, {}).get('categories', {}).values():
+            p, n = counts.split('/')
+            passed, total = passed + int(p), total + int(n)
+    log(f'dev regression {passed}/{total}')
+    if total == 0 or passed < args.dev_min:
+        sys.exit(f'Dev regression {passed}/{total} below {args.dev_min}: fix the harness first. The gate suites stay unseen.')
 for suite in args.suites.split(','):
     name = Path(suite).stem
     run(name, [sys.executable, 'mutti/tests/qualification-run.py', '--app', str(app), '--root', str(session / name), '--testenv', str(args.testenv),
                '--models', str(args.models), '--model', args.model, '--suite', f'mutti/tests/fixtures/{suite}', '--playback'])
 if not args.skip_holdout:
-    subprocess.call(['go', 'build', '-o', str(session / 'mutti-cast'), './cmd/mutti-cast'], cwd=repo / 'mutti/hub')
-    run('casting-v6-holdout', [str(session / 'mutti-cast'), '-fixture', 'mutti/tests/fixtures/model-casting-v6-holdout.json',
-                               '-rubric', 'docs/mutti/evidence/qualification-v6-protocol.md', '-models', args.model,
-                               '-ollama', str(app / 'Contents/Resources/ai-engine/ollama'), '-store', str(args.models.parent),
-                               '-output', str(session / 'casting-v6-holdout'), '-repetitions', '3'])
+    casting('casting-v6-holdout', 'model-casting-v6-holdout.json', 3)
 print('\nSummary', session)
 for suite in args.suites.split(','):
     summary = session / Path(suite).stem / 'result' / 'summary.json'
