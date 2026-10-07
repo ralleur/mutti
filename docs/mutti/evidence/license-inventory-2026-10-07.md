@@ -74,6 +74,11 @@ modules; hub and manager only the standard library), Intro Skipper 7 MB.
    checked against the sources. NuGet packages with only an SPDX expression
    are listed without a copyright line. No legal review.
 
-Next steps: on the next package build (daytime) check the inventory as a
-build report; clarify the six licenses; prepare a source offer/bundle for
+Addendum (same day): the first package built with both scripts
+(`c365b6256`, 2,912 files) confirms the simulation: 0 files unassigned,
+0 missing license texts; unchanged open points: 6 unknown .NET licenses,
+3 source obligations, 7 copyleft notes, 9 review cases
+(`build/macos/osx-arm64/license-inventory.md`).
+
+Next steps: clarify the six licenses; prepare a source offer/bundle for
 FFmpeg, server and web; owner decision on the review cases.
