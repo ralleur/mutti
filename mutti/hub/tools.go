@@ -463,6 +463,16 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		if err != nil {
 			return toolError(name, "The photo library is currently unavailable.")
 		}
+		// Without smart search the library compares the whole query with
+		// descriptions, so "lake sunset" misses "Lake at sunset" and
+		// "skateboarding" misses "skateboard". Look for the words, then
+		// their stems, before reporting nothing.
+		fallback := ""
+		if len(items) == 0 && strings.TrimSpace(a.Query) != "" {
+			if items, more, fallback, err = t.photoFallback(ctx, a.Query, a.From, a.To); err != nil {
+				return toolError(name, "The photo library is currently unavailable.")
+			}
+		}
 		out := []map[string]any{}
 		for _, p := range items {
 			title := p.Description
@@ -473,14 +483,86 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			out = append(out, map[string]any{"source": s.Ref, "kind": p.Type, "taken": dateOnly(p.Taken), "description_data": p.Description, "place": p.City})
 		}
 		result := map[string]any{"count": len(out), "hits": out}
+		if fallback != "" {
+			result["note"] = fallback
+		}
 		if more {
 			result["more"] = true
-			result["note"] = fmt.Sprintf("More photos match; only the first %d are listed. Do not present them as all photos or as a total number.", len(out))
+			result["note"] = strings.TrimSpace(fallback + " " + fmt.Sprintf("More photos match; only the first %d are listed. Do not present them as all photos or as a total number.", len(out)))
 		}
 		return ToolResult{Content: toolJSON(result),
 			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["photos"], len(out))}}
 	}
 	return toolError(name, "Unknown tool.")
+}
+
+// photoFallback searches the significant words of a query that found
+// nothing: photos matching every word, else any word, else a word stem.
+func (t *profileTools) photoFallback(ctx context.Context, query, from, to string) ([]PhotoAsset, bool, string, error) {
+	var words []string
+	for _, w := range searchWord.FindAllString(query, -1) {
+		if lw := strings.ToLower(w); utf8.RuneCountInString(lw) >= 3 && !t.lang().stop[lw] {
+			words = append(words, lw)
+		}
+	}
+	search := func(terms []string) (all, any []PhotoAsset, more bool, err error) {
+		count := map[string]int{}
+		seen := map[string]bool{}
+		for _, term := range terms {
+			items, m, err := t.photos.Find(ctx, term, from, to)
+			if err != nil {
+				return nil, nil, false, err
+			}
+			more = more || m
+			for _, p := range items {
+				count[p.ID]++
+				if !seen[p.ID] {
+					seen[p.ID] = true
+					any = append(any, p)
+				}
+			}
+		}
+		for _, p := range any {
+			if count[p.ID] == len(terms) {
+				all = append(all, p)
+			}
+		}
+		return all, any, more, nil
+	}
+	if len(words) > 1 {
+		all, any, more, err := search(words)
+		if err != nil || len(all) > 0 {
+			return all, more, "No photo matches the whole query; these match each of its words.", err
+		}
+		if len(any) > 0 {
+			return any, more, "No photo matches the whole query; these match some of its words. Check that they answer the question.", nil
+		}
+	}
+	var stems []string
+	for _, w := range words {
+		if s := stem(w); s != w {
+			stems = append(stems, s)
+		}
+	}
+	if len(stems) > 0 {
+		_, any, more, err := search(stems)
+		if err != nil || len(any) > 0 {
+			return any, more, "No photo matches the words as written; these match a shorter form of them. Check that they answer the question.", err
+		}
+	}
+	return nil, false, "", nil
+}
+
+// stem removes a common English or German ending ("skateboarding" ->
+// "skateboard", "Gärten" -> "gärt") so a description with the base form
+// matches; the result keeps at least four letters.
+func stem(word string) string {
+	for _, suffix := range []string{"ing", "ern", "en", "er", "es", "ed", "s", "e", "n"} {
+		if r := strings.TrimSuffix(word, suffix); r != word && utf8.RuneCountInString(r) >= 4 {
+			return r
+		}
+	}
+	return word
 }
 
 // withTotal adds the number of all matches when only the first ones are

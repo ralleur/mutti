@@ -413,3 +413,29 @@ func TestScoringIgnoresMarkdownEmphasis(t *testing.T) {
 		t.Fatal("emphasis breaks the text check")
 	}
 }
+
+func TestPhotoSearchFallsBackToWordsAndStems(t *testing.T) {
+	f := &castFixture{}
+	for _, p := range []struct{ id, desc string }{{"lake", "Lake at sunset"}, {"skate", "Short skateboard clip"}, {"garden", "Kitchen garden in April"}} {
+		f.Data.Photos = append(f.Data.Photos, struct{ Key, ID, Type, Taken, Description, City string }{ID: p.id, Type: "IMAGE", Taken: "2026-06-01", Description: p.desc})
+	}
+	tools := castTools(f)
+	for query, want := range map[string]string{"lake sunset": "lake", "skateboarding": "skate", "lake garden": ""} {
+		var out struct {
+			Count int
+			Note  string
+			Hits  []struct{ Source string }
+		}
+		_ = json.Unmarshal([]byte(tools.Call(context.Background(), "search_photos", json.RawMessage(`{"query":"`+query+`"}`)).Content), &out)
+		switch {
+		case want != "" && (out.Count != 1 || out.Note == ""):
+			t.Errorf("%q: %+v", query, out)
+		case want == "" && out.Count != 2:
+			t.Errorf("%q should list photos matching some words: %+v", query, out)
+		}
+	}
+	en := languagePacks["en"]
+	if !en.nothingFound.MatchString("I searched your archive but found no matching documents.") || !en.offerRetry.MatchString("You might try a different search term, such as just lake.") {
+		t.Fatal("English nothing-found or retry wording missed")
+	}
+}
