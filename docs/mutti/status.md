@@ -164,6 +164,17 @@ Messsonde Wiedergabe mit Rückfall auf progressiven Transcode;
   der Markdown-Hervorhebung scheiterte; Bewerter korrigiert (`d8d520dd84`).
   v6-dev-8 auf dem Harness mit Tag-Bereinigung und Teilwortsuche: 60/60,
   keine `</think>`-Lecks mehr.
+- **Messtag 2/3 (07.10.2026):** real-en-v2 auf `3760794b2d` (gesehen): Fotosuche
+  ohne Smart Search zu wörtlich, englische Formulierungen nicht erkannt →
+  Wort-/Stammsuche (`8150a1b2b5`). Paket `426e3fad81`: **real-de-v5 84/84,
+  alle sechs deutschen Aufgaben bestanden**; real-en-v3 Medien und Fotos
+  bestanden, documents.read/content.assist nicht (Teilwort-Treffer zitiert,
+  englische Frage deutsch gesucht) → alle Begriffe müssen enthalten sein,
+  Regel 3 „in der Sprache der Frage“ (`a4f1978460`, `8c5f2159dd`).
+  **Release-Kandidat `426e3fad81`** gesichert unter
+  `build/release-candidates/426e3fad81/` (Deutsch komplett, Englisch Medien/
+  Fotos; nichts signiert – Owner-Entscheidung). Nächstes Paket wird mit den
+  frischen Sätzen real-de-v6/real-en-v4 gemessen.
 - **P4 DE/EN Manager** (`7d3c46f5e6`, gemergt): Zustand, Update-/Import-
   meldungen und alle Fehlerantworten des Managers in der Sprache der
   Anfrage; vollständige Tabelle per AST-Test.
