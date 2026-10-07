@@ -31,7 +31,7 @@ func (m *Manager) Handler() (http.Handler, error) {
 		_ = json.NewEncoder(w).Encode(v)
 	}
 	mux.HandleFunc("POST /api/maintenance/{operation}", m.maintenanceHandler)
-	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { respond(w, m.State()) })
+	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) { respond(w, m.State().localized(r)) })
 	mux.HandleFunc("GET /api/session", func(w http.ResponseWriter, r *http.Request) {
 		respond(w, map[string]any{"csrf": m.token, "nativeOwner": m.isNativeOwner(r)})
 	})
@@ -53,11 +53,11 @@ func (m *Manager) Handler() (http.Handler, error) {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		if m.jobCancel != nil || !m.state.Ready {
-			http.Error(w, "Bitte den laufenden Vorgang abwarten.", 409)
+			http.Error(w, say(r, "Bitte den laufenden Vorgang abwarten."), 409)
 			return
 		}
 		if e := privateWrite(filepath.Join(m.state.Active, "setup-new"), []byte("1")); e != nil {
-			http.Error(w, "Die Auswahl konnte nicht gespeichert werden.", 500)
+			http.Error(w, say(r, "Die Auswahl konnte nicht gespeichert werden."), 500)
 			return
 		}
 		m.state.NewSetup = true
@@ -68,21 +68,21 @@ func (m *Manager) Handler() (http.Handler, error) {
 		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 		d.DisallowUnknownFields()
 		if e := d.Decode(&input); e != nil {
-			http.Error(w, "Bitte alle Felder prüfen.", 400)
+			http.Error(w, say(r, "Bitte alle Felder prüfen."), 400)
 			return
 		}
 		var extra any
 		if d.Decode(&extra) != io.EOF {
-			http.Error(w, "Ungültige Anfrage.", 400)
+			http.Error(w, say(r, "Ungültige Anfrage."), 400)
 			return
 		}
 		if r.Header.Get("X-Mutti-Native-Owner") != "" && !m.isNativeOwner(r) {
-			http.Error(w, "Die App-Freigabe ist abgelaufen. Bitte Mutti erneut öffnen.", 403)
+			http.Error(w, say(r, "Die App-Freigabe ist abgelaufen. Bitte Mutti erneut öffnen."), 403)
 			return
 		}
 		input.nativeOwner = m.isNativeOwner(r)
 		if e := m.StartImport(r.Context(), input); e != nil {
-			http.Error(w, e.Error(), 409)
+			http.Error(w, say(r, e.Error()), 409)
 			return
 		}
 		w.WriteHeader(http.StatusAccepted)
@@ -91,14 +91,14 @@ func (m *Manager) Handler() (http.Handler, error) {
 	// state the server does not run, so there is no server owner sign-in.
 	mux.HandleFunc("POST /api/update/rollback", func(w http.ResponseWriter, r *http.Request) {
 		if !m.isNativeOwner(r) {
-			http.Error(w, "Nur die Mutti-App auf diesem Mac darf den Datenstand zurücksetzen.", 403)
+			http.Error(w, say(r, "Nur die Mutti-App auf diesem Mac darf den Datenstand zurücksetzen."), 403)
 			return
 		}
 		var input struct{ Snapshot string }
 		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		d.DisallowUnknownFields()
 		if d.Decode(&input) != nil {
-			http.Error(w, "Ungültige Anfrage.", 400)
+			http.Error(w, say(r, "Ungültige Anfrage."), 400)
 			return
 		}
 		// Check and claim in one step, so two requests never restore at once.
@@ -109,13 +109,13 @@ func (m *Manager) Handler() (http.Handler, error) {
 		}
 		m.mu.Unlock()
 		if !blocked {
-			http.Error(w, "Eine Wiederherstellung vor dem Update ist nur bei gesperrtem Start möglich.", 409)
+			http.Error(w, say(r, "Eine Wiederherstellung vor dem Update ist nur bei gesperrtem Start möglich."), 409)
 			return
 		}
 		if err := m.rollbackUpdate(input.Snapshot); err != nil {
 			// Still blocked: the owner can retry; an interrupted rollback resumes.
-			m.setPhase("update_blocked", err.Error())
-			http.Error(w, err.Error(), 409)
+			m.setPhase("update_blocked", err.Error()) // stored in German, translated per request
+			http.Error(w, say(r, err.Error()), 409)
 			return
 		}
 		m.setPhase("idle", "")
@@ -140,20 +140,20 @@ func (m *Manager) Handler() (http.Handler, error) {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 		if r.Host != origin.Host {
-			http.Error(w, "Unbekannter Host.", 403)
+			http.Error(w, say(r, "Unbekannter Host."), 403)
 			return
 		}
 		if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
-			http.Error(w, "Unbekannter Ursprung.", 403)
+			http.Error(w, say(r, "Unbekannter Ursprung."), 403)
 			return
 		}
 		if r.Method != "GET" && r.Method != "HEAD" {
 			if o := r.Header.Get("Origin"); o != "" && o != m.Options.Origin {
-				http.Error(w, "Unbekannter Ursprung.", 403)
+				http.Error(w, say(r, "Unbekannter Ursprung."), 403)
 				return
 			}
 			if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") || (subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Mutti-CSRF")), []byte(m.token)) != 1 && !(strings.HasPrefix(r.URL.Path, "/api/maintenance/") && r.Header.Get("Origin") == "")) {
-				http.Error(w, "Bitte die Seite neu öffnen.", 403)
+				http.Error(w, say(r, "Bitte die Seite neu öffnen."), 403)
 				return
 			}
 		}

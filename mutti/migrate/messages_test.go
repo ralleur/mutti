@@ -2,10 +2,16 @@
 package migrate
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"net/http/httptest"
+	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -84,5 +90,74 @@ func TestSetupPageHasEnglishTexts(t *testing.T) {
 		if !dict[text] {
 			t.Errorf("no English text for %q", text)
 		}
+	}
+}
+
+// Every German text the manager can show has an English text. German is
+// the message ID; composed messages are fmt formats in the table.
+func TestEveryManagerMessageHasAnEnglishText(t *testing.T) {
+	german := regexp.MustCompile(`[äöüßÄÖÜ…]|\b(der|die|das|ist|nicht|bitte|Bitte|wird|wurde|kann|keine?|und|oder|mit|für|vor|nach|Ungültige?r?|Unbekannte?r?|Sicherung|Daten|Server|Datei|fehlgeschlagen|unbekannt)\b`)
+	notShown := map[string]bool{"Mutti Import": true, "… (%d in total)": true} // client name; English detail
+	files, _ := filepath.Glob("*.go")
+	checked := 0
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") || f == "messages.go" {
+			continue
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), f, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(parsed, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			text, err := strconv.Unquote(lit.Value)
+			if err != nil || !strings.Contains(text, " ") || !german.MatchString(text) || notShown[text] {
+				return true
+			}
+			checked++
+			if _, ok := englishMessages[text]; !ok {
+				t.Errorf("%s: no English text for %q", f, text)
+			}
+			return true
+		})
+	}
+	if checked < 150 {
+		t.Fatalf("only %d texts checked", checked)
+	}
+}
+
+func TestStateFollowsTheRequestLanguage(t *testing.T) {
+	f := newUpdateFixture(t)
+	f.m.Options.Origin = "http://127.0.0.1:18594"
+	f.m.token = randomID()
+	f.m.setPhase("update_blocked", "Bitte zuerst den Server beenden.")
+	f.m.setUpdate(&UpdateState{State: "failed", Message: fmt.Sprintf("Das Update konnte nicht abgeschlossen werden (%s). Der Datenstand vor dem Update ist gesichert; die vorherige Mutti-Version bietet die Wiederherstellung an.", "der neue Server beendet sich wiederholt")})
+	h, err := f.m.Handler()
+	if err != nil {
+		t.Fatal(err)
+	}
+	get := func(language string) State {
+		r := httptest.NewRequest("GET", "/api/state", nil)
+		r.Host = "127.0.0.1:18594"
+		if language != "" {
+			r.Header.Set("Accept-Language", language)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		var s State
+		_ = json.Unmarshal(w.Body.Bytes(), &s)
+		return s
+	}
+	if s := get("en-US"); s.Message != "Please stop the server first." || !strings.HasPrefix(s.Update.Message, "The update could not be completed (the new server keeps stopping).") {
+		t.Fatalf("en %q / %q", s.Message, s.Update.Message)
+	}
+	if s := get("de-DE"); s.Message != "Bitte zuerst den Server beenden." {
+		t.Fatalf("de %q", s.Message)
+	}
+	if f.m.State().Message != "Bitte zuerst den Server beenden." {
+		t.Fatal("stored state was translated")
 	}
 }

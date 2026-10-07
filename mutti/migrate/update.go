@@ -160,7 +160,7 @@ func (m *Manager) checkPackage(v *dataVersion) error {
 	case errors.Is(err, errNoComponentList):
 		return errors.New("Dieses Mutti-Paket enthält keine Komponentenliste. Bitte Mutti neu installieren. Es wurde nichts verändert.")
 	case err != nil:
-		return errors.New("Das Mutti-Paket ist beschädigt oder verändert (" + err.Error() + "). Bitte Mutti neu installieren. Es wurde nichts verändert.")
+		return fmt.Errorf("Das Mutti-Paket ist beschädigt oder verändert (%s). Bitte Mutti neu installieren. Es wurde nichts verändert.", err.Error())
 	case v.Channel == "release" && !check.Signed:
 		return errors.New("Dieses Mutti-Paket ist nicht mit dem Release-Schlüssel signiert. Bitte Mutti aus der offiziellen Quelle installieren. Es wurde nichts verändert.")
 	}
@@ -271,8 +271,7 @@ func (m *Manager) prepareStart() error {
 			update.To = current
 			update.Message = "Eine neuere Version übernimmt das laufende Update; die Sicherung vor dem Update bleibt gültig."
 		default:
-			return m.blockUpdate(update, fmt.Sprintf("Der Datenstand wurde bereits von %s geöffnet. Diese Version darf ihn nicht verwenden. "+
-				"Bitte %s oder neuer verwenden oder die Sicherung vor dem Update wiederherstellen.", update.To.label(), update.To.label()))
+			return m.blockUpdate(update, fmt.Sprintf("Der Datenstand wurde bereits von %s geöffnet. Diese Version darf ihn nicht verwenden. Bitte %s oder neuer verwenden oder die Sicherung vor dem Update wiederherstellen.", update.To.label(), update.To.label()))
 		}
 		if update.State == "failed" {
 			update.State, update.Finished, update.Message = "pending", nil, "Neuer Prüfversuch nach dem Update."
@@ -310,7 +309,7 @@ func (m *Manager) prepareStart() error {
 	snap, err := m.createSnapshot(active, stored)
 	if err != nil {
 		return m.blockUpdate(&UpdateState{State: "blocked", From: stored, To: current, Started: update.Started},
-			"Vor dem Update konnte keine vollständige Sicherung erstellt werden: "+err.Error()+" Es wurde nichts verändert.")
+			fmt.Sprintf("Vor dem Update konnte keine vollständige Sicherung erstellt werden: %s Es wurde nichts verändert.", err.Error()))
 	}
 	update.Snapshot = snap
 	if err = m.writeUpdate(update); err != nil {
@@ -378,8 +377,7 @@ func (m *Manager) failUpdate(u *UpdateState, reason string) {
 	now := time.Now().UTC()
 	failed := *u
 	failed.State, failed.Finished = "failed", &now
-	failed.Message = "Das Update konnte nicht abgeschlossen werden (" + reason + "). Der Datenstand vor dem Update ist gesichert; " +
-		"die vorherige Mutti-Version bietet die Wiederherstellung an."
+	failed.Message = fmt.Sprintf("Das Update konnte nicht abgeschlossen werden (%s). Der Datenstand vor dem Update ist gesichert; die vorherige Mutti-Version bietet die Wiederherstellung an.", reason)
 	_ = m.writeUpdate(&failed)
 	m.setUpdate(&failed)
 }
