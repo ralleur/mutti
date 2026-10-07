@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.R
 parser.add_argument('--testenv', type=Path, required=True)
 parser.add_argument('--models', type=Path, required=True, help='verified engine store models/ directory')
 parser.add_argument('--model', default='qwen3.8:27b-mlx')
-parser.add_argument('--suites', default='qualification-real-de-v5.json,qualification-real-en-v2.json')
+parser.add_argument('--suites', default='qualification-real-de-v5.json,qualification-real-en-v3.json')
 parser.add_argument('--skip-build', action='store_true')
 parser.add_argument('--skip-holdout', action='store_true')
 parser.add_argument('--skip-dev', action='store_true', help='skip the dev regression (only if it already passed on this build)')

@@ -97,6 +97,30 @@ aufgezeichneten Antworten (auch v6-dev und de-v1/v2) stand ein
 `</think>` mit wiederholter Antwort – bisher von keinem Bewerter erkannt;
 behoben (`f1ae8dbd43`).
 
+### real-en-v2 (07.10.2026, danach gesehen) – Paket `3760794b2d`
+
+| Aufgabe | Ergebnis |
+| --- | --- |
+| media.search / media.read / media.favorite | 33/33, 9/9, 9/9 – erfüllt |
+| documents.read | 21/27, Nichtwissen 0/3 – **nicht** erfüllt |
+| photos.search | 6/15 – **nicht** erfüllt |
+| content.assist | 69/84 – **nicht** erfüllt |
+
+0 kritisch, 0 ungültige Marken, 0 Engine-Fehler; Median 62 Token/s, p95
+vollständige Antwort 10,2 s, Engine bis 16,1 GB; Wiedergabe leer/unter
+KI-Last in Ordnung. Ursachen: Fotosuche ohne Smart Search verglich die ganze
+Anfrage mit der Beschreibung („lake sunset“ ≠ „Lake at sunset“,
+„skateboarding“ ≠ „skateboard“) und das englische Wiederholungsangebot wurde
+nicht erkannt (**Produktlücke**, behoben: Wort-/Stammsuche, live geprüft);
+„found no matching documents“ wurde nicht als „nichts gefunden“ erkannt
+(**Bewerterlücke**); zwei Fälle mehrdeutig für die Testdaten (zwei
+Versicherungsscheine; Herbst-Datumssuche). Testdatenbefund: das englische
+Skateboard-Video ist bytegleich mit dem deutschen Fahrradvideo; Immich hat
+beide zu einem Objekt zusammengeführt.
+
+v6-Holdout auf `c365b6256`: 129/132 (ein Fall mit richtiger Antwort, die an
+Markdown scheiterte; Bewerter korrigiert).
+
 ### Offen (Gate)
 
 - **real-de-v3** (frisch, eingefroren) und **real-en-v1** (ungesehen; ein Lauf

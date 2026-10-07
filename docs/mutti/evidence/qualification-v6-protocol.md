@@ -114,8 +114,20 @@ digest, so only the measurement of the final package can be signed.
 The v6 holdout ran once on that package: 129/132 (all three failures one
 case, VT15, whose correct answer "noch **nicht** gesehen" failed the text
 check because of the Markdown emphasis). Scorer change before the de-v5 and
-en-v2 runs: text checks ignore Markdown emphasis (`**`, `__`, `*`, backticks)
+en-v3 runs: text checks ignore Markdown emphasis (`**`, `__`, `*`, backticks)
 in both directions, which also makes `answer_none`/`critical_none` stricter.
+
+**Seen and replaced (2026-10-07):** real-en-v2 ran on package `3760794b2d`
+(media tasks met the thresholds; documents.read 21/27 with an unknown-answer
+case failing on a scorer gap, photos.search 6/15; 0 critical). It was used
+to add the word/stem fallback of photo search and English wording, and two
+of its cases were ambiguous for the test data (the profile owns a German and
+an English insurance certificate; the autumn date range is crowded by
+untitled photos of earlier native tests). The English gate is
+`mutti/tests/fixtures/qualification-real-en-v3.json`
+(SHA-256 `8b3764c40816b5d32c8ba9be6aac4f75f9f8be96893fc23c9b7ce31322541f3c`),
+frozen before its first run; real-de-v5 did not run yet (its setup found a
+leftover instance) and remains the unseen German gate.
 
 Latency (first output, complete answer; p50/p95), median tokens/s and peak
 resident engine memory are recorded and reported, not gated: the v2 latency
