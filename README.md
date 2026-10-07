@@ -24,7 +24,14 @@ Kontopflicht; für Netze ohne direkten Weg ist ein Tailscale-Wiki-Artikel geplan
 - [Komponenten-Pins](mutti/components.lock.json)
 - [Upstream-Updates](docs/mutti/upstream.md)
 - [Sicherheit](SECURITY.md) · [Lizenzen](mutti/THIRD-PARTY.md)
+- [Rechte und Mitwirkung](RIGHTS.md) · [CLA v1](CLA.md) · [Produktidentität](TRADEMARKS.md)
 
 Jellyfin-API, Namespaces und Originalhistorie bleiben erhalten. Mutti ist ein
 unabhängiges Projekt; die Jellyfin-Mitwirkenden werden in [UPSTREAM.md](UPSTREAM.md)
 und den unveränderten Lizenz-/Urheberhinweisen genannt.
+
+Mutti ist Open Source. Die Rechte an der eigenen Mutti-Arbeit und an der
+Produktidentität liegen beim Maintainer und sind übertragbar; neue externe
+Originalbeiträge brauchen den [CLA v1](CLA.md). Eine Übertragung des Projekts
+erhält bestehende Open-Source-Rechte und alle Lizenzpflichten Dritter
+([RIGHTS.md](RIGHTS.md)).

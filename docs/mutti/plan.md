@@ -30,6 +30,7 @@ Produktempfehlung für eine verpflichtende externe Tailscale-Einrichtung.
 | Aktueller Auftrag | Plan ausführen. Eigene Forks, lokale Implementierung und überprüfbare Builds sind beauftragt. Hosting und öffentliche Release-Freigabe folgen nach den jeweiligen Abnahmen. |
 | Weitere Dienste | **Hybrid.** Immich, Paperless und ähnliche Dienste laufen unverändert als gepinnte Upstream-Container in einer in die Mac-App eingebetteten Container-Runtime (Apples Containerization-Framework); nativ läuft nur, was Apple-Hardware braucht (Jellyfin-Transcoding, lokale Modelle). Kein Fork weiterer Dienste. Owner-Entscheidung vom 07.10.2026, Abschnitt 16. |
 | Außenlizenz des Pakets | Das Gesamtpaket wird unter der **GNU GPL Version 3** angeboten; Mutti-eigene Dateien bleiben GPL-2.0-or-later, der Transport MPL-2.0, alle Upstream-Lizenzen unverändert. Owner-Entscheidung vom 07.10.2026 auf Basis von [licensing.md](licensing.md); eine anwaltliche Bestätigung vor dem ersten öffentlichen Download bleibt empfohlen. |
+| Rechtemodell | Zwei Anforderungen: Mutti ist Open Source, und die Rechte an der eigenen Mutti-Arbeit und an der Produktidentität bleiben gebündelt beim Maintainer und sind übertragbar. Umsetzung wie bei kurtz über `RIGHTS.md`, `CLA.md` (v1, Status `license/cla`) und `TRADEMARKS.md`; Drittkomponenten gehören nie dazu. Owner-Anforderung vom 07.10.2026, [licensing.md, Abschnitt 4](licensing.md). |
 
 **Plattformentscheidung (aktualisiert 06.10.2026):** Die erste Iteration ist
 bewusst **Mac-only**. Das Docker-Paket bleibt im Repository als Entwicklerweg
@@ -696,6 +697,11 @@ bildet und das vorhandene Instanzmodell (`instances/<ID>`,
   Mutti-Prüfungen laufen auf allen Arbeitsbranches und Pull Requests.
 - **Dokumentation widerspruchsfrei:** README, Entwicklungsanleitung und Status
   beschreiben denselben Stand; lokale Pfade und veraltete Aussagen sind entfernt.
+- **Rechtemodell:** `RIGHTS.md`, `CLA.md` (v1) mit dem Workflow `cla.yml` und
+  `TRADEMARKS.md` übernehmen das kurtz-Modell: Open Source nach außen, die
+  Rechte an eigener Arbeit und Identität gebündelt und übertragbar beim
+  Maintainer, Drittrechte unberührt. Der Pflichtstatus `license/cla` auf dem
+  Hauptbranch ist eine Repository-Einstellung des Maintainers.
 [Backup und Restore](https://jellyfin.org/docs/general/administration/backup-and-restore/),
 [Upstream-Updatepolitik](https://jellyfin.org/docs/general/testing/upgrades/).
 
@@ -828,6 +834,7 @@ Ergänzungen vom 7. Oktober 2026:
 | --- | --- | --- |
 | 8 | Außenlizenz des Pakets: GPL Version 3 für das Gesamtpaket, Dateilizenzen bleiben; FFmpeg-Quellbündel und kurtz-App-Store-Weg als Gates | Übernommen. Abschnitte 1 und 10, [licensing.md](licensing.md). |
 | 9 | Weitere Dienste hybrid: eingebettete Container-Runtime für unveränderte Upstream-Dienste, nativ nur für Apple-Hardware; kein Fork; App-Modul-Vertrag | Übernommen. Abschnitte 1, 11 (M8) und 16. |
+| 10 | Rechtemodell: Open Source; eigene Arbeit und Produktidentität beim Maintainer, übertragbar; CLA, RIGHTS und Markenpolicy wie bei kurtz | Owner-Anforderung, umgesetzt. Abschnitt 1, `RIGHTS.md`, `CLA.md`, `TRADEMARKS.md`, [licensing.md, Abschnitt 4](licensing.md). |
 
 ## 16. Weitere Dienste: Laufzeitmodell und Upstream-Treue
 

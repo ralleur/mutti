@@ -93,8 +93,54 @@ Keine Rechtsbewertung, sondern die Konsequenzen, die aus den Fakten folgen:
 5. **Intro-Skipper-Vorgeschichte**: Teile von `Plugin.cs` tragen Copyright-Zeilen von Jellyfin-Kernentwicklern (2019/2021, Template-Herkunft); unter welcher Lizenz dieser Template-Code ursprünglich stand, wurde nicht zurückverfolgt.
 6. **Empirische Prüfung** auf einem Mac mit SDK, dass der Publish-Output die .NET-Hinweise tatsächlich nicht enthält und der Build-Schritt sie korrekt einsammelt.
 
-## 4. Gate
+## 4. Rechtemodell (Owner-Anforderungen vom 7. Oktober 2026)
+
+Der Owner stellt zwei Anforderungen an die Lizenzierung:
+
+1. **Mutti ist Open Source.** Erfüllt durch die Datei- und Komponentenlizenzen
+   oben und die GPL Version 3 für das Gesamtpaket.
+2. **Die Rechte an der eigenen Mutti-Arbeit und an der Produktidentität bleiben
+   gebündelt beim Maintainer und sind übertragbar.** Das erreicht das Projekt
+   wie kurtz über drei Bausteine:
+   - [RIGHTS.md](../../RIGHTS.md) hält fest, welche Rechte beim Maintainer
+     liegen (eigene Arbeit, per CLA erhaltene Rechte, Projektidentität), dass
+     sie als Ganzes übertragbar sind, und dass Jellyfin, Plugins, FFmpeg und
+     andere Drittkomponenten nie dazugehören.
+   - [CLA.md](../../CLA.md) (Version 1) sichert für neue externe
+     Originalbeiträge nicht-exklusive, übertragbare und unterlizenzierbare
+     Nutzungsrechte; der Workflow `.github/workflows/cla.yml` setzt den Status
+     `license/cla`. Der Schutz des Hauptbranches muss diesen Status verlangen;
+     das ist eine Repository-Einstellung, die der Maintainer aktiviert.
+   - [TRADEMARKS.md](../../TRADEMARKS.md) regelt Name, Wortmarke, Symbol und
+     Icon; die Ralleur-Identität bleibt getrennt.
+
+Eine Open-Source-Lizenz ist nicht exklusiv und berührt die Inhaberschaft nicht:
+Der Maintainer kann seine eigenen Dateien jederzeit zusätzlich unter anderen
+Bedingungen anbieten, und eine Übertragung der Rechte umfasst diese Freiheit.
+Bereits erteilte Open-Source-Rechte bleiben für ihre Empfänger bestehen, und
+die GPL-Teile von Jellyfin bleiben in jeder Kombination GPL. Die Bausteine der
+eigenen Arbeit, die ohne Jellyfin-Code auskommen (Manager, Mac-Hülle,
+Transport), sind damit frei verwertbar; die in den Jellyfin-Prozess
+kompilierten Teile (Snapshot-Hilfe, Exporthelfer, Server-Hooks) sind an die GPL
+gebunden.
+
+Hinweise zur Beweislage:
+
+- Mutti-eigene Dateien tragen SPDX-Kopfzeilen, aber keine Copyright-Zeilen.
+  Eine spätere, dokumentierte Ergänzung von Urheberzeilen ist möglich; eine
+  pauschale Massenänderung ist laut RIGHTS.md nicht zulässig.
+- Mehrere Commits der Arbeitsbranches tragen die Autorenkennung des KI-Agenten
+  und einen Offenlegungs-Trailer. Die Arbeit erfolgte im Auftrag und unter
+  Leitung des Maintainers; RIGHTS.md und CLA.md verlangen diese Offenlegung
+  ausdrücklich und versprechen keine Exklusivrechte an rein generiertem Material.
+- Optional: Die GPL-2.0-or-later-Dateien von Manager und Mac-Hülle könnten wie
+  kurtz auf MPL-2.0 umgestellt werden, solange kein externer Beitrag vorliegt.
+  Das ändert nichts an der Inhaberschaft, erleichtert aber Dritten die
+  Wiederverwendung einzelner Bausteine. Keine Entscheidung erforderlich.
+
+## 5. Gate
 
 - Vor dem ersten öffentlichen Download: Punkt 3.2 und 3.3 erledigt, App-Info und Website nennen GPL Version 3, Bundle enthält alle Lizenztexte (Paket-GPLv3, Jellyfin, Web, Intro Skipper, FFmpeg, .NET, Sora, MPL-Komponenten); anwaltliche Bestätigung von 3.1 eingeholt.
 - Vor dem Apple-TV-Release: Punkt 3.4 im kurtz-Repository entschieden.
 - Der Release-Workflow (Signatur, Notarisierung) ersetzt diese Prüfung nicht.
+- Vor dem ersten externen Beitrag: `license/cla` als Pflichtstatus auf dem Hauptbranch aktiviert.
