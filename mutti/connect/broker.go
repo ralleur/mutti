@@ -135,7 +135,7 @@ func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		room := b.rooms[id]
 		if room == nil || len(b.sessions) >= 2048 {
 			b.mu.Unlock()
-			http.Error(w, "Mutti ist offline.", 503)
+			http.Error(w, say(r, "Mutti ist offline."), 503)
 			return
 		}
 		if !room.limiter.Allow() {
@@ -160,7 +160,7 @@ func (b *Broker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case answer := <-ex.answer:
 			jsonReply(w, 200, answer)
 		case <-time.After(35 * time.Second):
-			http.Error(w, "Mutti antwortet nicht.", 504)
+			http.Error(w, say(r, "Mutti antwortet nicht."), 504)
 		case <-r.Context().Done():
 		}
 	case "answer":

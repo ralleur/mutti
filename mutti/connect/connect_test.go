@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -436,5 +438,59 @@ func TestSDKMetadataPathsRemainRelative(t *testing.T) {
 	data, _ := io.ReadAll(response.Body)
 	if bytes.Contains(data, []byte("capability")) || bytes.Contains(data, []byte("mutti.internal")) || bytes.Contains(data, []byte("private-token")) || !bytes.Contains(data, []byte(`"TranscodingUrl":"/Videos/test/master.m3u8?ApiKey=mutti-device-bound"`)) {
 		t.Fatalf("SDK URL contract violated: %s", data)
+	}
+}
+
+func TestPairingMessagesFollowTheRequestLanguage(t *testing.T) {
+	r := httptest.NewRequest("POST", "/approve", nil)
+	if got := say(r, "QR-Code abgelaufen oder bereits verwendet."); got != "QR-Code abgelaufen oder bereits verwendet." {
+		t.Fatalf("no language: %q", got)
+	}
+	r.Header.Set("Accept-Language", "en-GB,en;q=0.9")
+	if got := say(r, "QR-Code abgelaufen oder bereits verwendet."); got != "QR code expired or already used." {
+		t.Fatalf("en: %q", got)
+	}
+	r.Header.Set("Accept-Language", "de-DE,en;q=0.5")
+	if got := say(r, "Mutti ist offline."); got != "Mutti ist offline." {
+		t.Fatalf("de first: %q", got)
+	}
+	re := regexp.MustCompile(`say\(r, "((?:[^"\\]|\\.)*)"\)`)
+	for _, f := range []string{"admin.go", "server.go", "broker.go"} {
+		b, _ := os.ReadFile(f)
+		for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+			if _, ok := englishMessages[m[1]]; !ok {
+				t.Errorf("%s: no English text for %q", f, m[1])
+			}
+		}
+	}
+}
+
+// Every visible text of the pairing page has an English entry in its
+// inline dictionary.
+func TestPairingPageHasEnglishTexts(t *testing.T) {
+	page := string(adminHTML)
+	script := page[strings.Index(page, "<script>"):]
+	dict := map[string]bool{}
+	for _, m := range regexp.MustCompile(`'((?:[^'\\]|\\.)*)':'`).FindAllStringSubmatch(script, -1) {
+		dict[m[1]] = true
+	}
+	markup := page[strings.Index(page, "</style>"):strings.Index(page, "<script>")]
+	var texts []string
+	for _, m := range regexp.MustCompile(`>([^<>]+)<`).FindAllStringSubmatch(markup, -1) {
+		texts = append(texts, strings.TrimSpace(m[1]))
+	}
+	for _, m := range regexp.MustCompile(`(?:placeholder|aria-label|title|alt)="([^"]+)"`).FindAllStringSubmatch(markup, -1) {
+		texts = append(texts, m[1])
+	}
+	for _, m := range regexp.MustCompile(`t\('((?:[^'\\]|\\.)*)'`).FindAllStringSubmatch(script, -1) {
+		texts = append(texts, m[1])
+	}
+	for _, text := range texts {
+		if text == "" || text == "Mutti" || !regexp.MustCompile(`\pL`).MatchString(text) {
+			continue
+		}
+		if !dict[text] {
+			t.Errorf("no English text for %q", text)
+		}
 	}
 }

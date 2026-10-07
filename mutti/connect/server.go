@@ -229,12 +229,12 @@ func (s *Server) remoteRequest(pin string, w http.ResponseWriter, r *http.Reques
 	device, approved := s.state.Devices[pin]
 	s.mu.Unlock()
 	if !approved {
-		http.Error(w, "Gerät ist nicht freigegeben oder wurde gesperrt.", 403)
+		http.Error(w, say(r, "Gerät ist nicht freigegeben oder wurde gesperrt."), 403)
 		return
 	}
 	var currentUser jellyUser
 	if s.jf(r.Context(), "GET", "/Users/Me", device.Token, nil, &currentUser) != nil || currentUser.ID != device.UserID || currentUser.Policy.IsAdministrator || currentUser.Policy.IsDisabled {
-		http.Error(w, "Wiedergabeprofil nicht verfügbar.", 403)
+		http.Error(w, say(r, "Wiedergabeprofil nicht verfügbar."), 403)
 		return
 	}
 	s.observePolicy(pin, currentUser.policySnapshot)
@@ -285,7 +285,7 @@ func (s *Server) remoteRequest(pin string, w http.ResponseWriter, r *http.Reques
 		res.Header.Del("Set-Cookie")
 		return rewriteResponse(res, "http://mutti.internal", device.Token)
 	}, ErrorHandler: func(w http.ResponseWriter, r *http.Request, e error) {
-		http.Error(w, "Mutti-Mediendienst nicht erreichbar.", 502)
+		http.Error(w, say(r, "Mutti-Mediendienst nicht erreichbar."), 502)
 	}}
 	proxy.ServeHTTP(w, r)
 }
@@ -299,7 +299,7 @@ func hubUpload(path string) bool {
 // session is inserted here, exactly as for Jellyfin requests.
 func (s *Server) hubRequest(device Device, w http.ResponseWriter, r *http.Request) {
 	if s.Hub == "" {
-		jsonReply(w, 404, map[string]string{"code": "not_configured", "message": "Diese Mutti-Version bietet keine Zusatzfunktionen an."})
+		jsonReply(w, 404, map[string]string{"code": "not_configured", "message": say(r, "Diese Mutti-Version bietet keine Zusatzfunktionen an.")})
 		return
 	}
 	target, e := url.Parse(s.Hub)
@@ -332,7 +332,7 @@ func (s *Server) hubRequest(device Device, w http.ResponseWriter, r *http.Reques
 		res.Header.Del("Set-Cookie")
 		return nil
 	}, ErrorHandler: func(w http.ResponseWriter, r *http.Request, e error) {
-		jsonReply(w, 503, map[string]string{"code": "hub_unavailable", "message": "Die Zusatzfunktionen von Mutti sind gerade nicht erreichbar. Filme und Serien bleiben nutzbar."})
+		jsonReply(w, 503, map[string]string{"code": "hub_unavailable", "message": say(r, "Die Zusatzfunktionen von Mutti sind gerade nicht erreichbar. Filme und Serien bleiben nutzbar.")})
 	}}
 	proxy.ServeHTTP(w, r)
 }
@@ -361,7 +361,7 @@ func (s *Server) pair(pin string, w http.ResponseWriter, r *http.Request) {
 	}
 	inv := s.invites[digest(req.Secret)]
 	if inv == nil || (inv.Pin != "" && inv.Pin != pin) {
-		http.Error(w, "QR-Code abgelaufen oder bereits verwendet.", 410)
+		http.Error(w, say(r, "QR-Code abgelaufen oder bereits verwendet."), 410)
 		return
 	}
 	inv.Pin = pin

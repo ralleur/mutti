@@ -126,7 +126,7 @@ func (s *Server) Admin(origin string) http.Handler {
 				User        jellyUser `json:"User"`
 			}
 			if e := s.jf(r.Context(), "POST", "/Users/AuthenticateByName", "", bytes.NewReader(b), &result); e != nil || !result.User.Policy.IsAdministrator {
-				http.Error(w, "Bitte mit dem lokalen Besitzerzugang anmelden.", 401)
+				http.Error(w, say(r, "Bitte mit dem lokalen Besitzerzugang anmelden."), 401)
 				return
 			}
 			jsonReply(w, 200, map[string]string{"token": result.AccessToken})
@@ -135,14 +135,14 @@ func (s *Server) Admin(origin string) http.Handler {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		var owner jellyUser
 		if len(token) < 20 || s.jf(r.Context(), "GET", "/Users/Me", token, nil, &owner) != nil || !owner.Policy.IsAdministrator || owner.Policy.IsDisabled {
-			http.Error(w, "Besitzeranmeldung erforderlich.", 401)
+			http.Error(w, say(r, "Besitzeranmeldung erforderlich."), 401)
 			return
 		}
 		switch r.URL.Path {
 		case "/state":
 			var users []jellyUser
 			if s.jf(r.Context(), "GET", "/Users", token, nil, &users) != nil {
-				http.Error(w, "Profile konnten nicht geladen werden.", 502)
+				http.Error(w, say(r, "Profile konnten nicht geladen werden."), 502)
 				return
 			}
 			profiles := []jellyUser{}
@@ -166,7 +166,7 @@ func (s *Server) Admin(origin string) http.Handler {
 		case "/invite":
 			i, e := s.NewInvitation()
 			if e != nil {
-				http.Error(w, e.Error(), 429)
+				http.Error(w, say(r, e.Error()), 429)
 				return
 			}
 			jsonReply(w, 200, map[string]any{"url": i.URL(), "expires": i.Expires})
@@ -200,7 +200,7 @@ func (s *Server) Admin(origin string) http.Handler {
 				return
 			}
 			if e := s.approve(r.Context(), req.Pin, req.UserID, token); e != nil {
-				http.Error(w, e.Error(), 409)
+				http.Error(w, say(r, e.Error()), 409)
 				return
 			}
 			w.WriteHeader(204)
@@ -213,7 +213,7 @@ func (s *Server) Admin(origin string) http.Handler {
 				return
 			}
 			if e := s.Revoke(req.Pin); e != nil {
-				http.Error(w, "Sperren fehlgeschlagen.", 500)
+				http.Error(w, say(r, "Sperren fehlgeschlagen."), 500)
 				return
 			}
 			w.WriteHeader(204)
@@ -228,7 +228,7 @@ func (s *Server) Admin(origin string) http.Handler {
 			b, _ := json.Marshal(map[string]string{"Name": req.Name, "Password": randomID()})
 			var profile jellyUser
 			if e := s.jf(r.Context(), "POST", "/Users/New", token, bytes.NewReader(b), &profile); e != nil {
-				http.Error(w, "Profil konnte nicht erstellt werden.", 409)
+				http.Error(w, say(r, "Profil konnte nicht erstellt werden."), 409)
 				return
 			}
 			jsonReply(w, 200, profile)
