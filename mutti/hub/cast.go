@@ -157,6 +157,23 @@ func (d castData) Search(_ context.Context, query string) ([]Document, int, erro
 	return out, len(hits), nil
 }
 
+func (d castData) Containing(_ context.Context, term string) ([]Document, int, error) {
+	if d.fail["search_documents"] {
+		return nil, 0, errors.New("synthetic outage")
+	}
+	out := []Document{}
+	for _, doc := range d.f.Data.Documents {
+		if strings.Contains(strings.ToLower(doc.Title+" "+doc.Text), strings.ToLower(term)) {
+			out = append(out, Document{ID: doc.ID, Title: doc.Title, Created: doc.Created, Snippet: doc.Title})
+		}
+	}
+	n := len(out)
+	if n > 5 {
+		out = out[:5]
+	}
+	return out, n, nil
+}
+
 func (d castData) Read(_ context.Context, id int) (Document, error) {
 	for _, doc := range d.f.Data.Documents {
 		if doc.ID == id {
@@ -408,6 +425,9 @@ func score(c castCase, f *castFixture, data castData, book *sourceBook, r castRe
 	}
 	if r.Truncated {
 		add("truncated")
+	}
+	if reasoningTag.MatchString(answer) {
+		add("reasoning tags in the answer")
 	}
 	if r.Invalid > 0 {
 		add("invalid markers")

@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Source is a server-registered reference. The model only sees Ref ("Q3");
@@ -89,6 +91,8 @@ func (t *profileTools) lang() *languagePack {
 type documentBackend interface {
 	// Search returns the first hits and the total number of matches.
 	Search(ctx context.Context, query string) ([]Document, int, error)
+	// Containing matches term anywhere in title or text (compound words).
+	Containing(ctx context.Context, term string) ([]Document, int, error)
 	Read(ctx context.Context, id int) (Document, error)
 }
 
@@ -105,6 +109,11 @@ type hubDocuments struct {
 
 func (h hubDocuments) Search(ctx context.Context, query string) ([]Document, int, error) {
 	page, err := h.d.search(ctx, h.id, query, 1, 5)
+	return page.Items, max(page.Count, len(page.Items)), err
+}
+
+func (h hubDocuments) Containing(ctx context.Context, term string) ([]Document, int, error) {
+	page, err := h.d.containing(ctx, h.id, term, 5)
 	return page.Items, max(page.Count, len(page.Items)), err
 }
 
@@ -391,6 +400,22 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 			}
 			partial = len(items) > 0
 		}
+		// German compound words: "Rechnung" is not a word of "Arztrechnung"
+		// in the full-text index. Look for the longest term inside words.
+		inside := false
+		if len(items) == 0 {
+			words := slices.DeleteFunc(strings.Fields(strings.ReplaceAll(a.Query, " OR ", " ")), func(w string) bool { return utf8.RuneCountInString(w) < 4 })
+			slices.SortStableFunc(words, func(x, y string) int { return utf8.RuneCountInString(y) - utf8.RuneCountInString(x) })
+			for _, w := range words {
+				if items, total, err = t.docs.Containing(ctx, w); err != nil {
+					return toolError(name, "The document archive is currently unavailable.")
+				}
+				if len(items) > 0 {
+					inside = true
+					break
+				}
+			}
+		}
 		out := []map[string]any{}
 		for _, d := range items {
 			s := t.addSource(Source{Service: "documents", Kind: "document", ObjectID: strconv.Itoa(d.ID), Title: d.Title, Subtitle: d.Created, Revision: d.revision})
@@ -399,6 +424,9 @@ func (t *profileTools) Call(ctx context.Context, name string, raw json.RawMessag
 		result := withTotal(map[string]any{"count": len(out), "hits": out}, len(out), total, "documents")
 		if partial {
 			result["note"] = "No document contains all terms; these hits contain some of them. Check that they answer the question."
+		}
+		if inside {
+			result["note"] = "No document contains the terms as words; these hits contain one of them inside a longer word. Check that they answer the question."
 		}
 		return ToolResult{Content: toolJSON(result),
 			Trace: ToolTrace{Name: name, Status: "done", Summary: fmt.Sprintf(t.lang().found["documents"], total)}}

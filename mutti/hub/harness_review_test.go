@@ -382,3 +382,28 @@ func TestScoringAcceptsHonestDenialsAndCatchesHiddenFailures(t *testing.T) {
 		t.Fatalf("object keys %v", keys)
 	}
 }
+
+func TestReasoningTagsNeverReachTheUser(t *testing.T) {
+	for _, c := range []struct{ turn, want string }{
+		{"Der Betrag ist 312,00 EUR [Q1].\n</think>\n\nDer Betrag ist 312,00 EUR [Q1].", "Der Betrag ist 312,00 EUR [Q1]."},
+		{"<think>Ich überlege kurz.</think>Hallo!", "Hallo!"},
+		{"Hallo<think>noch unfertig", "Hallo"},
+	} {
+		h, _ := scriptedModel(t, c.turn)
+		var shown strings.Builder
+		res, err := h.Run(context.Background(), []chatMessage{{Role: "user", Content: "Hallo"}}, &stubTools{}, func(ev HarnessEvent) {
+			switch ev.Type {
+			case "reset":
+				shown.Reset()
+			case "delta":
+				shown.WriteString(ev.Text)
+			}
+		})
+		if err != nil || res.Text != c.want || strings.TrimSpace(shown.String()) != c.want {
+			t.Errorf("%q: text %q, shown %q", c.turn, res.Text, shown.String())
+		}
+	}
+	if fails, _ := scoreQualification(qualifyCase{}, languagePacks["de"], qualifyResult{Answer: "Hallo </think> Hallo"}, nil, &sourceBook{}, nil); len(fails) == 0 {
+		t.Fatal("reasoning tags not scored")
+	}
+}

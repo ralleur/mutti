@@ -291,13 +291,32 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 				return result, err
 			}
 		}
+		// Thinking is off, but the model sometimes still writes reasoning
+		// tags (e.g. an answer, "</think>" and the answer again). The visible
+		// text is always what follows the reasoning: the client gets the
+		// continuation, or a reset and the rebuilt text.
+		prefix := text.String()
+		var raw strings.Builder
 		content, calls, stats, err := h.chat(ctx, messages, offered, func(delta string) {
 			if result.FirstToken == 0 {
 				result.FirstToken = time.Since(start)
 			}
-			text.WriteString(delta)
-			emit(HarnessEvent{Type: "delta", Text: delta})
+			raw.WriteString(delta)
+			visible, current := prefix+stripReasoning(raw.String()), text.String()
+			switch {
+			case visible == current:
+			case strings.HasPrefix(visible, current):
+				emit(HarnessEvent{Type: "delta", Text: visible[len(current):]})
+			default:
+				emit(HarnessEvent{Type: "reset"})
+				if visible != "" {
+					emit(HarnessEvent{Type: "delta", Text: visible})
+				}
+			}
+			text.Reset()
+			text.WriteString(visible)
 		})
+		content = stripReasoning(content)
 		result.EvalTokens += stats.EvalCount
 		result.EvalNanos += stats.EvalDuration
 		if stats.DoneReason == "length" {
@@ -382,6 +401,23 @@ func (h *Harness) Run(ctx context.Context, messages []chatMessage, tools ToolBox
 	}
 	result.Text = text.String()
 	return result, nil
+}
+
+var reasoningTag = regexp.MustCompile(`</?think>`)
+
+// stripReasoning keeps what follows the last closing reasoning tag and drops
+// an unfinished reasoning block.
+func stripReasoning(s string) string {
+	if !reasoningTag.MatchString(s) {
+		return s
+	}
+	if i := strings.LastIndex(s, "</think>"); i >= 0 {
+		s = s[i+len("</think>"):]
+	}
+	if i := strings.Index(s, "<think>"); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimLeft(s, " \n")
 }
 
 // serverNote carries a harness correction. Engines such as Ollama's MLX

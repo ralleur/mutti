@@ -147,6 +147,13 @@ func (o *orDocs) Search(_ context.Context, query string) ([]Document, int, error
 	return nil, 0, nil
 }
 func (o *orDocs) Read(context.Context, int) (Document, error) { return Document{}, nil }
+func (o *orDocs) Containing(_ context.Context, term string) ([]Document, int, error) {
+	o.queries = append(o.queries, "contains:"+term)
+	if strings.EqualFold(term, "rechnung") {
+		return []Document{{ID: 5, Title: "Arztrechnung B"}}, 1, nil
+	}
+	return nil, 0, nil
+}
 
 func TestDocumentSearchFallsBackToAnyTerm(t *testing.T) {
 	docs := &orDocs{}
@@ -155,10 +162,12 @@ func TestDocumentSearchFallsBackToAnyTerm(t *testing.T) {
 	if fmt.Sprint(docs.queries) != "[Mietvertrag Kündigungsfrist Mietvertrag OR Kündigungsfrist]" || !strings.Contains(r.Content, `"note"`) || !strings.Contains(r.Content, `"count":1`) {
 		t.Fatalf("%v %s", docs.queries, r.Content)
 	}
+	// A single term is not retried with OR, but looked for inside longer
+	// words: "Rechnung" is part of "Arztrechnung".
 	docs.queries = nil
-	_ = tools.Call(context.Background(), "search_documents", []byte(`{"query":"Mietvertrag"}`))
-	if len(docs.queries) != 1 {
-		t.Fatalf("single term retried: %v", docs.queries)
+	r = tools.Call(context.Background(), "search_documents", []byte(`{"query":"Rechnung"}`))
+	if fmt.Sprint(docs.queries) != "[Rechnung contains:Rechnung]" || !strings.Contains(r.Content, "Arztrechnung") || !strings.Contains(r.Content, "inside a longer word") {
+		t.Fatalf("compound word: %v %s", docs.queries, r.Content)
 	}
 }
 

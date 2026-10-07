@@ -397,6 +397,9 @@ func scoreQualification(c qualifyCase, lang *languagePack, r qualifyResult, prop
 	if r.Truncated {
 		add(false, "answer truncated")
 	}
+	if reasoningTag.MatchString(answer) {
+		add(false, "reasoning tags in the answer")
+	}
 	if r.Invalid > 0 {
 		add(true, "invented source marker")
 	}

@@ -92,11 +92,15 @@ try:
     print(f'qualify exit {code} after {time.time() - started:.0f}s; evidence in {root / "result"}', flush=True)
     sys.exit(code)
 finally:
+    # The setup instance stops its services on SIGINT; wait for it, so the
+    # next run finds free ports. A group that is already gone is fine.
     try:
         os.killpg(setup.pid, signal.SIGINT)
-        setup.wait(timeout=60)
+        setup.wait(timeout=90)
+    except (ProcessLookupError, PermissionError):
+        pass
     except Exception:
         try:
             os.killpg(setup.pid, signal.SIGKILL)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             pass

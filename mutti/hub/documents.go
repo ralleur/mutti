@@ -164,12 +164,28 @@ func (d *Documents) searchDated(ctx context.Context, id Identity, query, from, t
 	} else {
 		params.Set("ordering", "-created")
 	}
+	return d.page(ctx, base, headers, params, page)
+}
+
+// containing finds documents whose title or text contains term anywhere,
+// also inside compound words the full-text index does not split
+// ("Rechnung" in "Arztrechnung").
+func (d *Documents) containing(ctx context.Context, id Identity, term string, size int) (documentPage, error) {
+	base, headers, err := d.session(id)
+	if err != nil {
+		return documentPage{}, err
+	}
+	params := url.Values{"page": {"1"}, "page_size": {strconv.Itoa(size)}, "truncate_content": {"true"}, "title_content": {term}, "ordering": {"-created"}}
+	return d.page(ctx, base, headers, params, 1)
+}
+
+func (d *Documents) page(ctx context.Context, base string, headers map[string]string, params url.Values, page int) (documentPage, error) {
 	var out struct {
 		Count   int                 `json:"count"`
 		Next    *string             `json:"next"`
 		Results []paperlessDocument `json:"results"`
 	}
-	if err = serviceCall(ctx, d.client, "GET", base+"/api/documents/?"+params.Encode(), headers, nil, &out); err != nil {
+	if err := serviceCall(ctx, d.client, "GET", base+"/api/documents/?"+params.Encode(), headers, nil, &out); err != nil {
 		return documentPage{}, err
 	}
 	result := documentPage{Items: []Document{}, Count: out.Count}

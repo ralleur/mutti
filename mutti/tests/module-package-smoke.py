@@ -50,10 +50,19 @@ root.mkdir(parents=True, mode=0o700)
 resources = args.app.resolve() / 'Contents/Resources'
 env_data = json.loads(args.testenv.read_text())
 PORTS = {'hub': 32593, 'manager': 32594, 'connect': 32595, 'jellyfin': 32596, 'broker': 32600}
+# A previous instance (e.g. the last qualification run) may still be
+# shutting down; wait for its ports instead of failing at once.
 for port in PORTS.values():
-    with socket.socket() as probe:
-        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        probe.bind(('127.0.0.1', port))
+    for attempt in range(120):
+        try:
+            with socket.socket() as probe:
+                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                probe.bind(('127.0.0.1', port))
+            break
+        except OSError:
+            if attempt == 119:
+                raise SystemExit(f'Port {port} stays in use')
+            time.sleep(1)
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 report = {'started': time.time(), 'checks': [], 'model': args.model, 'app': str(args.app)}
 if args.setup_only:
