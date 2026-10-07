@@ -212,6 +212,32 @@ func (m *Manager) applyChildLocked(a childAction, restarts int, now time.Time) {
 	}
 }
 
+// notePackageLocked publishes whether the package was replaced while Mutti
+// runs. Nothing restarts then, so a restart notice gives way to the state it
+// had replaced and the service message says what to do.
+func (m *Manager) notePackageLocked(replaced bool) {
+	if replaced {
+		m.state.ServiceMessage = errPackageReplaced.Error()
+		if m.state.Phase == "restarting" {
+			m.state.Phase, m.state.Message = m.resumePhase, m.resumeMessage
+		}
+	} else if m.state.ServiceMessage == errPackageReplaced.Error() {
+		m.state.ServiceMessage = ""
+	}
+}
+
+// relaunchFailed counts a relaunch that could not be started. When the
+// supervisor gives up while an update is pending, the update has failed.
+func (m *Manager) relaunchFailed(child *childSupervisor, update *UpdateState, now time.Time) {
+	m.mu.Lock()
+	result := child.failed(now)
+	m.applyChildLocked(result, child.restarts(), now)
+	m.mu.Unlock()
+	if result == childGiveUp && update != nil && update.State == "pending" {
+		m.failUpdate(update, "der neue Server lässt sich nicht starten")
+	}
+}
+
 func (m *Manager) setPhase(phase, message string) {
 	m.mu.Lock()
 	m.state.Phase = phase
@@ -324,14 +350,20 @@ func (m *Manager) Run(ctx context.Context) error {
 			ready = m.api.call(healthCtx, "GET", "/Users/Public", nil, nil) == nil
 			healthCancel()
 		}
+		// A package replaced while Mutti runs is not relaunched (launch refuses
+		// it) and no module or Connect process of it is started. The supervisor
+		// holds instead of counting refused relaunches as crashes, so the state
+		// shows the replacement rather than a restart that cannot happen.
+		replaced := m.packageReplaced()
 		m.mu.Lock()
 		m.state.Ready = ready
 		m.state.SetupComplete = ready && info.StartupWizardCompleted
 		active := m.state.Active
 		update := m.state.Update
+		m.notePackageLocked(replaced)
 		// The import job owns the child while it runs. Decide under the same lock
 		// StartImport takes, so no job can begin between the check and the phase.
-		action := child.observe(now, running, ready, m.jobCancel != nil)
+		action := child.observe(now, running, ready, m.jobCancel != nil || replaced)
 		m.applyChildLocked(action, child.restarts(), now)
 		m.mu.Unlock()
 		if update != nil && update.State == "pending" {
@@ -352,22 +384,11 @@ func (m *Manager) Run(ctx context.Context) error {
 			connect.stopped()
 		}
 		if action == childRelaunch {
-			if e := m.launch(active); e != nil {
-				m.mu.Lock()
-				m.applyChildLocked(child.failed(now), child.restarts(), now)
-				m.mu.Unlock()
+			// A replacement noticed only by launch itself is held on the next tick.
+			if e := m.launch(active); e != nil && !errors.Is(e, errPackageReplaced) {
+				m.relaunchFailed(child, update, now)
 			}
 		}
-		// A package replaced while Mutti runs is not relaunched (launch refuses
-		// it) and no module or Connect process of it is started.
-		replaced := m.packageReplaced()
-		m.mu.Lock()
-		if replaced {
-			m.state.ServiceMessage = errPackageReplaced.Error()
-		} else if m.state.ServiceMessage == errPackageReplaced.Error() {
-			m.state.ServiceMessage = ""
-		}
-		m.mu.Unlock()
 		if !replaced && ready && info.StartupWizardCompleted && m.Options.Hub != "" && !m.hub.running() && time.Since(m.hubStarted) > 10*time.Second {
 			// Optional modules run in their own process: a failing module never
 			// stops Jellyfin, Connect or playback and is retried with a pause.

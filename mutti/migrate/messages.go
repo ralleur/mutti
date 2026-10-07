@@ -246,6 +246,7 @@ var englishMessages = map[string]string{
 	"XML-Direktiven sind in einer Importdatei nicht erlaubt.":                                                   "XML directives are not allowed in an import file.",
 	"der neue Server beendet sich wiederholt":                                                                   "the new server keeps stopping",
 	"der neue Server ist nach 20 Minuten nicht bereit":                                                          "the new server is not ready after 20 minutes",
+	"der neue Server lässt sich nicht starten":                                                                  "the new server cannot be started",
 	"Übernahme abgebrochen. Deine bisherige Einrichtung bleibt erhalten. Eine bereits angeforderte Jellyfin-Sicherung kann auf der Quelle weiterlaufen.": "Import cancelled. Your existing setup is kept. A Jellyfin backup already requested may continue on the source.",
 	"Übernahme abgebrochen. Der bisherige Datenstand bleibt erhalten.":                                                                                   "Import cancelled. Your existing data is kept.",
 	"Übernahme abgebrochen. Es wurde nicht umgeschaltet.":                                                                                                "Import cancelled. Nothing was switched.",

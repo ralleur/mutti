@@ -254,19 +254,23 @@ final class ServerController: ObservableObject {
             try process.run(); child = process
             readiness = Task { [weak self] in
                 var observed = false
+                // Polls towards the slow-start notice, and towards abandoning the start.
+                var slowPolls = 0
                 var attempts = 0
                 while !Task.isCancelled && process.isRunning {
                     guard let self else { return }
-                    // A pre-update backup can take long; a blocked update waits for the owner.
-                    var waiting = false
+                    // A pre-update backup or a rollback can take long; a blocked update waits for the owner.
+                    var busy = false
+                    var pending = false
                     var request = URLRequest(url: self.onboardingAddress.appending(path: "api/state"), cachePolicy: .reloadIgnoringLocalCacheData); request.timeoutInterval = 3
                     if let (data, response) = try? await URLSession.shared.data(for: request),
                        (response as? HTTPURLResponse)?.statusCode == 200,
                        let state = try? JSONDecoder().decode(ManagerState.self, from: data) {
                         self.importing = ["checking", "backup", "importing", "verifying", "activating"].contains(state.phase)
+                        busy = state.phase == "update" || state.isBlocked
                         // The first start after an update may migrate Jellyfin's data for
                         // longer; the manager itself gives it 20 minutes.
-                        waiting = state.phase == "update" || state.isBlocked || state.update?.state == "pending"
+                        pending = state.update?.state == "pending"
                         self.progressMessage = state.phase == "update" && !state.message.isEmpty ? state.message : nil
                         self.blockedSnapshot = state.isBlocked ? state.update?.snapshot : nil
                         self.restarting = state.isRestarting
@@ -279,6 +283,8 @@ final class ServerController: ObservableObject {
                         }
                         if state.newSetup { self.showOnboarding = false }
                         if self.ready { self.starting = false; self.error = nil }
+                        // A backup or rollback runs: its progress replaces an earlier error.
+                        else if state.phase == "update" { self.error = nil }
                         else if state.isError || state.isBlocked { self.starting = false; self.error = state.message }
                         else if let message = state.serviceMessage, !message.isEmpty { self.starting = false; self.error = message }
                         else if state.isRestarting { self.error = nil }
@@ -288,12 +294,14 @@ final class ServerController: ObservableObject {
                             self.connectMessage = message.isEmpty ? ServerController.localized("Der Fernzugriff ist nicht verfügbar.") : message
                         } else { self.connectMessage = nil }
                     }
-                    // A pre-update backup or a blocked update does not count against the start.
-                    attempts = waiting ? 0 : attempts + 1
+                    // A backup, a rollback or a blocked update does not count against the start. The first
+                    // start after an update gets the notice but is never abandoned here.
+                    slowPolls = busy ? 0 : slowPolls + 1
+                    attempts = busy || pending ? 0 : attempts + 1
                     if !observed && !self.ready {
                         // A first start after an update may run database migrations for minutes:
                         // announce the delay, keep waiting, and only abandon the start much later.
-                        if attempts >= ServerController.slowStartPolls && self.error == nil {
+                        if slowPolls >= ServerController.slowStartPolls && self.error == nil {
                             self.error = ServerController.localized("Der Start dauert länger als gewohnt. Nach einem Update kann die Bibliothek einige Minuten aktualisiert werden.")
                         }
                         if attempts > ServerController.abandonStartPolls {

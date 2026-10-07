@@ -13,7 +13,7 @@ ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 
 ## Aktuelle Übergabe und nächste Schritte
 
-**Stand 07.10.2026, mittags – Planverfeinerung (PR #2) mit P2/P3
+**Stand 07.10.2026, vormittags – Planverfeinerung (PR #2) mit P2/P3
 zusammengeführt.** Branch `codex/mutti-integration` (Worktree
 `mutti-integration`) = Merge von `origin/codex/mutti-foundation` (`b855397f7d`,
 PR #2: Review-Entscheidungen, Supervisor/Lebensader/Anmeldeobjekt, Release-
@@ -40,16 +40,48 @@ in `codex/mutti-p2-qualification` (`31ed8948bc`). Nicht gepusht.
 - **Geprüft (synthetisch):** `gofmt`/`go vet` sauber, `go test -race` grün für
   `mutti/hub`, `mutti/migrate`, `mutti/connect`; Swift-Typecheck und
   `swift test` 10/10 (neuer Test für die Update-Felder); `bash -n`,
-  `py_compile`, `node --check`. **Nicht** geprüft: Paketbau und
-  Paket-Smoke des zusammengeführten Stands, C#-Tests (aus PR #2 unverändert
-  übernommen), signierter Build (keine Signaturidentität hinterlegt).
-- **Folgen für die Freigabe:** Die Messung auf `7a036fc459` bleibt für genau
-  dieses ad-hoc signierte Paket gültig. Ein Developer-ID-signiertes Release
+  `py_compile`, `node --check`.
+- **Gebaut und im Paket geprüft:** `build-mac.sh` auf `c288c85d21`
+  (Provenienz sauber, Kanal `local-development`, ad-hoc signiert): 2.919
+  Dateien, Inventar 0 ohne Zuordnung, unverändert 6 unbekannte .NET-Lizenzen
+  (5 ohne lokalen Text, wie zuvor). `module-package-smoke.py` mit
+  `qwen3.8:27b-mlx` (adopt, KI ohne Freigabe gesperrt): **48/48**, darunter
+  Komponentenliste, Datenversion, Netzwerksperre der Engine, P0-Sperre,
+  P1-Inhaltsweg, Sicherung/Restore-Probe, Widerruf
+  (`build/module-e2e-integration-2/result.json`; Lauf 1 brach vor der
+  Kopplung ab, weil `build/mutti-testdevice` im frischen Worktree fehlte).
+  Abgleich mit dem gemessenen Kandidaten `7a036fc459`: `mutti-hub`
+  (`812a518260fd…`) und alle 31 Engine-Dateien SHA-256-gleich; Server,
+  Manager, Connect und Lizenzordner unterscheiden sich wie erwartet.
+  **Nicht** geprüft: signierter Build (keine Signaturidentität hinterlegt),
+  Supervisor-Verhalten im Paket (Absturz/Neustart, Anmeldeobjekt,
+  Wachhalten).
+- **Unabhängiges Review der Konfliktauflösung, Befunde behoben** (nach dem
+  Paketbau, daher nur synthetisch geprüft): (1) Ein während des Betriebs
+  ersetztes Paket zählte jeden verweigerten Neustart als Absturz und zeigte
+  rund zwei Minuten „wird neu gestartet“, danach einen allgemeinen Fehler; jetzt
+  hält der Supervisor an, die Neustart-Anzeige weicht und die Meldung
+  „Paket ersetzt“ erscheint. (2) Mac-App: Der Hinweis auf einen langsamen
+  ersten Start nach einem Update erschien nie, weil ein ausstehendes Update den
+  Zähler zurücksetzte; jetzt getrennte Zähler für Hinweis und Abbruch. (3) Ein
+  Neustart, der nach einem Update schon beim Starten scheitert, markiert das
+  Update nach Aufgeben des Supervisors als fehlgeschlagen. Zusätzlich zeigt die
+  App während einer Sicherung oder Wiederherstellung keinen veralteten Fehler mit
+  „Erneut starten“ mehr. Regressionstests in `merge_review_test.go`.
+- **CI-Parität:** `go test -race`/`go vet` für migrate, connect und hub auch
+  unter Linux im CI-Container (`golang:1.27.1-bookworm`) grün; die Mutti-CI
+  prüfte den Hub bisher nicht, Job `hub` ergänzt. `dotnet format
+  --verify-no-changes` sauber; die Mutti-C#-Tests (14/14) erst nach Behebung
+  eines StyleCop-Fehlers (SA1513 in `MuttiController.cs`, aus dem eigenen Zweig)
+  grün. Docker-Image wie im CI-Job `container` gebaut (Entwicklerweg, nicht
+  gestartet oder abgenommen).
+- **Folgen für die Freigabe:** Die Messung auf `7a036fc459` gilt für dessen
+  Hub und Engine; weil beide im zusammengeführten Paket dateigleich sind, sollte
+  die Bindung auch dort tragen (formal belegt erst durch einen Lauf mit
+  `records.json` und `--expect-qualified`). Ein Developer-ID-signiertes Release
   verändert Hub- und Engine-Digest und braucht eine neue Messung mit frischen
-  Gate-Sätzen; ebenso jeder Hub-Stand nach diesem Merge, falls sich der
-  Hub-Digest ändert.
-- **Nächste Schritte:** zusammengeführtes Paket bauen und
-  `module-package-smoke.py` ausführen; Merge nach Review in
+  Gate-Sätzen.
+- **Nächste Schritte:** Merge nach Review in
   `codex/mutti-foundation` übernehmen; Owner: Signatur der Freigaben für
   `7a036fc459` oder Verzicht zugunsten einer Messung auf dem signierten
   Release-Paket, Komponentenschlüssel ([Ablauf](release-keys.md)).

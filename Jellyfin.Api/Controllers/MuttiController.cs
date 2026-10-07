@@ -152,6 +152,7 @@ public partial class MuttiController : BaseJellyfinApiController
             {
                 request.Content = new StringContent(body.RootElement.GetRawText(), Encoding.UTF8, "application/json");
             }
+
             using var response = await (client ?? ConnectClient).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             // Small JSON state or a QR PNG only. Do not turn this into an arbitrary proxy.
             await response.Content.LoadIntoBufferAsync(2 * 1024 * 1024, cancellationToken).ConfigureAwait(false);
