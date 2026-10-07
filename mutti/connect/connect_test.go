@@ -482,7 +482,7 @@ func TestPairingPageHasEnglishTexts(t *testing.T) {
 	for _, m := range regexp.MustCompile(`(?:placeholder|aria-label|title|alt)="([^"]+)"`).FindAllStringSubmatch(markup, -1) {
 		texts = append(texts, m[1])
 	}
-	for _, m := range regexp.MustCompile(`t\('((?:[^'\\]|\\.)*)'`).FindAllStringSubmatch(script, -1) {
+	for _, m := range regexp.MustCompile(`(?:^|[^\w.])t\('((?:[^'\\]|\\.)*)'`).FindAllStringSubmatch(script, -1) {
 		texts = append(texts, m[1])
 	}
 	for _, text := range texts {
