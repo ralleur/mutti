@@ -18,6 +18,46 @@ import (
 // technical details from other components stay as they are.
 // TestEveryManagerMessageHasAnEnglishText keeps the table complete.
 var englishMessages = map[string]string{
+	"Anmeldung fehlgeschlagen. Bitte den Administratorzugang dieser Instanz verwenden.":                                            "Sign-in failed. Please use the administrator account of this instance.",
+	"Benutzerzugänge, Rechte, Bibliotheken und Wiedergabestand wurden verglichen.":                                                 "User accounts, permissions, libraries and playback progress were compared.",
+	"Bibliothek wiederhergestellt. %s":                                                                                             "Library restored. %s",
+	"Bitte den laufenden Vorgang abwarten.":                                                                                        "Please wait for the running operation to finish.",
+	"Das Mutti-Paket ist unvollständig: die Versionsangabe fehlt. Bitte Mutti neu installieren. Es wurde nichts verändert.":        "The Mutti package is incomplete: its version information is missing. Please reinstall Mutti. Nothing was changed.",
+	"Das Mutti-Paket wurde während des Betriebs ersetzt. Bitte Mutti beenden und neu öffnen; bis dahin wird nichts neu gestartet.": "The Mutti package was replaced while running. Please quit and reopen Mutti; until then nothing is started again.",
+	"Der Datenordner %s verweist auf einen anderen Ort und kann vor dem Update nicht gesichert werden.":                            "The data folder %s points to another place and cannot be backed up before the update.",
+	"Der Export wurde abgebrochen oder ist zu groß.":                                                                               "The export was cancelled or is too large.",
+	"Der Jellyfin-Datenordner ist lokal nicht lesbar.":                                                                             "The Jellyfin data folder cannot be read locally.",
+	"Der Jellyfin-Export konnte nicht bereitgestellt werden: %w Für entfernte Server muss der mitgelieferte Mutti-Umzugshelfer installiert und Jellyfin danach neu gestartet sein.": "The Jellyfin export could not be provided: %s For remote servers, the bundled Mutti moving helper must be installed and Jellyfin restarted afterwards.",
+	"Der Sicherungspfad gehört nicht zum ausgewählten Jellyfin-Datenordner.":                                                                                                        "The backup path does not belong to the selected Jellyfin data folder.",
+	"Der aktuelle Datenstand konnte nicht beiseitegelegt werden. Es wurde noch nichts wiederhergestellt; bitte erneut versuchen. Bereits verschobene Teile liegen in %s.":           "The current data could not be set aside. Nothing has been restored yet; please try again. Parts already moved are in %s.",
+	"Der aktuelle Zugriffsstand konnte nicht festgehalten werden. Es wurde nichts verändert.":                                                                                       "The current access state could not be recorded. Nothing was changed.",
+	"Der geschützte Export wurde abgelehnt.":                                                     "The protected export was refused.",
+	"Die Daten gehören nicht zur verwalteten Instanz.":                                           "The data does not belong to the managed instance.",
+	"Die Moduldaten konnten nicht gesichert werden.":                                             "The module data could not be backed up.",
+	"Die Prüfsumme der Sicherung stimmt nicht. Es wurde nichts verändert.":                       "The backup checksum does not match. Nothing was changed.",
+	"Die Sicherung ist keine lesbare reguläre Datei.":                                            "The backup is not a readable regular file.",
+	"Die Sicherung konnte nicht geprüft werden.":                                                 "The backup could not be verified.",
+	"Die Sicherung vor dem Update enthält nicht aufgeführte Dateien. Es wurde nichts verändert.": "The pre-update backup contains files that are not listed. Nothing was changed.",
+	"Die Sicherung vor dem Update ist unvollständig.":                                            "The pre-update backup is incomplete.",
+	"Die Sicherung vor dem Update wird wiederhergestellt …":                                      "Restoring the pre-update backup …",
+	"Die Versionsangabe des Datenstands ist beschädigt.":                                         "The version record of the data is damaged.",
+	"Die Wiederherstellung vor dem Update wurde unterbrochen. Bitte die Wiederherstellung erneut starten; der zuvor verwendete Stand liegt in %s.": "Restoring the pre-update backup was interrupted. Please start the restore again; the previously used state is in %s.",
+	"Die aktive Instanz liegt nicht im Mutti-Datenordner.":                                                                "The active instance is not inside the Mutti data folder.",
+	"Die fertige Sicherung ist auf diesem Rechner nicht lesbar. Bei Docker muss das Quellvolume lesbar eingebunden sein.": "The finished backup cannot be read on this computer. With Docker, the source volume must be mounted readable.",
+	"Die neue Sicherung konnte nicht auf private Dateirechte begrenzt werden.":                                            "The new backup could not be restricted to private file permissions.",
+	"Für die Sicherung ist nicht genug freier Speicher vorhanden.":                                                        "There is not enough free storage for the backup.",
+	"Kopieren fehlgeschlagen.": "Copying failed.",
+	"Paketversion unbekannt.":  "Package version unknown.",
+	"Sicherung konnte nicht erstellt werden. Prüfe freien Speicher und warte auf laufende Bibliotheksscans: %w": "The backup could not be created. Check free storage and wait for running library scans: %s",
+	"Unbekannte Plugin-Sicherungsdatei.":                           "Unknown plugin backup file.",
+	"Unbekannter Archivbereich.":                                   "Unknown archive section.",
+	"Unbekannter Host.":                                            "Unknown host.",
+	"Unbekannter Ursprung.":                                        "Unknown origin.",
+	"Ungültige Antwort des Umzugshelfers.":                         "Invalid response from the moving helper.",
+	"Ungültige Sicherungsdatei.":                                   "Invalid backup file.",
+	"Ungültiger Sicherungspfad.":                                   "Invalid backup path.",
+	"Unsicherer Pfad in der Sicherung.":                            "Unsafe path in the backup.",
+	"Vorgang läuft. Du kannst diese Ansicht später erneut öffnen.": "Operation in progress. You can reopen this view later.",
 	"%w Die bisherigen Einstellungen sind gesichert; es wurde keine weitere Sicherung gestartet.": "%s The previous settings are backed up; no further backup was started.",
 	"Abschließend geprüfte Sicherung": "Backup verified in the final check",
 	"Alte Gerätesitzungen und API-Schlüssel werden nicht wiederhergestellt. Geräte bitte neu koppeln.": "Old device sessions and API keys are not restored. Please pair devices again.",
@@ -280,6 +320,31 @@ func translateMessage(text string) string {
 		return fmt.Sprintf(p.english, args...)
 	}
 	return text
+}
+
+// localized returns a copy of the state with its texts in the language of
+// the request; the stored state stays German.
+func (s State) localized(r *http.Request) State {
+	if !englishRequest(r) {
+		return s
+	}
+	s.Message, s.ServiceMessage = translateMessage(s.Message), translateMessage(s.ServiceMessage)
+	s.Progress.Measurement = translateMessage(s.Progress.Measurement)
+	if s.Update != nil {
+		u := *s.Update
+		u.Message = translateMessage(u.Message)
+		s.Update = &u
+	}
+	if s.Report != nil {
+		report := *s.Report
+		report.Source = translateMessage(report.Source)
+		report.Notes = make([]string, len(s.Report.Notes))
+		for i, note := range s.Report.Notes {
+			report.Notes[i] = translateMessage(note)
+		}
+		s.Report = &report
+	}
+	return s
 }
 
 // say renders a manager message in the language of the request.

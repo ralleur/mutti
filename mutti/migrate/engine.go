@@ -689,7 +689,7 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 		report.Notes = append(report.Notes, note)
 	}
 	if input.backup != nil {
-		report.Source = "Mutti-Sicherung " + input.backup.ID
+		report.Source = fmt.Sprintf("Mutti-Sicherung %s", input.backup.ID)
 		report.Notes = []string{"Sicherung und wiederhergestellte Daten wurden verglichen.", "Medienoriginale bleiben an ihren bisherigen Speicherorten und müssen separat gesichert werden.", "Alte Gerätesitzungen und API-Schlüssel werden nicht wiederhergestellt. Geräte bitte neu koppeln."}
 		if input.verifyOnly {
 			m.setStep("complete", 7, "Wiederherstellung in einer getrennten Testinstanz geprüft. Deine aktive Bibliothek bleibt unverändert.")
@@ -753,7 +753,7 @@ func (m *Manager) importSource(ctx context.Context, input SourceInput) error {
 	if input.backup != nil {
 		if err := m.restoreHub(input.backup); err != nil {
 			m.mu.Lock()
-			m.state.Message = "Bibliothek wiederhergestellt. " + err.Error()
+			m.state.Message = fmt.Sprintf("Bibliothek wiederhergestellt. %s", err.Error())
 			m.mu.Unlock()
 		}
 	}
