@@ -92,15 +92,17 @@ try:
     print(f'qualify exit {code} after {time.time() - started:.0f}s; evidence in {root / "result"}', flush=True)
     sys.exit(code)
 finally:
-    # The setup instance stops its services on SIGINT; wait for it, so the
-    # next run finds free ports. A group that is already gone is fine.
+    # The setup process stops the services it started when it gets SIGINT
+    # (its own clean-up). Signal it directly: macOS may refuse a signal to
+    # the whole process group (EPERM), which left instances running before.
     try:
-        os.killpg(setup.pid, signal.SIGINT)
+        setup.send_signal(signal.SIGINT)
         setup.wait(timeout=90)
-    except (ProcessLookupError, PermissionError):
-        pass
-    except Exception:
+    except subprocess.TimeoutExpired:
+        setup.terminate()
         try:
-            os.killpg(setup.pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
+            setup.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            setup.kill()
+    except ProcessLookupError:
+        pass
