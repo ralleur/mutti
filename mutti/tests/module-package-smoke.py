@@ -196,6 +196,13 @@ try:
     for name, seconds in (('Nordlicht (2024)', 84), ('Sommer am See (2023)', 95), ('Lange Reise (2022)', 125), ('Schon gesehen (2023)', 88)):
         clip(media / f'{name}.mp4', seconds)
     clip(private / 'Privater Film B (2024).mp4', 92)
+    # P3/P4: the package carries a verifiable component list and the
+    # third-party notices of everything it bundles.
+    verify = subprocess.run([str(resources / 'migrate/mutti-migrate'), 'components', 'verify', str(resources)], capture_output=True, text=True)
+    check('package component list verifies', verify.returncode == 0, (verify.stderr or verify.stdout).strip())
+    components_digest = verify.stdout.split()[1]
+    notices = resources / 'licenses/THIRD-PARTY-NOTICES.txt'
+    check('third-party notices shipped', notices.exists() and notices.stat().st_size > 100_000)
     start('broker', [str(resources / 'connect/mutti-connect'), '--mode', 'broker', '--listen', f'127.0.0.1:{PORTS["broker"]}', '--stun-listen', '127.0.0.1:0'])
     manager = start('manager', [str(resources / 'migrate/mutti-migrate'), '--root', str(root / 'server'), '--server', str(resources / 'server/jellyfin'),
                                 '--web', str(resources / 'web'), '--ffmpeg', str(resources / 'ffmpeg/ffmpeg'), '--intro-skipper', str(resources / 'intro-skipper'),
@@ -218,6 +225,8 @@ try:
         time.sleep(1)
     else:
         raise AssertionError('server did not start')
+    recorded = json.loads((root / 'server' / 'data-version.json').read_text())
+    check('data version records the verified component list', recorded.get('components') == components_digest, recorded)
     password = secrets.token_urlsafe(24)
     ok(jf('POST', '/Startup/Configuration', {'ServerName': 'Mutti Module E2E', 'UICulture': 'de', 'MetadataCountryCode': 'DE', 'PreferredMetadataLanguage': 'de'}), 'config')
     ok(jf('POST', '/Startup/User', {'Name': 'Testbesitzer', 'Password': password}), 'owner')
