@@ -5,7 +5,7 @@
 // reviewed records a person selects from a measurement's candidates.
 //
 //	mutti-release keygen --id mutti-qualification-2026-10 --out KEYFILE
-//	mutti-release sign   --key KEYFILE --id ID --candidates candidates.json --out records.json [--tasks a,b] [--languages de,en]
+//	mutti-release sign   --key KEYFILE --id ID --candidates a.json[,b.json] --out records.json [--tasks a,b] [--languages de,en]
 //	mutti-release verify --file records.json
 //	mutti-release sign-components --key KEYFILE --id ID --resources Mutti.app/Contents/Resources
 package main
@@ -46,7 +46,10 @@ func main() {
 	case "sign":
 		var private []byte
 		if private, err = readKey(*key); err == nil {
-			err = hub.SignCandidates(*candidates, *out, *id, ed25519.NewKeyFromSeed(private), split(*tasks), split(*languages))
+			var path string
+			if path, err = combineCandidates(split(*candidates)); err == nil {
+				err = hub.SignCandidates(path, *out, *id, ed25519.NewKeyFromSeed(private), split(*tasks), split(*languages))
+			}
 		}
 	case "sign-components":
 		var private []byte
@@ -82,6 +85,48 @@ func signComponents(resources, id string, key ed25519.PrivateKey) error {
 	}
 	fmt.Printf("signed components.json with %s\n", id)
 	return nil
+}
+
+// combineCandidates merges the candidates of several measurements (e.g. one
+// per answer language) into one file for signing. It lives in this tool so
+// the shipped hub, whose digest is part of the evidence, stays unchanged.
+func combineCandidates(paths []string) (string, error) {
+	if len(paths) == 1 {
+		return paths[0], nil
+	}
+	type doc struct {
+		Version int               `json:"version"`
+		Issued  any               `json:"issued,omitempty"`
+		Records []json.RawMessage `json:"records"`
+		Revoked []string          `json:"revoked"`
+	}
+	combined := doc{Version: 1, Revoked: []string{}}
+	seen := map[string]bool{}
+	for _, p := range paths {
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return "", err
+		}
+		var d doc
+		if err = json.Unmarshal(raw, &d); err != nil || d.Version != 1 {
+			return "", fmt.Errorf("invalid candidates file %s", p)
+		}
+		for _, r := range d.Records {
+			var id struct{ ID string }
+			_ = json.Unmarshal(r, &id)
+			if id.ID == "" || seen[id.ID] {
+				return "", fmt.Errorf("record %q missing or twice", id.ID)
+			}
+			seen[id.ID] = true
+			combined.Records = append(combined.Records, r)
+		}
+	}
+	f, err := os.CreateTemp("", "mutti-candidates-*.json")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	return f.Name(), json.NewEncoder(f).Encode(combined)
 }
 
 func split(s string) []string {

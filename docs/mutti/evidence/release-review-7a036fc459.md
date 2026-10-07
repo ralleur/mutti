@@ -43,20 +43,25 @@ media.read, media.favorite, documents.read, photos.search) for exactly:
 
 ## Signing (owner)
 
+From the repository root, with the existing qualification key:
+
 ```
-cd mutti/hub
-S=build/qualification-session-20261007-0901   # relative to the repo root
-go run ./cmd/mutti-release sign --key "$HOME/Library/Application Support/Mutti/release-keys/<qualification key>" \
+S=build/qualification-session-20261007-0901
+(cd mutti/hub && go run ./cmd/mutti-release sign \
+  --key "$HOME/Library/Application Support/Mutti/release-keys/<qualification key file>" \
   --id mutti-qualification-2026-10 \
-  --candidates ../../$S/qualification-real-de-v6/result/candidates.json \
-  --out ../packaging/qualification/records-de.json
-# same for qualification-real-en-v4 → records-en.json, then combine
-go run ./cmd/mutti-release verify --file ../packaging/qualification/records.json
+  --candidates ../../$S/qualification-real-de-v6/result/candidates.json,../../$S/qualification-real-en-v4/result/candidates.json \
+  --out ../packaging/qualification/records.json)
+(cd mutti/hub && go run ./cmd/mutti-release verify --file ../packaging/qualification/records.json)
 ```
 
-(`SignCandidates` writes one file per call; combining two candidate files
-into one `records.json` is a small follow-up I can prepare once you agree.)
+`verify` must list the twelve records. The combining step lives in
+`mutti-release` (not shipped): the hub built from the current branch is
+still bit-identical to the measured one (`812a518260fd…`, checked). A dry
+run with a throwaway, untrusted key produced the twelve records and was
+rejected by the hub as expected.
 
-After signing: rebuild (hub digest stays `812a518260fd…`), run
-`module-package-smoke.py --expect-qualified` with the model, then the native
-AI check in kurtz.
+After signing: rebuild the package with `records.json` (hub digest
+unchanged), run `module-package-smoke.py --model qwen3.8:27b-mlx
+--model-source adopt --adopt-from … --expect-qualified`, then the native AI
+check in kurtz.
