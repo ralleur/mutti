@@ -68,10 +68,10 @@ final class NativeImportClient {
         guard data.count <= 64 * 1024 else { throw ServerController.Failure("Bitte die Importangaben prüfen.") }
         if input["Replace"] as? Bool == true {
             let alert = NSAlert()
-            alert.messageText = "Zu deiner Jellyfin-Bibliothek wechseln?"
-            alert.informativeText = "Mutti bereitet Jellyfin vor, übernimmt und prüft deine Daten. Falls nötig, startet Mutti deinen Jellyfin-Server kurz neu; laufende Wiedergaben werden dabei unterbrochen. Deine bisherige Mutti-Einrichtung bleibt auf diesem Mac erhalten. Anschließend verwendest du deinen vorhandenen Jellyfin-Zugang."
-            alert.addButton(withTitle: "Übernehmen")
-            alert.addButton(withTitle: "Abbrechen")
+            alert.messageText = NSLocalizedString("Zu deiner Jellyfin-Bibliothek wechseln?", comment: "Import confirmation")
+            alert.informativeText = NSLocalizedString("Mutti bereitet Jellyfin vor, übernimmt und prüft deine Daten. Falls nötig, startet Mutti deinen Jellyfin-Server kurz neu; laufende Wiedergaben werden dabei unterbrochen. Deine bisherige Mutti-Einrichtung bleibt auf diesem Mac erhalten. Anschließend verwendest du deinen vorhandenen Jellyfin-Zugang.", comment: "Import confirmation")
+            alert.addButton(withTitle: NSLocalizedString("Übernehmen", comment: "Import confirmation"))
+            alert.addButton(withTitle: NSLocalizedString("Abbrechen", comment: "Import confirmation"))
             let result = await alert.beginSheetModal(for: window)
             guard result == .alertFirstButtonReturn else { return false }
         }

@@ -14,7 +14,7 @@
 "Das App-Paket ist unvollständig." = "The app package is incomplete.";
 "Das App-Paket ist unvollständig. Bitte baue oder installiere Mutti erneut." = "The app package is incomplete. Please build or install Mutti again.";
 "Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll." = "Mutti stopped. You can restart the server. Details are in the local log.";
-"Der Start dauert zu lange. Prüfe das Protokoll und versuche es erneut." = "Startup is taking too long. Check the log and try again.";
+"Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut." = "Startup is taking too long. Check the log and try again.";
 
 "Einrichtung läuft" = "Setup in progress";
 "Bitte zuerst die Einrichtung abschließen." = "Please finish setup first.";
@@ -25,3 +25,20 @@
 "Bitte die offene Bestätigung abschließen." = "Please finish the open confirmation first.";
 "Bitte Mutti erneut öffnen, um die Wiederherstellung in der App zu bestätigen." = "Please reopen Mutti to confirm the restore in the app.";
 "Abbrechen" = "Cancel";
+"Bitte Mutti erneut öffnen, um den Import in der App zu bestätigen." = "Please reopen Mutti to confirm the import in the app.";
+"Bitte die HTTPS-Adresse des Vermittlungsdiensts eintragen." = "Please enter the HTTPS address of the signalling service.";
+"Bitte die Importangaben prüfen." = "Please check the import details.";
+"Bitte die offene Importbestätigung abschließen." = "Please finish the open import confirmation first.";
+"Bitte eine STUN-Adresse verwenden. Relay ist nicht aktiviert." = "Please use a STUN address. Relay is not enabled.";
+"Das App-Paket ist unvollständig. Bitte Mutti erneut installieren." = "The app package is incomplete. Please reinstall Mutti.";
+"Die lokale Importfreigabe konnte nicht vorbereitet werden." = "The local import permission could not be prepared.";
+"Direkter Fernzugriff" = "Direct remote access";
+"HTTPS-Adresse des Vermittlungsdiensts" = "HTTPS address of the signalling service";
+"Im Heimnetz kannst du sofort koppeln. Für den Zugriff unterwegs benötigt diese Testversion einen erreichbaren Vermittlungsdienst. Er überträgt Verbindungsdaten; deine Medien bleiben direkt zwischen Mutti und kurtz." = "At home you can pair right away. For access on the go, this test version needs a reachable signalling service. It only carries connection data; your media stays directly between Mutti and kurtz.";
+"Leer lassen für die Heimnetz-Kopplung. Nach einer Änderung bitte die Geräte neu koppeln. Laufende Verbindungen werden beendet." = "Leave empty for pairing at home. After a change, please pair devices again. Running connections are closed.";
+"STUN-Adresse, zum Beispiel stun:connect.example.org:3478" = "STUN address, for example stun:connect.example.org:3478";
+"Speichern" = "Save";
+"Zur Übersicht" = "Go to overview";
+"Zu deiner Jellyfin-Bibliothek wechseln?" = "Switch to your Jellyfin library?";
+"Mutti bereitet Jellyfin vor, übernimmt und prüft deine Daten. Falls nötig, startet Mutti deinen Jellyfin-Server kurz neu; laufende Wiedergaben werden dabei unterbrochen. Deine bisherige Mutti-Einrichtung bleibt auf diesem Mac erhalten. Anschließend verwendest du deinen vorhandenen Jellyfin-Zugang." = "Mutti prepares Jellyfin, takes over your data and checks it. If needed, Mutti briefly restarts your Jellyfin server; playback in progress is interrupted. Your existing Mutti setup is kept on this Mac. Afterwards you use your existing Jellyfin sign-in.";
+"Übernehmen" = "Import";

@@ -14,7 +14,7 @@
 "Das App-Paket ist unvollständig." = "Das App-Paket ist unvollständig.";
 "Das App-Paket ist unvollständig. Bitte baue oder installiere Mutti erneut." = "Das App-Paket ist unvollständig. Bitte baue oder installiere Mutti erneut.";
 "Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll." = "Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll.";
-"Der Start dauert zu lange. Prüfe das Protokoll und versuche es erneut." = "Der Start dauert zu lange. Prüfe das Protokoll und versuche es erneut.";
+"Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut." = "Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut.";
 
 "Einrichtung läuft" = "Einrichtung läuft";
 "Bitte zuerst die Einrichtung abschließen." = "Bitte zuerst die Einrichtung abschließen.";
@@ -25,3 +25,20 @@
 "Abbrechen" = "Abbrechen";
 "Bitte die offene Bestätigung abschließen." = "Bitte die offene Bestätigung abschließen.";
 "Bitte Mutti erneut öffnen, um die Wiederherstellung in der App zu bestätigen." = "Bitte Mutti erneut öffnen, um die Wiederherstellung in der App zu bestätigen.";
+"Bitte Mutti erneut öffnen, um den Import in der App zu bestätigen." = "Bitte Mutti erneut öffnen, um den Import in der App zu bestätigen.";
+"Bitte die HTTPS-Adresse des Vermittlungsdiensts eintragen." = "Bitte die HTTPS-Adresse des Vermittlungsdiensts eintragen.";
+"Bitte die Importangaben prüfen." = "Bitte die Importangaben prüfen.";
+"Bitte die offene Importbestätigung abschließen." = "Bitte die offene Importbestätigung abschließen.";
+"Bitte eine STUN-Adresse verwenden. Relay ist nicht aktiviert." = "Bitte eine STUN-Adresse verwenden. Relay ist nicht aktiviert.";
+"Das App-Paket ist unvollständig. Bitte Mutti erneut installieren." = "Das App-Paket ist unvollständig. Bitte Mutti erneut installieren.";
+"Die lokale Importfreigabe konnte nicht vorbereitet werden." = "Die lokale Importfreigabe konnte nicht vorbereitet werden.";
+"Direkter Fernzugriff" = "Direkter Fernzugriff";
+"HTTPS-Adresse des Vermittlungsdiensts" = "HTTPS-Adresse des Vermittlungsdiensts";
+"Im Heimnetz kannst du sofort koppeln. Für den Zugriff unterwegs benötigt diese Testversion einen erreichbaren Vermittlungsdienst. Er überträgt Verbindungsdaten; deine Medien bleiben direkt zwischen Mutti und kurtz." = "Im Heimnetz kannst du sofort koppeln. Für den Zugriff unterwegs benötigt diese Testversion einen erreichbaren Vermittlungsdienst. Er überträgt Verbindungsdaten; deine Medien bleiben direkt zwischen Mutti und kurtz.";
+"Leer lassen für die Heimnetz-Kopplung. Nach einer Änderung bitte die Geräte neu koppeln. Laufende Verbindungen werden beendet." = "Leer lassen für die Heimnetz-Kopplung. Nach einer Änderung bitte die Geräte neu koppeln. Laufende Verbindungen werden beendet.";
+"STUN-Adresse, zum Beispiel stun:connect.example.org:3478" = "STUN-Adresse, zum Beispiel stun:connect.example.org:3478";
+"Speichern" = "Speichern";
+"Zur Übersicht" = "Zur Übersicht";
+"Zu deiner Jellyfin-Bibliothek wechseln?" = "Zu deiner Jellyfin-Bibliothek wechseln?";
+"Mutti bereitet Jellyfin vor, übernimmt und prüft deine Daten. Falls nötig, startet Mutti deinen Jellyfin-Server kurz neu; laufende Wiedergaben werden dabei unterbrochen. Deine bisherige Mutti-Einrichtung bleibt auf diesem Mac erhalten. Anschließend verwendest du deinen vorhandenen Jellyfin-Zugang." = "Mutti bereitet Jellyfin vor, übernimmt und prüft deine Daten. Falls nötig, startet Mutti deinen Jellyfin-Server kurz neu; laufende Wiedergaben werden dabei unterbrochen. Deine bisherige Mutti-Einrichtung bleibt auf diesem Mac erhalten. Anschließend verwendest du deinen vorhandenen Jellyfin-Zugang.";
+"Übernehmen" = "Übernehmen";

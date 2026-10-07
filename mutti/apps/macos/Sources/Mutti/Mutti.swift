@@ -136,7 +136,7 @@ final class ServerController: ObservableObject {
             process.terminationHandler = { [weak self] _ in Task { @MainActor [weak self] in
                 guard let self, self.launchID == identifier, !self.stopping else { return }
                 self.ready = false; self.setupCompleted = false; self.starting = false; self.child = nil; self.nativeImportClient = nil; self.readiness?.cancel(); self.releaseLock()
-                self.error = "Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll."
+                self.error = NSLocalizedString("Mutti wurde beendet. Du kannst den Server erneut starten. Details stehen im lokalen Protokoll.", comment: "Mutti server status")
             } }
             try process.run(); child = process
             readiness = Task { [weak self] in
@@ -170,7 +170,7 @@ final class ServerController: ObservableObject {
                     }
                     attempts = waiting ? 0 : attempts + 1
                     if !observed && attempts > 90 {
-                        self.stop(); self.error = "Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut."; return
+                        self.stop(); self.error = NSLocalizedString("Der Start dauert zu lange. Prüfe das lokale Protokoll und versuche es erneut.", comment: "Mutti server status"); return
                     }
                     try? await Task.sleep(for: .seconds(1))
                 }
