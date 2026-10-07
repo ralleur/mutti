@@ -84,9 +84,27 @@ Messsonde Wiedergabe mit Rückfall auf progressiven Transcode;
   Kontoverknüpfungen bleiben nach einem Rollback entzogen; danach gekoppelte
   Geräte koppeln neu. Dabei behoben: die Nachprüfung las `connect/state.json`
   statt `connect/connect.json`. Vertrag: [contracts.md](contracts.md#updates-and-rollback-p3-mac).
-  **Nicht** im Paket oder mit echten Daten geprüft; offen: signierte
-  Komponentensätze, native Oberfläche für den blockierten Zustand,
-  Wiederherstellung auf leerem Zweitziel.
+  **Nicht** im Paket oder mit echten Daten geprüft; offen: native
+  Oberfläche für den blockierten Zustand, Wiederherstellung auf leerem
+  Zweitziel.
+- **P3 – verifizierte Komponentensätze, implementiert und synthetisch
+  geprüft** (`427696bcce`): Der Build listet jede Datei unter
+  `Contents/Resources` mit SHA-256 (`components.json`, vor `codesign`;
+  geprüft: `codesign --deep` verändert dort nichts); Releases signieren die
+  Liste (`mutti-release sign-components`, Ed25519). `mutti-migrate` prüft bei
+  jedem Start den ganzen Satz (APFS-Klon des echten Pakets: 2.898 Dateien,
+  10 Links, 0,35 s); Änderung, fehlende/zusätzliche Datei, fremde Signatur
+  oder unsignierter Release-Kanal blockieren vor jeder Datenänderung.
+  Release-Schlüssel ist noch keiner hinterlegt (Owner-Schritt); aktuelle
+  Pakete sind unsignierte Entwicklungsbuilds.
+- **Quell-/Lizenzinventar (M1/P4), offline** (`6a047d1260`):
+  `inventory.py` ordnet alle 2.908 Paketdateien zu (0 ohne Zuordnung) und
+  liest Lizenzen aus lokalen Metadaten; `notices.py` erzeugt
+  `licenses/THIRD-PARTY-NOTICES.txt` (180 Texte); llama.cpp-/mlx-c-Texte zu
+  den von Ollama gepinnten Revisionen ergänzt. Beides läuft ab dem nächsten
+  Build mit. Offen vor Auslieferung: 6 .NET-Pakete ohne Lizenzangabe,
+  Quellpflichten FFmpeg (GPL-3.0+), Server, Web, 9 Prüffälle (u. a.
+  CC-BY-SA-4.0). [Nachweis](evidence/license-inventory-2026-10-07.md).
 - **Drei unabhängige Reviews, Befunde behoben** (je mit Regressionstests,
   `go test -race` grün): P1 (`920f11a701`), P2 (`51fe393d84`: Modelldateien
   werden auf der Platte geprüft, Bindung je Modell, nur verwaltete Engine,
