@@ -147,6 +147,11 @@ package is measured with two fresh suites, frozen before their first run:
 - `mutti/tests/fixtures/qualification-real-en-v4.json`
   (SHA-256 `b938af40712f8fbe2a96c9abea6c76d531181186cf657f7ab97c8be4a4cd5117`)
 
+Dev regression before these runs: with the rule-3 addition "if nothing is
+found, search once more translated" v6-dev-10 reached 59/60 (an
+unknown-answer case cited a related hit); the addition was removed and
+v6-dev-11 reached 60/60 on the harness of the measured package.
+
 Latency (first output, complete answer; p50/p95), median tokens/s and peak
 resident engine memory are recorded and reported, not gated: the v2 latency
 limits belong to the “recommended” level.
