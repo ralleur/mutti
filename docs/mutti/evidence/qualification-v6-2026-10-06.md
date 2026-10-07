@@ -158,6 +158,33 @@ Zahnarztrechnung nicht (wie schon en-v2 M16). Behoben in `a4f1978460`
 `build/release-candidates/426e3fad81/`): Deutsch alle sechs Aufgaben
 bestanden, Englisch Medien und Fotos bestanden; nichts signiert.
 
+### real-de-v6 und real-en-v4 (07.10.2026, Gates) – Paket `7a036fc459` – **beide Sprachen, alle Aufgaben erfüllt**
+
+| Aufgabe | real-de-v6 | real-en-v4 |
+| --- | --- | --- |
+| content.assist | 84/84 | 84/84 |
+| media.search | 33/33 | 33/33 |
+| media.read | 9/9 | 9/9 |
+| media.favorite | 9/9 | 9/9 |
+| documents.read | 27/27 | 27/27 |
+| photos.search | 15/15 | 15/15 |
+
+Je 0 kritisch, 0 ungültige Marken, 0 Engine-Fehler, Nichtwissen 6/6, keine
+Reasoning-Tags. Latenz DE/EN: erste Ausgabe p95 1,3 s / 1,4 s, vollständig
+p95 7,4 s / 6,0 s; Median 59 / 51 Token/s; Engine bis 16,1 GB. Wiedergabe
+leer und unter KI-Last: alle Clips abspielbar (progressiv, > 400-fache
+Echtzeit). Bindung: Modell `5642e97495e1…`, Engine `9dc018e018b0…`
+(gebündeltes Ollama 0.32.13 mit MLX), `Mac16,9`, macOS 27.0 (26A428), Hub
+`812a518260fd…`, Kontext 8192, Temperatur 0, Thinking aus. Entwicklungs-
+regression vor dem Lauf: v6-dev-11 60/60.
+
+Provenienz: Der Build lief, während eine Protokollzeile (5 Zeilen Markdown)
+uncommittet im Baum lag, daher `dirty: true`. Geprüft: Der Hub aus dem
+sauberen Commit `7a036fc459` ist bitgleich (`812a518260fd…`), die Bindung
+gilt also für den sauberen Stand. Ergebnisse:
+`build/qualification-session-20261007-0901/qualification-real-{de-v6,en-v4}/result/`;
+App unverändert gesichert unter `build/release-candidates/7a036fc459/`.
+
 ### Offen (Gate)
 
 - **real-de-v3** (frisch, eingefroren) und **real-en-v1** (ungesehen; ein Lauf
