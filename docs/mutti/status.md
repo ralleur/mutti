@@ -131,6 +131,25 @@ Messsonde Wiedergabe mit Rückfall auf progressiven Transcode;
   90 s ohne „ready“ ab, auch während der Sicherung vor einem Update und im
   blockierten Zustand; jetzt Fortschrittsmeldung bzw. Erklärung und Knopf
   für die native Wiederherstellung (mit Bestätigung).
+- **Zweite Review-Runde, 07.10.2026 morgens** (Owner: Mac darf wieder voll
+  ausgelastet werden): P3-Review (14 Befunde) behoben in `7512e194f8`
+  (u. a. fehlende Versionsdatei schaltete den Schutz ab, Rollback ignorierte
+  den Zeiger auf die aktive Instanz und war nicht wiederaufnehmbar, Builds
+  derselben Jellyfin-Version waren nicht geordnet – jetzt nach Commit-Zeit
+  der Quellen). P2-/Harness-Review (17 Befunde) behoben in `fa9f332224`
+  (fragebezogene Behauptungserkennung, `auto_search` wieder nach
+  `tool_first`, Datei-Zustand mit ctime, Manifest nur einmal gelesen,
+  synchrone Neumessung der Engine, Prüfung vor jeder Modellrunde). Tests je
+  Fall, `go test -race` grün; 0 Abweichungen auf 528 aufgezeichneten
+  Antworten.
+- **Gate-Sätze ersetzt** (`9900fd0782`): Prompts von real-de-v3/real-en-v1
+  waren während der Harness-Arbeit sichtbar (Detektortest, eine Bewerterregel
+  aus en-v1 C06 abgeleitet); ohne Ergebnis, aber nicht mehr unvoreingenommen.
+  Neue Gates real-de-v4 und real-en-v2 (je 28 Fälle) nach den Änderungen
+  eingefroren. [Protokoll](evidence/qualification-v6-protocol.md).
+- **Entwicklungsregression auf dem Mac (Inferenz):** v6-dev-6 (Harness nach
+  der Nacht) 60/60; v6-dev-7 auf dem endgültigen Harness (`fa9f332224`) 60/60,
+  Median 58 Token/s – Voraussetzung für die Gate-Läufe erfüllt.
 - Folge: Der Harness hat sich nach v6-dev-5 geändert; **die Wirkung auf das
   Modell ist ungemessen.** `qualification-session.py` misst deshalb zuerst den
   v6-Entwicklungssatz und bricht vor den Gate-Sätzen ab, wenn er nicht 60/60
