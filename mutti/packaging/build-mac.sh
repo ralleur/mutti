@@ -52,11 +52,13 @@ cp "$ROOT/build/ffmpeg/$RID/ffmpeg" "$ROOT/build/ffmpeg/$RID/ffprobe" "$APP/Cont
 cp "$ROOT/LICENSE" "$APP/Contents/Resources/licenses/Jellyfin.txt"
 cp "$WEB/LICENSE" "$APP/Contents/Resources/licenses/Jellyfin-Web.txt"
 cp "$ROOT/mutti/design/assets/Sora-OFL.txt" "$APP/Contents/Resources/licenses/"
-cp "$ROOT/mutti/packaging/licenses/Ollama-MIT.txt" "$APP/Contents/Resources/licenses/"
-if [ "$ARCH" = arm64 ]; then cp "$ROOT/mutti/packaging/licenses/MLX-MIT.txt" "$APP/Contents/Resources/licenses/"; fi
+cp "$ROOT/mutti/packaging/licenses/Ollama-MIT.txt" "$ROOT/mutti/packaging/licenses/llama.cpp-MIT.txt" "$APP/Contents/Resources/licenses/"
+if [ "$ARCH" = arm64 ]; then cp "$ROOT/mutti/packaging/licenses/MLX-MIT.txt" "$ROOT/mutti/packaging/licenses/mlx-c-MIT.txt" "$APP/Contents/Resources/licenses/"; fi
 cp "$ROOT/mutti/THIRD-PARTY.md" "$APP/Contents/Resources/licenses/"
 cp "$ROOT/mutti/components.lock.json" "$APP/Contents/Resources/"
 python3 "$ROOT/mutti/packaging/provenance.py" "$WEB" "$APP/Contents/Resources/build-provenance.json"
+# License texts of bundled .NET, Go and npm packages, from the exact inputs.
+python3 "$ROOT/mutti/packaging/notices.py" --resources "$APP/Contents/Resources" --web "$WEB"
 # Component list of everything in Resources; mutti-migrate checks it before a
 # build touches the data. Must be the last change to Resources. A release
 # signs it with the key outside the repository (MUTTI_COMPONENT_KEY[_ID]).
@@ -67,4 +69,7 @@ fi
 # Local development signature only. Release signing/notarization is a separate gate.
 codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
+# Source/license inventory with open release points (report only).
+python3 "$ROOT/mutti/packaging/inventory.py" --resources "$APP/Contents/Resources" --web "$WEB" \
+  --json "$ROOT/build/macos/$RID/license-inventory.json" --md "$ROOT/build/macos/$RID/license-inventory.md"
 echo "$APP"
