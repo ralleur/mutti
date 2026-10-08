@@ -8,14 +8,14 @@ wird nie committet, in Logs ausgegeben oder in einen Chat kopiert.
 | Zweck | Kennung (Beispiel) | Öffentlicher Schlüssel im Code | Signiert |
 | --- | --- | --- | --- |
 | KI-Freigabeeinträge | `mutti-qualification-2026-10` (vorhanden) | `trustedReleaseKeys` in `mutti/hub/attestation.go` | ausgewählte, geprüfte Kandidaten einer Messung |
-| Komponentenliste des Pakets | z. B. `mutti-release-2026-10` (**noch nicht angelegt**) | `trustedComponentKeys` in `mutti/migrate/components.go` | `Contents/Resources/components.json` jedes Release-Pakets |
+| Komponentenliste des Pakets | `mutti-release-2026-10` (vorhanden seit 08.10.2026) | `trustedComponentKeys` in `mutti/migrate/components.go` | `Contents/Resources/components.json` jedes Release-Pakets |
 
 ## Komponentenschlüssel anlegen (einmalig, Owner)
 
 ```
 cd mutti/hub
 go run ./cmd/mutti-release keygen --id mutti-release-2026-10 \
-  --out "$HOME/Library/Application Support/Mutti/release-keys/components.key"
+  --out "$HOME/Library/Application Support/Mutti/release-keys/mutti-release-2026-10.key"
 ```
 
 Die Ausgabe nennt Kennung und öffentlichen Schlüssel. Den öffentlichen
@@ -27,7 +27,7 @@ still akzeptiert wird.
 ## Release-Build signieren
 
 ```
-MUTTI_COMPONENT_KEY="$HOME/Library/Application Support/Mutti/release-keys/components.key" \
+MUTTI_COMPONENT_KEY="$HOME/Library/Application Support/Mutti/release-keys/mutti-release-2026-10.key" \
 MUTTI_COMPONENT_KEY_ID=mutti-release-2026-10 \
 bash mutti/packaging/build-mac.sh
 build/macos/osx-arm64/Mutti.app/Contents/Resources/migrate/mutti-migrate \
@@ -43,7 +43,7 @@ builds (`local-development`) laufen unsigniert und werden so vermerkt.
 Nur nach Review der Messung und ausdrücklichem OK des Owners:
 
 ```
-go run ./cmd/mutti-release sign --key ".../release-keys/<qualification>.key" \
+go run ./cmd/mutti-release sign --key "$HOME/Library/Application Support/Mutti/release-keys/mutti-qualification-2026-10.key" \
   --id mutti-qualification-2026-10 --candidates <messung>/result/candidates.json \
   --out mutti/packaging/qualification/records.json [--tasks …] [--languages de,en]
 go run ./cmd/mutti-release verify --file mutti/packaging/qualification/records.json

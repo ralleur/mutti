@@ -1,6 +1,6 @@
 # Umsetzungsstand
 
-Stand: 6. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
+Stand: 8. Oktober 2026. **Lokale Entwicklungsvorschau; der Gesamtplan ist nicht abgeschlossen.**
 Die Architektur-Review vom 6. Oktober und die Owner-Entscheidungen dazu stehen in
 [review-2026-10-06.md](review-2026-10-06.md) und [plan.md, Abschnitt 15](plan.md#15-entscheidungsprotokoll-vom-6-oktober-2026).
 Seitdem gilt: erste Iteration Mac-only (Apple Silicon, MLX), kein zentrales
@@ -12,6 +12,53 @@ Stand v12.1. Die Umsetzung liegt zunächst auf `codex/mutti-foundation`; `main`
 ist die Review-Basis. Der Web-Commit ist im Komponentenmanifest festgelegt.
 
 ## Aktuelle Übergabe und nächste Schritte
+
+**Stand 08.10.2026, vormittags – Integration übernommen, KI-Freigabe signiert,
+Komponentenschlüssel angelegt, qualifiziertes Paket geprüft.** Owner-Entscheidungen
+im Chat: (1) Integrationsstand übernehmen und pushen, (2) Freigabe für
+`7a036fc459` signieren, (3) Komponentenschlüssel anlegen, (4) Agentenarbeit.
+Branch `codex/mutti-release-signing` (Haupt-Worktree) auf `codex/mutti-foundation`
+`03127c7573`; Nachweis: [release-signing-2026-10-08](evidence/release-signing-2026-10-08.md).
+
+- **Übernahme:** `codex/mutti-integration` nach erneutem Review (`go vet`,
+  `go test -race` hub/migrate/connect, `swift test` 10/10, `git diff --check`)
+  fast-forward nach `codex/mutti-foundation` übernommen und gepusht
+  (`b855397f7d..03127c7573`); PR #1 (Draft) zeigt den Stand.
+- **P2, Freigabe signiert** (`89737197d0`): zwölf Einträge (de/en × sechs
+  Aufgaben) der Gate-Sätze real-de-v6/real-en-v4 mit `mutti-qualification-2026-10`
+  signiert → `mutti/packaging/qualification/records.json`; `mutti-release verify`
+  listet alle zwölf, gültig bis 2027-04-05. Hub aus dem Baum bytegleich zum
+  gemessenen Kandidaten (`812a518260fd…`). Private Schlüssel nie gelesen.
+- **P3, Komponentenschlüssel** (`7084e5d3af`): `mutti-release-2026-10` außerhalb
+  des Repos angelegt, öffentlicher Schlüssel in `trustedComponentKeys`;
+  Runbook [release-keys.md](release-keys.md) mit den tatsächlichen Dateinamen.
+- **Paket** (`build-mac.sh` auf sauberem `7084e5d3af`, Kanal
+  `local-development`, ad hoc): `components verify` → `signed`, `records.json`
+  im Paket, Hub und `ai-engine/` identisch zum Kandidaten, Provenienz sauber.
+- **Paket-Smoke mit erwarteter Qualifikation:** erster Lauf scheiterte nur an
+  der zu engen AT-06-Prüfung (Modell: „1 Minute 35 Sekunden“ statt „95“);
+  Prüfung erweitert (`23ba75d2b2`), zweiter Lauf **63/63** inklusive AT-03 bis
+  AT-12 und AT-16 mit echter KI im Paket – damit ist die positive KI-Strecke
+  (P1-E2E mit P2-Qualifikation) erstmals im Paket bestanden.
+- **Native KI-Prüfung kurtz** (`d1f2d6c7`, iPad-Pro-Simulator iOS 27.0, gegen
+  gehaltene Instanz, 62/62): Kopplung per Link, Besitzerfreigabe,
+  gerätegebundene Anmeldung; Mediathek zeigt Alle/Fotos/Dokumente und „Fragen“;
+  serverseitiger Verlauf mit Quellen und bestätigtem Vorschlag sichtbar; neue
+  Frage mit Werkzeugstatus, Antwort und Quellenkarte in rund 20 s.
+- **Supervisor im Paket:** Jellyfin-Kind der Testinstanz mit SIGKILL beendet →
+  nach 1 s Neustarthinweis, nach 9 s wieder bereit, Connect neu gestartet,
+  Zähler nach 60 s auf 0; Client-Tunnel danach weiter nutzbar. Nicht geprüft:
+  Aufgeben nach Backoff, „Paket ersetzt“, Anmeldeobjekt/Wachhalten der App.
+- **Doku:** `contracts.md` (P2 erste Freigabe, P3 Schlüssel vorhanden),
+  `plan.md` §18 (Stand der Signierung), `release-keys.md`.
+- **Übernahme:** Branch nach den oben genannten Prüfungen per Merge in
+  `codex/mutti-foundation` übernommen und gepusht (Agent, keine Fremdreview).
+- **Nächste Schritte:** Developer-ID-Signatur und Notarisierung (Identität
+  „Developer ID Application“ fehlt im Schlüsselbund; vorhanden sind nur Apple
+  Distribution/Development) mit anschließender Messung auf dem signierten
+  Paket und neuen frischen Gate-Sätzen; §4.1 Identität auf Installationsebene vor
+  der ersten externen Kopplung; P3 native Oberfläche für den gesperrten Zustand
+  und Restore auf leerem Zweitziel; Lizenz-Prüffälle.
 
 **Stand 07.10.2026, vormittags – Planverfeinerung (PR #2) mit P2/P3
 zusammengeführt.** Branch `codex/mutti-integration` (Worktree

@@ -182,7 +182,10 @@ Implemented P0 boundaries:
 - Synthetic test grants exist only in `_test.go`. The isolated casting harness
   may exercise fake backends; this never qualifies a product deployment.
 
-P2 (implemented, nothing promoted yet): the hub measures its own deployment —
+P2 (implemented; the first promotion was signed on 2026-10-08: twelve DE/EN
+task records for the measured deployment of package `7a036fc459`, valid until
+2027-04-05, see [release-signing-2026-10-08](evidence/release-signing-2026-10-08.md)):
+the hub measures its own deployment —
 engine directory digest (bundled engine incl. MLX kernels, links must stay
 inside it, re-measured after every engine start), sandbox network lock, exact
 Mac model/chip/cores/memory, macOS build and its own executable digest. Model
@@ -294,8 +297,10 @@ or recorded data exists.
   the newest of every Jellyfin release.
 - The native Mac app shows the pre-update backup and the blocked state and
   offers the rollback. Not yet implemented: restore of a snapshot onto an
-  empty second target, and the release key itself (no key is trusted yet, so
-  every current package is an unsigned development build).
+  empty second target. The component release key exists since 2026-10-08
+  (`mutti-release-2026-10`, public key in `trustedComponentKeys`): a package
+  built with `MUTTI_COMPONENT_KEY` verifies as `signed`; a build without the
+  key stays an unsigned development build.
 
 ## Open decisions
 

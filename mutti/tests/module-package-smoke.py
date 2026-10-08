@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import signal
 import socket
@@ -428,7 +429,9 @@ try:
         check('AT-03 Streaming deltas and tool status before completion', any(e['type'] == 'delta' for e in events) and any(e['type'] == 'tool' for e in events))
         run2, _, done2 = alpha.ask(cid, 'Wie lange dauert der zweite Treffer?')
         report['at06'] = done2['message']['text']
-        check('AT-06 Follow-up refers to the second hit (95 seconds)', '95' in done2['message']['text'], done2['message']['text'])
+        # 95 seconds may be phrased as "95 Sekunden", "1 Minute 35 Sekunden" or "1:35".
+        says_95s = lambda t: '95' in t or '1:35' in t or re.search(r'1\s*(Minute|Min\.?)\w*\s*(und\s*)?35', t) is not None
+        check('AT-06 Follow-up refers to the second hit (95 seconds)', says_95s(done2['message']['text']), done2['message']['text'])
         invoice_pdf = subprocess.check_output([sys.executable, '-c', 'import importlib.util,sys;spec=importlib.util.spec_from_file_location("t",sys.argv[1]);t=importlib.util.module_from_spec(spec);spec.loader.exec_module(t);sys.stdout.buffer.write(t.pdf([["Stadtwerke Musterstadt","Rechnung RE-2026-0815","Rechnungsbetrag: 128,40 EUR","Faellig am 15.11.2026"]]))', str(repo / 'mutti/tests/module-testenv.py')])
         status, attachment = alpha.call('POST', f'ai/conversations/{cid}/attachments', invoice_pdf, {'Content-Type': 'application/pdf', 'X-Filename': 'rechnung.pdf'})
         check('AT-07 PDF attachment text extracted locally', status == 201 and attachment['extraction'] == 'ok', attachment)
