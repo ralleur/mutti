@@ -35,9 +35,11 @@ const (
 var errNoComponentList = errors.New("no component list")
 
 // trustedComponentKeys are the release keys (key ID -> Ed25519 public key,
-// base64). The private keys live outside the repository; until the owner
-// creates the release key, every package is an unsigned development build.
-var trustedComponentKeys = map[string]string{}
+// base64). The private keys live outside the repository; a package built
+// without the release key stays an unsigned development build.
+var trustedComponentKeys = map[string]string{
+	"mutti-release-2026-10": "b3wZu5yDpeWvJAtS2n1BKf0Xs9cbwGxgDz2hay97JAs=",
+}
 
 type componentManifest struct {
 	Schema int               `json:"schema"`
