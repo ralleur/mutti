@@ -1129,6 +1129,11 @@ Die Review-Entscheidungen (Abschnitt 15) und der Ausbau P0–P4 wurden am
   schreiben (in `build-mac.sh` umgesetzt), auf genau diesem Paket mit
   `mutti-hub qualify` messen, erst dann Freigaben signieren; danach Notarisierung
   und Stapling und eine Kontrolle, dass die gebundenen Digests unverändert sind.
+  Stand 08.10.2026 (Owner-Entscheidung): Die Freigaben des ad hoc signierten
+  Kandidaten `7a036fc459` sind signiert und das Paket trägt eine signierte
+  Komponentenliste (`mutti-release-2026-10`); das gilt für die lokale
+  Entwicklung und Abnahme, nicht für ein Developer-ID-Release
+  ([Nachweis](evidence/release-signing-2026-10-08.md)).
 - **Verfügbarkeit (M2) ersetzt das frühere Neustartbudget.** Der Supervisor mit
   Backoff übernimmt Neustarts; die Prüfung nach einem Update nutzt dessen
   Zustand (aufgegebener Neustart → Update gesperrt).
