@@ -1,0 +1,17 @@
+name: mutti-rendezvous
+services:
+  rendezvous:
+    image: mutti-rendezvous:preview
+    build:
+      context: ../../..
+      dockerfile: mutti/packaging/rendezvous/Dockerfile
+    ports:
+      - "127.0.0.1:18600:18600"
+      - "3478:3478/udp"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 64
+    restart: unless-stopped

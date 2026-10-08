@@ -1,0 +1,51 @@
+{
+  "project": "mutti-qualify-c872c511fa",
+  "images": {
+    "immich": "ghcr.io/immich-app/immich-server@sha256:c15bff75068effb03f4355997d03dc7e0fc58720c2b54ad6f7f10d1bc57efaa5",
+    "database": "ghcr.io/immich-app/postgres@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23",
+    "valkey": "valkey/valkey@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9",
+    "paperless": "ghcr.io/paperless-ngx/paperless-ngx@sha256:6c86cad803970ea782683a8e80e7403444c5bf3cf70de63b4d3c8e87500db92f",
+    "redis": "redis@sha256:3055dc25265b0c19ec90a1756dad4e0faff6f79e2557a6ac3d1274e39ee906f6"
+  },
+  "started": 1791236069.541139,
+  "checks": [
+    "Immich accepts actual synthetic PNG",
+    "Asset owner matches uploading user",
+    "Original download is byte-identical",
+    "Cross-user access denied: photos/assets/f2d61bf3-63fe-4085-a389-163992eaa481",
+    "Cross-user access denied: photos/assets/f2d61bf3-63fe-4085-a389-163992eaa481/original",
+    "Metadata search does not reveal other user asset",
+    "Duplicate upload reuses existing original",
+    "Scoped API key reads own asset",
+    "Cross-user access denied: photos/admin/users",
+    "Cross-user access denied: photos/assets/f2d61bf3-63fe-4085-a389-163992eaa481",
+    "Paperless returns asynchronous import task",
+    "Document processing reaches SUCCESS",
+    "Paperless full-text search finds processed invoice",
+    "Document text and owner are retained",
+    "Cross-user access denied: docs/documents/1/",
+    "Cross-user access denied: docs/documents/1/download/",
+    "Document search respects user permissions",
+    "Paperless original download is byte-identical",
+    "Upstream Paperless export completed",
+    "Cross-user access denied: restored/documents/1/",
+    "Independent Paperless restore preserves original bytes",
+    "Independent restore retains document ownership and extracted text",
+    "Cross-user access denied: restored/documents/1/",
+    "Immich restart preserves original and session",
+    "Paperless restart preserves original and token"
+  ],
+  "limitations": [
+    "API qualification, no Mutti adapter or native client",
+    "No HEIC/live-photo/background backup coverage",
+    "Text PDF only; OCR scan quality pending",
+    "Same Docker Desktop host; not physical NAS or native Mac packaging"
+  ],
+  "hazards": {
+    "paperless_task_metadata_visible_to_other_user_with_task_permission": false
+  },
+  "passed": true,
+  "finished": 1791236117.8695638,
+  "cleanup_completed": true,
+  "runner_sha256": "3426de33c0b56ad6c47eecfccda2feecf533a6d06d86d3b74069646da330f3ec"
+}

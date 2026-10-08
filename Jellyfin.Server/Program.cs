@@ -71,6 +71,27 @@ namespace Jellyfin.Server
         /// <returns><see cref="Task" />.</returns>
         public static Task Main(string[] args)
         {
+            // Local import utility: no host, plugins or network listener are started.
+            if (args.Length > 0 && args[0] == "--mutti-intro-snapshot")
+            {
+                try
+                {
+                    if (args.Length != 3)
+                    {
+                        throw new ArgumentException("Expected source and new snapshot directory.");
+                    }
+
+                    global::Mutti.IntroSkipper.IntroSnapshot.Create(args[1], args[2]);
+                }
+                catch (Exception)
+                {
+                    Environment.ExitCode = 1;
+                    return Console.Error.WriteLineAsync("Intro Skipper could not be snapshotted consistently. Check data access and database integrity.");
+                }
+
+                return Task.CompletedTask;
+            }
+
             static Task ErrorParsingArguments(IEnumerable<Error> errors)
             {
                 Environment.ExitCode = 1;

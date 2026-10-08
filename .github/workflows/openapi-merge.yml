@@ -9,6 +9,7 @@ on:
 jobs:
   publish-openapi:
     name: OpenAPI - Publish Artifact
+    if: github.repository == 'jellyfin/jellyfin'
     uses: ./.github/workflows/openapi-generate.yml
     permissions:
       contents: read

@@ -1,0 +1,29 @@
+name: mutti-foundation-local-test
+services:
+  mutti:
+    image: mutti:autonomy-20261006
+    platform: linux/arm64
+    user: "${MUTTI_TEST_UID:?Start with Start-Docker-Test.command}:${MUTTI_TEST_GID:?Start with Start-Docker-Test.command}"
+    ports:
+      - "127.0.0.1:18594:18594"
+      - "127.0.0.1:18595:18595"
+      - "127.0.0.1:18597:8096"
+      - "127.0.0.1:18599:18599"
+      - "41000-41031:41000-41031/udp"
+    environment:
+      MUTTI_LAN_ORIGIN: "http://127.0.0.1:18599"
+      MUTTI_SIGNAL_URL: ""
+      MUTTI_STUN_URL: ""
+      MUTTI_UDP_MIN: "41000"
+      MUTTI_UDP_MAX: "41031"
+    volumes:
+      - "./Testdaten:/config"
+      - "./Testcache:/cache"
+      - "./Testmedien:/media:ro"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"

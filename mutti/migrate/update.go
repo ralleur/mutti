@@ -1,0 +1,975 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+package migrate
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+)
+
+// Recoverable updates (P3). Jellyfin migrates its database when a newer
+// server starts and has no general downgrade. Before a different server build
+// touches the data, the manager therefore takes an offline snapshot while
+// the server is stopped. An older build never starts on data a newer build
+// may already have migrated; it offers the matching snapshot instead.
+
+// dataVersion identifies the server build that owns the data stage.
+type dataVersion struct {
+	Schema   int    `json:"schema"`
+	Jellyfin string `json:"jellyfin"` // packaged Jellyfin version, e.g. "12.1"
+	Build    string `json:"build"`    // server source identity of the package
+	Product  string `json:"product"`  // Mutti package version
+	// Components is the digest of the package's component list; two
+	// development builds of the same commit differ here. Empty for packages
+	// without a list and data recorded before it existed.
+	Components string `json:"components,omitempty"`
+	Signed     bool   `json:"signed,omitempty"`  // component list signed with a release key
+	Channel    string `json:"channel,omitempty"` // "release" requires a signed component list
+	// CommitTime of the server sources orders builds of the same Jellyfin
+	// release (zero for data recorded before it was kept).
+	CommitTime int64     `json:"commitTime,omitempty"`
+	Recorded   time.Time `json:"recorded"`
+}
+
+func (v dataVersion) same(o dataVersion) bool {
+	return v.Jellyfin == o.Jellyfin && v.Build == o.Build && (v.Components == "" || o.Components == "" || v.Components == o.Components)
+}
+
+func (v dataVersion) label() string {
+	build := ""
+	if len(v.Build) >= 10 && v.Build != "unknown" {
+		build = ", Build " + v.Build[:10]
+	}
+	if v.Product != "" {
+		return "Mutti " + v.Product + " (Jellyfin " + v.Jellyfin + build + ")"
+	}
+	return "Jellyfin " + v.Jellyfin + build
+}
+
+// olderBuild reports a package built from older sources than the data: a
+// lower Jellyfin release, or the same release from an older server commit.
+// A package without a build time never counts as newer than data that has
+// one; data recorded before build times were kept orders by release only.
+func olderBuild(current, data dataVersion) bool {
+	if data.Jellyfin == "unknown" {
+		return false
+	}
+	if c := compareVersions(current.Jellyfin, data.Jellyfin); c != 0 {
+		return c < 0
+	}
+	if data.CommitTime == 0 {
+		return false
+	}
+	return current.CommitTime < data.CommitTime
+}
+
+// UpdateState is shown to the owner; snapshots are listed by ID only.
+type UpdateState struct {
+	ID       string      `json:"id"`
+	State    string      `json:"state"` // pending, verified, failed, blocked, rolling_back, rolled_back
+	From     dataVersion `json:"from"`
+	To       dataVersion `json:"to"`
+	Snapshot string      `json:"snapshot,omitempty"`
+	// Keep is the folder (relative to the root) that holds the replaced data
+	// of a rollback; an interrupted rollback resumes with it.
+	Keep     string     `json:"keep,omitempty"`
+	Started  time.Time  `json:"started"`
+	Finished *time.Time `json:"finished,omitempty"`
+	Message  string     `json:"message,omitempty"`
+}
+
+type snapshotManifest struct {
+	Schema  int               `json:"schema"`
+	ID      string            `json:"id"`
+	Created time.Time         `json:"created"`
+	Version dataVersion       `json:"version"` // data stage captured (the version before the update)
+	Active  string            `json:"active"`  // instance path relative to the root
+	Hashes  map[string]string `json:"hashes"`  // relative path -> sha256
+	Links   map[string]string `json:"links,omitempty"`
+	Bytes   int64             `json:"bytes"`
+}
+
+// packageVersion reads the shipped component manifest next to the server.
+// Without one (development runs) the update guard is not active.
+func (o Options) resources() string { return filepath.Dir(filepath.Dir(o.Server)) }
+
+func (o Options) packageVersion() (dataVersion, bool) {
+	if o.Server == "" {
+		return dataVersion{}, false
+	}
+	resources := o.resources()
+	var lock struct {
+		Version  string `json:"version"`
+		Jellyfin struct {
+			Version      string `json:"version"`
+			ServerCommit string `json:"serverCommit"`
+		} `json:"jellyfin"`
+	}
+	b, err := os.ReadFile(filepath.Join(resources, "components.lock.json"))
+	if err != nil || json.Unmarshal(b, &lock) != nil || lock.Jellyfin.Version == "" {
+		return dataVersion{}, false
+	}
+	v := dataVersion{Schema: 1, Jellyfin: lock.Jellyfin.Version, Build: lock.Jellyfin.ServerCommit, Product: lock.Version}
+	// The package's own server commit distinguishes Mutti builds of the same
+	// Jellyfin release; a dirty development tree gets a content-free marker.
+	var provenance struct {
+		Channel string `json:"channel"`
+		Server  struct {
+			Commit     string `json:"commit"`
+			CommitTime int64  `json:"commitTime"`
+			Dirty      bool   `json:"dirty"`
+		} `json:"server"`
+	}
+	if b, err = os.ReadFile(filepath.Join(resources, "build-provenance.json")); err == nil && json.Unmarshal(b, &provenance) == nil && provenance.Server.Commit != "" {
+		v.Build = provenance.Server.Commit
+		if provenance.Server.Dirty {
+			v.Build += "+dirty"
+		}
+		v.Channel, v.CommitTime = provenance.Channel, provenance.Server.CommitTime
+	}
+	if b, err = os.ReadFile(filepath.Join(resources, componentsFile)); err == nil {
+		sum := sha256.Sum256(b)
+		v.Components = hex.EncodeToString(sum[:])
+	}
+	return v, true
+}
+
+// checkPackage verifies the component set before the server starts. A
+// damaged or modified package, or a release without a valid signature,
+// blocks the start; nothing has changed yet.
+func (m *Manager) checkPackage(v *dataVersion) error {
+	m.setPhase("update", "Programmpaket wird geprüft …")
+	defer m.setPhase("idle", "")
+	check, err := VerifyComponents(m.Options.resources())
+	switch {
+	case errors.Is(err, errNoComponentList) && v.Channel != "release":
+		return nil // development build without a component list
+	case errors.Is(err, errNoComponentList):
+		return errors.New("Dieses Mutti-Paket enthält keine Komponentenliste. Bitte Mutti neu installieren. Es wurde nichts verändert.")
+	case err != nil:
+		return fmt.Errorf("Das Mutti-Paket ist beschädigt oder verändert (%s). Bitte Mutti neu installieren. Es wurde nichts verändert.", err.Error())
+	case v.Channel == "release" && !check.Signed:
+		return errors.New("Dieses Mutti-Paket ist nicht mit dem Release-Schlüssel signiert. Bitte Mutti aus der offiziellen Quelle installieren. Es wurde nichts verändert.")
+	}
+	v.Components, v.Signed = check.Digest, check.Signed
+	return nil
+}
+
+// compareVersions orders dotted numeric versions ("12.1" < "12.10").
+func compareVersions(a, b string) int {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < max(len(pa), len(pb)); i++ {
+		var x, y int
+		if i < len(pa) {
+			x, _ = strconv.Atoi(pa[i])
+		}
+		if i < len(pb) {
+			y, _ = strconv.Atoi(pb[i])
+		}
+		if x != y {
+			if x < y {
+				return -1
+			}
+			return 1
+		}
+	}
+	return 0
+}
+
+func (m *Manager) dataVersionPath() string { return filepath.Join(m.Options.Root, "data-version.json") }
+func (m *Manager) updatePath() string      { return filepath.Join(m.Options.Root, "update.json") }
+func (m *Manager) snapshotDir() string     { return filepath.Join(m.Options.Root, "update-snapshots") }
+
+func (m *Manager) readUpdate() (*UpdateState, error) {
+	b, err := os.ReadFile(m.updatePath())
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	var u UpdateState
+	if err != nil || json.Unmarshal(b, &u) != nil {
+		return nil, errors.New("Der Update-Nachweis ist beschädigt.")
+	}
+	return &u, nil
+}
+
+func (m *Manager) writeUpdate(u *UpdateState) error {
+	b, _ := json.Marshal(u)
+	return privateWrite(m.updatePath(), b)
+}
+
+func (m *Manager) writeDataVersion(v dataVersion) error {
+	v.Recorded = time.Now().UTC()
+	b, _ := json.Marshal(v)
+	return privateWrite(m.dataVersionPath(), b)
+}
+
+// hasData reports an instance that a server has already initialised.
+func hasData(instance string) bool {
+	entries, err := os.ReadDir(filepath.Join(instance, "data"))
+	return err == nil && len(entries) > 0
+}
+
+// errUpdateBlocked keeps the server stopped; the state explains why.
+var errUpdateBlocked = errors.New("update blocked")
+
+// prepareStart runs before the server is launched. It returns nil to start,
+// errUpdateBlocked when this build must not touch the data.
+func (m *Manager) prepareStart() error {
+	current, ok := m.Options.packageVersion()
+	if !ok {
+		// Development runs have neither a component list nor recorded data.
+		// A package that lost its version file must not start unguarded.
+		if m.Options.Server != "" && (fileExists(filepath.Join(m.Options.resources(), componentsFile)) || fileExists(m.dataVersionPath())) {
+			return m.blockUpdate(&UpdateState{State: "blocked", Started: time.Now().UTC()},
+				"Das Mutti-Paket ist unvollständig: die Versionsangabe fehlt. Bitte Mutti neu installieren. Es wurde nichts verändert.")
+		}
+		return nil
+	}
+	active := m.State().Active
+	m.removeIncompleteSnapshots()
+	update, err := m.readUpdate()
+	if err != nil {
+		return m.blockUpdate(&UpdateState{State: "blocked", To: current, Started: time.Now().UTC()}, err.Error())
+	}
+	// A block is decided anew on every attempt; only the stored record stays.
+	m.setUpdate(update)
+	if m.State().Phase == "update_blocked" {
+		m.setPhase("idle", "")
+	}
+	// The whole component set is checked on every start (about 0.4 s for
+	// the 800 MB Mac package); a damaged or modified package touches nothing.
+	if err := m.checkPackage(&current); err != nil {
+		return m.blockUpdate(&UpdateState{State: "blocked", To: current, Started: time.Now().UTC()}, err.Error())
+	}
+	m.mu.Lock()
+	m.admitted = current
+	m.mu.Unlock()
+	// An interrupted rollback is finished first; until then nothing starts.
+	if update != nil && update.State == "rolling_back" {
+		return m.blockUpdate(update, fmt.Sprintf("Die Wiederherstellung vor dem Update wurde unterbrochen. Bitte die Wiederherstellung erneut starten; der zuvor verwendete Stand liegt in %s.", update.Keep))
+	}
+	// An unfinished or failed update: its target build continues; a newer
+	// build (e.g. a fix) takes it over and keeps the original snapshot. The
+	// previous or any older build must not open possibly migrated data.
+	if update != nil && (update.State == "pending" || update.State == "failed") {
+		switch {
+		case update.To.same(current):
+		case !update.From.same(current) && !olderBuild(current, update.To):
+			update.To = current
+			update.Message = "Eine neuere Version übernimmt das laufende Update; die Sicherung vor dem Update bleibt gültig."
+		default:
+			return m.blockUpdate(update, fmt.Sprintf("Der Datenstand wurde bereits von %s geöffnet. Diese Version darf ihn nicht verwenden. Bitte %s oder neuer verwenden oder die Sicherung vor dem Update wiederherstellen.", update.To.label(), update.To.label()))
+		}
+		if update.State == "failed" {
+			update.State, update.Finished, update.Message = "pending", nil, "Neuer Prüfversuch nach dem Update."
+		}
+		if err := m.writeUpdate(update); err != nil {
+			return err
+		}
+		m.setUpdate(update)
+		return nil
+	}
+	var stored dataVersion
+	b, err := os.ReadFile(m.dataVersionPath())
+	switch {
+	case os.IsNotExist(err) && !hasData(active):
+		return m.writeDataVersion(current) // fresh installation
+	case os.IsNotExist(err):
+		stored = dataVersion{Schema: 1, Jellyfin: "unknown", Build: "unknown"} // data from before this guard
+	case err != nil || json.Unmarshal(b, &stored) != nil:
+		return m.blockUpdate(&UpdateState{State: "blocked", To: current, Started: time.Now().UTC()}, "Die Versionsangabe des Datenstands ist beschädigt.")
+	}
+	if stored.same(current) {
+		return nil
+	}
+	if olderBuild(current, stored) {
+		blocked := &UpdateState{State: "blocked", From: stored, To: current, Started: time.Now().UTC()}
+		if snap := m.findSnapshot(current); snap != "" {
+			blocked.Snapshot = snap
+		}
+		return m.blockUpdate(blocked, fmt.Sprintf("Diese Version (%s) ist älter als der Datenstand (%s). Ein älteres Programm kann migrierte Daten nicht sicher öffnen.",
+			current.label(), stored.label()))
+	}
+	// A new build: snapshot first, then let the server migrate.
+	update = &UpdateState{ID: randomID(), State: "pending", From: stored, To: current, Started: time.Now().UTC()}
+	m.setPhase("update", "Sicherung vor dem Update wird erstellt …")
+	snap, err := m.createSnapshot(active, stored)
+	if err != nil {
+		return m.blockUpdate(&UpdateState{State: "blocked", From: stored, To: current, Started: update.Started},
+			fmt.Sprintf("Vor dem Update konnte keine vollständige Sicherung erstellt werden: %s Es wurde nichts verändert.", err.Error()))
+	}
+	update.Snapshot = snap
+	if err = m.writeUpdate(update); err != nil {
+		return err
+	}
+	m.setUpdate(update)
+	m.setPhase("idle", "")
+	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
+func (m *Manager) setUpdate(u *UpdateState) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if u == nil {
+		m.state.Update = nil
+		return
+	}
+	snapshot := *u
+	m.state.Update = &snapshot
+}
+
+func (m *Manager) blockUpdate(u *UpdateState, message string) error {
+	if u.State != "rolling_back" { // an interrupted rollback stays recognisable
+		u.State = "blocked"
+	}
+	u.Message = message
+	m.setUpdate(u)
+	m.setPhase("update_blocked", message)
+	return errUpdateBlocked
+}
+
+// verifyUpdate is called while the server runs. The update counts as done
+// once the new server answers with the packaged version, setup is complete
+// and module and device state are still readable.
+func (m *Manager) verifyUpdate(serverVersion string, setupComplete bool) {
+	m.mu.Lock()
+	u := m.state.Update
+	m.mu.Unlock()
+	if u == nil || u.State != "pending" || !setupComplete || !strings.HasPrefix(serverVersion, u.To.Jellyfin+".") {
+		return
+	}
+	if err := checkModuleState(m.hubDirectory(), m.State().Active); err != nil {
+		m.failUpdate(u, err.Error())
+		return
+	}
+	now := time.Now().UTC()
+	verified := *u
+	verified.State, verified.Finished, verified.Message = "verified", &now, "Update geprüft. Der Datenstand vor dem Update bleibt als Sicherung erhalten."
+	if err := m.writeDataVersion(u.To); err != nil {
+		return
+	}
+	if err := m.writeUpdate(&verified); err != nil {
+		return
+	}
+	m.setUpdate(&verified)
+	m.pruneSnapshots(2)
+}
+
+func (m *Manager) failUpdate(u *UpdateState, reason string) {
+	now := time.Now().UTC()
+	failed := *u
+	failed.State, failed.Finished = "failed", &now
+	failed.Message = fmt.Sprintf("Das Update konnte nicht abgeschlossen werden (%s). Der Datenstand vor dem Update ist gesichert; die vorherige Mutti-Version bietet die Wiederherstellung an.", reason)
+	_ = m.writeUpdate(&failed)
+	m.setUpdate(&failed)
+}
+
+// checkModuleState makes sure module and device state still parse.
+func checkModuleState(hubDir, active string) error {
+	for _, path := range []string{filepath.Join(hubDir, "hub.json"), filepath.Join(active, "connect", "connect.json")} {
+		b, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		var v any
+		if err != nil || json.Unmarshal(b, &v) != nil {
+			return errors.New("Modul- oder Gerätedaten sind nicht mehr lesbar")
+		}
+	}
+	return nil
+}
+
+// instanceEntries is what a snapshot keeps of an instance. Without an import
+// the instance is the Mutti root itself, so only these entries are copied;
+// caches, logs, backups and other instances are not part of the data stage.
+var instanceEntries = []string{"config", "data", "connect", "connect-settings.json", "setup-new", "report.json"}
+
+// snapshotExcluded are rebuilt or re-downloaded and not needed for recovery.
+func snapshotExcluded(source, rel string) bool {
+	rel = filepath.ToSlash(rel)
+	switch source {
+	case "instance":
+		return rel == "data/transcodes" || strings.HasPrefix(rel, "data/transcodes/")
+	case "hub":
+		return rel == "ai/models" || rel == "ai/home" || rel == "tmp" || strings.HasPrefix(rel, "ai/models/") || strings.HasPrefix(rel, "ai/home/") || strings.HasPrefix(rel, "tmp/")
+	}
+	return false
+}
+
+// snapshotSources lists (live path, path inside the snapshot) pairs.
+func (m *Manager) snapshotSources(active string) [][2]string {
+	var out [][2]string
+	for _, e := range instanceEntries {
+		out = append(out, [2]string{filepath.Join(active, e), "instance/" + e})
+	}
+	return append(out, [2]string{m.hubDirectory(), "hub"})
+}
+
+// freeBytes is replaceable in tests.
+var freeBytes = func(path string) (uint64, error) {
+	var s syscall.Statfs_t
+	if err := syscall.Statfs(path, &s); err != nil {
+		return 0, err
+	}
+	return uint64(s.Bavail) * uint64(s.Bsize), nil
+}
+
+// createSnapshot copies the stopped instance and the shared module data into
+// a new snapshot directory, hashes every file and only then makes it visible.
+func (m *Manager) createSnapshot(active string, version dataVersion) (string, error) {
+	rel, err := filepath.Rel(m.Options.Root, active)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", errors.New("Die aktive Instanz liegt nicht im Mutti-Datenordner.")
+	}
+	sources := m.snapshotSources(active)
+	// A data folder that is a link to another place would only be saved as
+	// the link; the update must not proceed without its content.
+	for _, s := range sources {
+		if info, err := os.Lstat(s[0]); err == nil && info.Mode()&fs.ModeSymlink != 0 {
+			return "", fmt.Errorf("Der Datenordner %s verweist auf einen anderen Ort und kann vor dem Update nicht gesichert werden.", filepath.Base(s[0]))
+		}
+	}
+	kind := func(to string) string { k, _, _ := strings.Cut(to, "/"); return k }
+	var need int64
+	for _, s := range sources {
+		_ = filepath.WalkDir(s[0], func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			r, _ := filepath.Rel(filepath.Dir(s[0]), path)
+			if d.IsDir() && snapshotExcluded(kind(s[1]), relWithin(s, r)) {
+				return filepath.SkipDir
+			}
+			if info, e := d.Info(); e == nil && info.Mode().IsRegular() {
+				need += info.Size()
+			}
+			return nil
+		})
+	}
+	if err = os.MkdirAll(m.snapshotDir(), 0700); err != nil {
+		return "", err
+	}
+	// APFS clones cost almost nothing, but other file systems need the space.
+	if free, err := freeBytes(m.snapshotDir()); err != nil || free < uint64(need)+uint64(need)/10+64<<20 {
+		return "", errors.New("Für die Sicherung ist nicht genug freier Speicher vorhanden.")
+	}
+	id := randomID()
+	tmp := filepath.Join(m.snapshotDir(), ".incomplete-"+id)
+	_ = os.RemoveAll(tmp)
+	defer os.RemoveAll(tmp)
+	manifest := snapshotManifest{Schema: 1, ID: id, Created: time.Now().UTC(), Version: version, Active: filepath.ToSlash(rel), Hashes: map[string]string{}, Links: map[string]string{}}
+	for _, s := range sources {
+		if _, err := os.Lstat(s[0]); os.IsNotExist(err) {
+			continue
+		}
+		base := strings.TrimPrefix(strings.TrimPrefix(s[1], "instance/"), "hub")
+		k := kind(s[1])
+		if err := copyTree(s[0], filepath.Join(tmp, filepath.FromSlash(s[1])), func(r string) bool {
+			return snapshotExcluded(k, filepath.ToSlash(filepath.Join(base, r)))
+		}); err != nil {
+			return "", errors.New("Kopieren fehlgeschlagen.")
+		}
+	}
+	err = filepath.WalkDir(tmp, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		r, _ := filepath.Rel(tmp, path)
+		if d.Type()&fs.ModeSymlink != 0 {
+			target, e := os.Readlink(path)
+			manifest.Links[filepath.ToSlash(r)] = target
+			return e
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		h, n, e := fileHash(path)
+		if e != nil {
+			return e
+		}
+		manifest.Hashes[filepath.ToSlash(r)] = h
+		manifest.Bytes += n
+		return nil
+	})
+	if err != nil {
+		return "", errors.New("Die Sicherung konnte nicht geprüft werden.")
+	}
+	b, _ := json.Marshal(manifest)
+	if err = privateWrite(filepath.Join(tmp, "snapshot.json"), b); err != nil {
+		return "", err
+	}
+	if err = os.Rename(tmp, filepath.Join(m.snapshotDir(), id)); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// copyTree copies regular files, directories and symlinks (as links). On
+// macOS cp -c clones files on APFS.
+func copyTree(from, to string, skip func(rel string) bool) error {
+	if info, err := os.Lstat(from); err == nil && info.Mode().IsRegular() {
+		if err := os.MkdirAll(filepath.Dir(to), 0700); err != nil {
+			return err
+		}
+		return copyFile(from, to)
+	}
+	return filepath.WalkDir(from, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(from, path)
+		if rel != "." && skip(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		target := filepath.Join(to, rel)
+		switch {
+		case d.IsDir():
+			return os.MkdirAll(target, 0700)
+		case d.Type()&fs.ModeSymlink != 0:
+			link, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(link, target)
+		case d.Type().IsRegular():
+			return copyFile(path, target)
+		}
+		return nil // sockets and other special files are not data
+	})
+}
+
+// relWithin maps a path relative to the source's parent to the path the
+// exclusion rules use (relative to the instance or hub root).
+func relWithin(s [2]string, relToParent string) string {
+	rel := filepath.ToSlash(relToParent)
+	if strings.HasPrefix(s[1], "instance/") {
+		return rel
+	}
+	_, rest, _ := strings.Cut(rel, "/")
+	return rest
+}
+
+func copyFile(from, to string) error {
+	if runtime.GOOS == "darwin" {
+		if exec.Command("/bin/cp", "-c", "-p", from, to).Run() == nil {
+			return nil
+		}
+	}
+	in, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(out, in)
+	if e := out.Sync(); err == nil {
+		err = e
+	}
+	if e := out.Close(); err == nil {
+		err = e
+	}
+	return err
+}
+
+func (m *Manager) readSnapshot(id string) (*snapshotManifest, string, error) {
+	if !validID(id) {
+		return nil, "", errors.New("Ungültige Sicherung.")
+	}
+	dir := filepath.Join(m.snapshotDir(), id)
+	b, err := os.ReadFile(filepath.Join(dir, "snapshot.json"))
+	var s snapshotManifest
+	if err != nil || json.Unmarshal(b, &s) != nil || s.Schema != 1 || s.ID != id {
+		return nil, "", errors.New("Die Sicherung vor dem Update ist unvollständig.")
+	}
+	// The instance is the root or one verified import below instances/.
+	if instance, ok := strings.CutPrefix(s.Active, "instances/"); s.Active != "." && (!ok || !validID(instance)) {
+		return nil, "", errors.New("Unsicherer Pfad in der Sicherung.")
+	}
+	// Nothing besides the listed files and links is restored.
+	err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel, _ := filepath.Rel(dir, path)
+		rel = filepath.ToSlash(rel)
+		switch {
+		case rel == "snapshot.json":
+		case d.Type()&fs.ModeSymlink != 0:
+			if target, e := os.Readlink(path); e != nil || s.Links[rel] != target {
+				return errors.New("unlisted link")
+			}
+		case d.Type().IsRegular():
+			if _, ok := s.Hashes[rel]; !ok {
+				return errors.New("unlisted file")
+			}
+		default:
+			return errors.New("special file")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, "", errors.New("Die Sicherung vor dem Update enthält nicht aufgeführte Dateien. Es wurde nichts verändert.")
+	}
+	base, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil, "", errors.New("Die Sicherung vor dem Update ist unvollständig.")
+	}
+	for rel, want := range s.Hashes {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		// No symlinked file or parent inside the snapshot.
+		if resolved, err := filepath.EvalSymlinks(path); err != nil || resolved != filepath.Join(base, filepath.FromSlash(rel)) {
+			return nil, "", errors.New("Unsicherer Pfad in der Sicherung.")
+		}
+		if h, _, err := fileHash(path); err != nil || h != want {
+			return nil, "", errors.New("Die Prüfsumme der Sicherung stimmt nicht. Es wurde nichts verändert.")
+		}
+	}
+	return &s, dir, nil
+}
+
+// findSnapshot returns the newest snapshot of a given data stage.
+func (m *Manager) findSnapshot(v dataVersion) string {
+	entries, _ := os.ReadDir(m.snapshotDir())
+	best, newest := "", time.Time{}
+	for _, e := range entries {
+		if !e.IsDir() || !validID(e.Name()) {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(m.snapshotDir(), e.Name(), "snapshot.json"))
+		var s snapshotManifest
+		if err == nil && json.Unmarshal(b, &s) == nil && s.Version.same(v) && s.Created.After(newest) {
+			best, newest = e.Name(), s.Created
+		}
+	}
+	return best
+}
+
+// removeIncompleteSnapshots deletes copies an interrupted start left behind;
+// they were never published and no state refers to them.
+func (m *Manager) removeIncompleteSnapshots() {
+	entries, _ := os.ReadDir(m.snapshotDir())
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".incomplete-") {
+			_ = os.RemoveAll(filepath.Join(m.snapshotDir(), e.Name()))
+		}
+	}
+}
+
+// pruneSnapshots keeps the newest n complete snapshots, the one the update
+// record refers to and the newest one of every Jellyfin release, so the way
+// back to an older release is never dropped silently.
+func (m *Manager) pruneSnapshots(keep int) {
+	entries, _ := os.ReadDir(m.snapshotDir())
+	type snap struct {
+		id       string
+		created  time.Time
+		jellyfin string
+	}
+	var all []snap
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".incomplete-") {
+			_ = os.RemoveAll(filepath.Join(m.snapshotDir(), e.Name()))
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(m.snapshotDir(), e.Name(), "snapshot.json"))
+		var s snapshotManifest
+		if err == nil && json.Unmarshal(b, &s) == nil {
+			all = append(all, snap{e.Name(), s.Created, s.Version.Jellyfin})
+		}
+	}
+	slices.SortFunc(all, func(a, b snap) int { return b.created.Compare(a.created) })
+	referenced := ""
+	if u, err := m.readUpdate(); err == nil && u != nil {
+		referenced = u.Snapshot
+	}
+	newestOf := map[string]bool{}
+	for i, s := range all {
+		first := !newestOf[s.jellyfin]
+		newestOf[s.jellyfin] = true
+		if i < keep || first || s.id == referenced {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(m.snapshotDir(), s.id))
+	}
+}
+
+// rollbackUpdate restores a verified pre-update snapshot while the server is
+// stopped. It is resumable: what was in force before is recorded first, the
+// state "rolling_back" with the folder of the replaced data is persisted,
+// then everything is moved aside, then restored, then withdrawals made after
+// the snapshot are applied. Replaced data is moved aside, never deleted.
+func (m *Manager) rollbackUpdate(id string) error {
+	current, ok := m.Options.packageVersion()
+	if !ok {
+		return errors.New("Paketversion unbekannt.")
+	}
+	s, dir, err := m.readSnapshot(id)
+	if err != nil {
+		return err
+	}
+	if !s.Version.same(current) {
+		return fmt.Errorf("Diese Sicherung gehört zu %s; bitte mit genau dieser Version wiederherstellen.", s.Version.label())
+	}
+	if m.child.running() {
+		return errors.New("Bitte zuerst den Server beenden.")
+	}
+	m.change.Lock()
+	defer m.change.Unlock()
+	root := m.Options.Root
+	update, _ := m.readUpdate()
+	if update == nil || update.State != "rolling_back" || update.Snapshot != id || update.Keep == "" {
+		// From: the data stage being replaced; To: the restored one.
+		var replaced dataVersion
+		if b, e := os.ReadFile(m.dataVersionPath()); e == nil {
+			_ = json.Unmarshal(b, &replaced)
+		}
+		started := time.Now().UTC()
+		update = &UpdateState{ID: randomID(), State: "rolling_back", From: replaced, To: s.Version, Snapshot: id, Started: started,
+			Keep: "before-rollback-" + started.Format("20060102-150405") + "-" + randomID()[:8]}
+	}
+	keep := filepath.Join(root, update.Keep)
+	if err = os.MkdirAll(keep, 0700); err != nil {
+		return err
+	}
+	// 1. What was in force before the rollback: the device list and module
+	// grants of the instance in use (possibly an import made by the newer
+	// version) and the shared module state.
+	before := filepath.Join(keep, "access-before-rollback")
+	if !fileExists(filepath.Join(before, ".complete")) {
+		_ = os.RemoveAll(before)
+		if err = os.MkdirAll(before, 0700); err != nil {
+			return err
+		}
+		for from, to := range map[string]string{filepath.Join(m.State().Active, "connect", "connect.json"): "connect.json", filepath.Join(m.hubDirectory(), "hub.json"): "hub.json"} {
+			if fileExists(from) {
+				if err = copyFile(from, filepath.Join(before, to)); err != nil {
+					return errors.New("Der aktuelle Zugriffsstand konnte nicht festgehalten werden. Es wurde nichts verändert.")
+				}
+			}
+		}
+		if err = privateWrite(filepath.Join(before, ".complete"), []byte("1")); err != nil {
+			return err
+		}
+	}
+	if err = m.writeUpdate(update); err != nil {
+		return err
+	}
+	m.setUpdate(update)
+	active := filepath.Join(root, filepath.FromSlash(s.Active))
+	sources := append(m.snapshotSources(active), [2]string{filepath.Join(root, "active-instance.json"), "active-instance.json"})
+	// 2. Move the whole data stage aside. After an interruption before the
+	// marker, entries already moved are in the folder and the others still live.
+	if !fileExists(filepath.Join(keep, ".moved")) {
+		for _, src := range sources {
+			target := filepath.Join(keep, filepath.FromSlash(src[1]))
+			if !fileExists(src[0]) || fileExists(target) {
+				continue
+			}
+			if err = os.MkdirAll(filepath.Dir(target), 0700); err == nil {
+				err = os.Rename(src[0], target)
+			}
+			if err != nil {
+				return fmt.Errorf("Der aktuelle Datenstand konnte nicht beiseitegelegt werden. Es wurde noch nichts wiederhergestellt; bitte erneut versuchen. Bereits verschobene Teile liegen in %s.", keep)
+			}
+		}
+		if err = privateWrite(filepath.Join(keep, ".moved"), []byte("1")); err != nil {
+			return err
+		}
+	} else {
+		// Resumed after the move: what is live is an incomplete copy of the
+		// snapshot, which is still intact, so it is copied again.
+		for _, src := range sources {
+			if err = os.RemoveAll(src[0]); err != nil {
+				return fmt.Errorf("Die Wiederherstellung ist unvollständig; der vorherige Stand liegt in %s.", keep)
+			}
+		}
+	}
+	// 3. Restore the snapshot.
+	for _, src := range sources[:len(sources)-1] {
+		saved := filepath.Join(dir, filepath.FromSlash(src[1]))
+		if !fileExists(saved) {
+			continue
+		}
+		if err = copyTree(saved, src[0], func(string) bool { return false }); err != nil {
+			return fmt.Errorf("Die Wiederherstellung ist unvollständig; der vorherige Stand liegt in %s.", keep)
+		}
+	}
+	// 4. The restored instance is the active one again.
+	var report *Report
+	if s.Active != "." {
+		pointer, _ := json.Marshal(map[string]string{"ID": filepath.Base(active)})
+		var r Report
+		b, e := os.ReadFile(filepath.Join(active, "report.json"))
+		if e != nil || json.Unmarshal(b, &r) != nil || !r.Verified {
+			return fmt.Errorf("Die Wiederherstellung ist unvollständig; der vorherige Stand liegt in %s.", keep)
+		}
+		if err = privateWrite(filepath.Join(root, "active-instance.json"), pointer); err != nil {
+			return err
+		}
+		report = &r
+	}
+	// 5. Access withdrawn after the snapshot stays withdrawn.
+	revoked, err := keepRevocations(filepath.Join(before, "connect.json"), filepath.Join(active, "connect", "connect.json"),
+		filepath.Join(before, "hub.json"), filepath.Join(m.hubDirectory(), "hub.json"))
+	if err != nil {
+		return fmt.Errorf("Entzogene Zugriffe konnten nicht übernommen werden; der vorherige Stand liegt in %s.", keep)
+	}
+	// Downloaded models are not part of a snapshot; keep the installed ones.
+	if models := filepath.Join(keep, "hub", "ai", "models"); dirExists(models) && !fileExists(filepath.Join(m.hubDirectory(), "ai", "models")) {
+		_ = os.MkdirAll(filepath.Join(m.hubDirectory(), "ai"), 0700)
+		_ = os.Rename(models, filepath.Join(m.hubDirectory(), "ai", "models"))
+	}
+	if err = m.writeDataVersion(s.Version); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	m.state.Active, m.state.Report = active, report
+	m.mu.Unlock()
+	now := time.Now().UTC()
+	update.State, update.Finished = "rolled_back", &now
+	update.Message = fmt.Sprintf("Datenstand vor dem Update wiederhergestellt. Der zuvor verwendete Stand liegt in %s.", update.Keep)
+	if revoked > 0 {
+		update.Message = fmt.Sprintf("Datenstand vor dem Update wiederhergestellt. Der zuvor verwendete Stand liegt in %s. %d nach der Sicherung entzogene Geräte oder Freigaben bleiben entzogen; danach gekoppelte Geräte bitte neu koppeln.", update.Keep, revoked)
+	}
+	if err = m.writeUpdate(update); err != nil {
+		return err
+	}
+	m.setUpdate(update)
+	return nil
+}
+
+// keepRevocations applies withdrawals made after the snapshot to the
+// restored state: a paired device, a module grant, an enabled module or a
+// profile link survives a rollback only if it also exists in the state being
+// replaced. A missing or unreadable replaced state counts as withdrawn (fail
+// closed). Jellyfin's own users and sessions return to the snapshot; remote
+// access only works through a paired device. Returns the number withdrawn.
+func keepRevocations(previousConnect, restoredConnect, previousHub, restoredHub string) (int, error) {
+	n := 0
+	err := editJSON(restoredConnect, func(restored map[string]any) {
+		current := map[string]any{}
+		_ = readJSONMap(previousConnect, &current)
+		now, _ := current["devices"].(map[string]any)
+		devices, _ := restored["devices"].(map[string]any)
+		for pin, raw := range devices {
+			// A device survives only with the same profile and session;
+			// one bound anew under the newer version pairs again.
+			device, _ := raw.(map[string]any)
+			was, ok := now[pin].(map[string]any)
+			if !ok || device == nil || was["userId"] != device["userId"] || was["token"] != device["token"] {
+				delete(devices, pin)
+				n++
+			}
+		}
+	})
+	if err != nil {
+		return n, err
+	}
+	err = editJSON(restoredHub, func(restored map[string]any) {
+		current := map[string]any{}
+		_ = readJSONMap(previousHub, &current)
+		nowModules, _ := current["modules"].(map[string]any)
+		modules, _ := restored["modules"].(map[string]any)
+		for name, raw := range modules {
+			module, _ := raw.(map[string]any)
+			now, _ := nowModules[name].(map[string]any)
+			if module == nil {
+				continue
+			}
+			if module["enabled"] == true && now["enabled"] != true {
+				module["enabled"] = false
+				n++
+			}
+			nowGrants, _ := now["grants"].(map[string]any)
+			grants, _ := module["grants"].(map[string]any)
+			for user, allowed := range grants {
+				if allowed == true && nowGrants[user] != true {
+					grants[user] = false
+					n++
+				}
+			}
+			// A link removed or re-pointed under the newer version is
+			// dropped; the owner links the profile again.
+			nowLinks, _ := now["links"].(map[string]any)
+			links, _ := module["links"].(map[string]any)
+			for profile, link := range links {
+				a, _ := json.Marshal(link)
+				b, _ := json.Marshal(nowLinks[profile])
+				if nowLinks[profile] == nil || string(a) != string(b) {
+					delete(links, profile)
+					n++
+				}
+			}
+		}
+	})
+	return n, err
+}
+
+func readJSONMap(path string, out *map[string]any) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, out)
+}
+
+// editJSON rewrites a private JSON file only if edit changed it. A missing
+// file has nothing to restrict.
+func editJSON(path string, edit func(map[string]any)) error {
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	v := map[string]any{}
+	if err = json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	before, _ := json.Marshal(v)
+	edit(v)
+	after, _ := json.Marshal(v)
+	if string(before) == string(after) {
+		return nil
+	}
+	out, _ := json.MarshalIndent(v, "", "  ")
+	tmp := path + ".tmp"
+	if err = os.WriteFile(tmp, out, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}

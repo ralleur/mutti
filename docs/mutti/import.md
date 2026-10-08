@@ -1,0 +1,282 @@
+# Jellyfin nach Mutti übernehmen
+
+Stand: 5. Oktober 2026 · lokale Entwicklungsvorschau für **Jellyfin 12.1**.
+
+## Testen
+
+Mac-App: `build/macos/osx-arm64/Mutti.app` (Apple Silicon). Startet mit dem
+bisherigen privaten Mutti-Preview-Datenordner. Bei einer neuen Installation
+erscheint zuerst **Neu einrichten / Aus Jellyfin übernehmen**. In einer bereits
+eingerichteten Mutti-App führt **Jellyfin übernehmen** oben direkt zum Import.
+
+1. Den erkannten Jellyfin-Server wählen oder seine Adresse eingeben und als
+   Administrator anmelden. In der Mac-App genügt dieser vorhandene Jellyfin-Zugang.
+   Bei einer schon eingerichteten Mutti-Instanz den Wechsel im nativen Dialog
+   bestätigen; deren Daten bleiben erhalten. Kein zusätzliches Mutti-Konto anlegen.
+2. **Jellyfin übernehmen** starten. Währenddessen Wiedergabe und Änderungen auf
+   Jellyfin pausieren. Nach der Abschlussprüfung mit dem bestehenden Jellyfin-
+   Zugang anmelden und Geräte neu koppeln.
+
+Keine manuelle ZIP-Erstellung, Dateisuche oder neue Benutzeranlage im lokalen
+Normalfall. Die Quelldaten und Medien werden nicht verschoben. Jellyfin bleibt
+installiert und läuft weiter; nach dem Wechsel bitte Mutti verwenden. Es gibt
+keine laufende Synchronisierung zwischen beiden Servern.
+
+Docker/NAS verwendet denselben Dienst und Ablauf. Der neue Einstieg liegt auf
+`http://127.0.0.1:18594`, Jellyfin weiterhin auf `18597`, Geräteverwaltung auf
+`18595`. Compose veröffentlicht diese drei Verwaltungsports ausschließlich auf
+localhost. Für die NAS-Vorschau bleibt der SSH-Tunnel mit denselben drei
+Portnummern nötig (siehe [development.md](development.md)); Docker/NAS ist ein
+Entwicklerweg und kein Gate der ersten, Mac-only ausgelieferten Iteration. Medien müssen im
+Container lesbar eingebunden sein. Andere Speicherorte im Importformular zuordnen.
+Bei einem bereits eingerichteten Docker-/Browser-Ziel wird zusätzlich dessen
+bestehender Bibliotheksadministrator geprüft. Die Mac-Freigabe gilt ausschließlich
+in der App, die den privaten Datenordner und den Serverprozess verwaltet.
+Das lokale Image heißt `mutti:import-preview`; Compose baut standardmäßig `mutti:dev`.
+
+## Fortschritt und ausbleibende Aktivität
+
+Der Import zeigt sieben Schritte einschließlich der zweiten Quellsicherung für
+den abschließenden Vergleich. Gesamt- und Schrittdauer kommen vom Manager und
+bleiben beim Neuladen erhalten. Wo eine lokale Sicherungsdatei eindeutig zum
+neuen Vorgang gehört oder ein Transfer/Archivaufbau beobachtet werden kann,
+zeigt Mutti Dateigröße und Zeit seit der letzten gemessenen Änderung. Alte ZIPs,
+Symlinks und mehrere konkurrierende Sicherungen gelten nicht als Fortschritt.
+Nach 90 Sekunden ohne weitere messbare Aktivität erscheint ein Wartehinweis;
+interne Pufferung kann solche Pausen verursachen, deshalb keine unbelegte
+Stillstandsbehauptung, Prozentzahl oder Restzeit. Ein Verbindungsabbruch wird
+getrennt angezeigt; die Anzeige versucht selbstständig eine erneute Verbindung.
+
+Ein API-Zeitlimit (30 Minuten) und das gesamte Importlimit (45 Minuten) werden
+von einer nicht erreichbaren Quelle und einem Benutzerabbruch unterschieden.
+Jellyfins Sicherungsauftrag läuft gegebenenfalls nach Abbruch oder Zeitlimit auf
+der Quelle weiter. Vor einem erneuten Versuch dort den Status prüfen.
+
+## Kurt begleitet den Umzug (MK-010)
+
+Die vorhandenen Kurt-Zeichnungen aus Hauser ersetzen den Spinner. Die sieben
+Manager-Schritte steuern Schlafen → Po-Rutschen → Gehen → Laufen → Leckerli →
+Kotzen → Häufchen. Nach der Zugangsprüfung wacht Kurt einmal auf und steht auf.
+Bewegungen mit Wegstrecke wenden am Ende und laufen zurück; Hinterlassenschaften
+werden pro Schleife neu dargestellt und sammeln sich nicht an.
+
+Schritttext, Dauer, gemessene Aktivität und Hinweise bleiben unabhängig sichtbar.
+„Kurt pausieren“ hält nur die Figur an. Die Systemeinstellung für reduzierte
+Bewegung zeigt eine feste Pose. Bei verlorener Statusverbindung oder unsichtbarer
+Seite pausiert die Animation; Fehler, Abbruch und Erfolg beenden sie. Ein kurzer
+Importschritt wartet nicht auf eine Animation. Nach Neuladen wird der aktuelle
+Manager-Schritt angezeigt; bereits vergangene Schritte werden nicht nachgespielt.
+
+Die lokal eingebetteten Ressourcen benötigen keine externe Verbindung. Fehlende
+Animationsdateien blockieren weder Statusanzeige noch Import. Fassung 11 ist als
+kleiner Auszug mit unveränderten Zeichnungen und SHA-256-Herkunftsnachweis unter
+`mutti/migrate/web/kurt` paketiert; Mac und Docker nutzen dieselben Dateien.
+Die Herkunft und der lokale Testumfang stehen in `mutti/THIRD-PARTY.md`.
+
+Fokussierter Zustands-/Schleifentest:
+`node --test mutti/tests/kurt-animation.test.cjs`.
+
+## Automatische Vorbereitung des Quellservers
+
+Der Importstart umfasst die nötige Vorbereitung einschließlich eines kurzen
+Jellyfin-Neustarts. Der Hinweis steht direkt am Importknopf und in der bestehenden
+nativen Wechselbestätigung; es gibt keine zusätzliche technische Auswahl.
+Mutti sichert die Originalkonfiguration privat unter
+`source-preparation/<Quellenkennung>/database-original-*` im Mutti-Datenordner,
+setzt bei Jellyfin-SQLite ausschließlich `Pessimistic` auf den Standard `NoLock`,
+begleitet den Neustart und setzt den Import nach Identitäts-/Bereitschaftsprüfung
+fort. Andere Einstellungen bleiben erhalten. Die korrigierte Einstellung bleibt
+auf Jellyfin bestehen; der problematische Modus wird nicht automatisch wieder
+aktiviert.
+
+**Mac, Browser und Docker/NAS:** Über die Jellyfin-Administrator-API werden die
+vollständigen Datenbankeinstellungen gelesen und gesichert. Die Änderung setzt
+einen gültigen Quelladministrator voraus. Mutti fordert den Neustart an, beobachtet
+den Übergang und prüft dieselbe Serveridentität und `NoLock`, bevor die Sicherung
+beginnt. Ein nur gespeicherter Konfigurationswert genügt nicht als Neustartnachweis.
+
+**Bereits blockierte lokale Quelle:** Ausschließlich die native Mac-App kann
+zusätzlich einen eigenen macOS-Benutzerdienst vorbereiten, auch wenn die
+Jellyfin-Anmeldung bereits durch die Datenbanksperre blockiert ist. Voraussetzung:
+Loopback-Adresse, genau ein passender Listener/PID, Prozess des angemeldeten
+Benutzers, direkt gestartetes `jellyfin`, eindeutiger geladener LaunchAgent mit
+`KeepAlive=true`, explizite Daten-/Konfigurationspfade und übereinstimmende
+Serveridentität aus `device.txt`. Dateien müssen dem Benutzer gehören und dürfen
+keine Symlinks oder gemeinsam beschreibbaren Konfigurationsdateien sein. Vor der
+Änderung wird die Zuordnung erneut geprüft. Nach einem normalen Beendigungsversuch
+ersetzt launchd nötigenfalls den blockierten Prozess dieses einen Dienstes; erst
+nach neuem PID und derselben bereiten Serveridentität geht es weiter. Die
+Jellyfin-Administratoranmeldung bleibt für den eigentlichen Import erforderlich.
+Browseranfragen, fremde Benutzer, Shell-Wrapper, Systemdienste und nicht eindeutig
+zuordenbare Prozesse erhalten diesen lokalen Zugriff nicht.
+
+Ein privater Vorgangsvermerk wird vor der Änderung gespeichert. Nach App-Abbruch
+kann der nächste Importversuch einen noch ausstehenden Neustart wieder aufnehmen;
+abweichende Quellen oder zwischenzeitlich geänderte Konfigurationen werden nicht
+mit diesem Vermerk verändert. Sobald die Einstellung geändert wurde, versucht
+Mutti den Neustart auch bei Importabbruch begrenzt zu Ende zu führen. Es gibt
+keine unbegrenzten Neustartschleifen. Auf einer vollständig unerreichbaren Quelle
+oder einem bereits blockierten fremden NAS kann die API allein keinen Neustart
+garantieren; eine zusätzliche NAS-/Systemdienstverwaltung ist nicht enthalten.
+
+## Was übernommen und geprüft wird
+
+- Benutzer-IDs, lokale Passwörter und Rechte; keine Neuanlage der Konten.
+- Bibliotheks- und Medien-IDs, Pfade, Metadaten, Playlists und Sammlungen.
+- Favoriten, Wiedergabestatus, Resume-Position, Zähler und letztes Wiedergabedatum.
+- Kompatible Server- und Benutzereinstellungen aus Jellyfins vollständiger Sicherung.
+
+Die Importprüfung vergleicht alle gesicherten Datenbanktabellen semantisch sowie
+die wiederhergestellten Medienmetadaten, Root- und Playlist-/Sammlungsdateien.
+Der isolierte Restore erhält auch persistierte Felder mit privaten Settern,
+unter anderem Profilbild-Zuordnungen und Anzeigeeinstellungen. Der Vergleich
+normalisiert interne Versionszähler und berücksichtigt bei Benutzerrechten/-
+präferenzen die tatsächlichen Benutzer/Art/Wert-Tupel.
+Login-Aktivitätszeiten, Aktivitätsprotokoll sowie Geräte-/Sitzungstabellen sind
+von der Inhaltsgleichheit ausgenommen. Benutzerrechte und Wiedergabedaten bleiben
+vollständig im Vergleich. Alle erwarteten Tabellen müssen im Archiv vorhanden sein.
+
+Interne Sammlungspfade werden bei der Bibliotheksprüfung mit derselben Zuordnung
+wie Datenbank, XML und Verknüpfungen auf den neuen Mutti-Datenordner abgebildet.
+Das berücksichtigt die von Jellyfin in der API aufgelösten `%AppDataPath%`-Pfade.
+Bibliotheks-IDs, Namen und alle erwarteten Medienordner müssen weiterhin exakt
+übereinstimmen; bei einer Abweichung benennt die Meldung Bibliothek und Fehlerart.
+
+Eine zweite Quellsicherung prüft vor Aktivierung auf Änderungen an Daten,
+Quelldateien und Konfiguration. Bei Abweichung stoppt der Umzug mit Wiederholhinweis.
+Das ist ein kontrolliertes Wechselzeitfenster, keine kontinuierliche Replikation:
+Änderungen nach der letzten Prüfung werden nicht mehr synchronisiert.
+
+## Bewusste Anpassungen und Grenzen
+
+- Quelle **12.1.x**, Sicherungsformat **0.2.0**. Andere Versionen werden vor dem
+  Import abgelehnt; ein universeller Versionsmigrator ist nicht enthalten.
+- Netzwerk, Datenbankverbindung und Log-Ausgabe bleiben unter Muttis Kontrolle.
+  Alte öffentliche Listener werden nicht aktiviert. Hardwarebeschleunigung und
+  Transcodingpfade werden für das Ziel zurückgesetzt und im Ergebnis ausgewiesen.
+- Alte API-Schlüssel und Gerätesitzungen werden entfernt. Geräte danach neu
+  anmelden/koppeln. Bestehende Mutti-Vermittler-/STUN-Einstellungen bleiben erhalten.
+- **Intro Skipper 12.0.4.0 ist enthalten.** Bestehende Konfiguration, Ausschlüsse,
+  Segmentdaten und Analysecache werden ohne separate Plugin-Rückfrage übernommen.
+  Ohne Plugin auf der Quelle steht es danach mit seinen Standardeinstellungen bereit.
+- Weitere aktive Plugins und externe Anmeldeanbieter blockieren die Übernahme,
+  solange ihre Migration nicht qualifiziert ist. Keine stille Teilübernahme.
+- Medien bleiben an ihrem Ort. Fehlende Laufwerke oder fehlende Leserechte zuerst
+  auflösen; Mutti zeigt den betroffenen Pfad an. Ein Dateiumzug ist nicht enthalten.
+- Eine automatische Installation/Deinstallation des Fernexporters und ein
+  manueller Archiv-Ausweichweg sind noch offen. Für entfernte Quellen benötigt
+  diese Vorschau **HTTPS und den separat installierten Exporthelfer**.
+
+## Quelle auf einem anderen Rechner
+
+Der Quellserver braucht einmalig den [Mutti-Umzugshelfer](../../mutti/export/README.md).
+Das DLL-Paket liegt nach dem Build in `build/export` und im Mac-App-Paket unter
+`Contents/Resources/export`. Nach Installation und Jellyfin-Neustart übernimmt
+Mutti Sicherung und Transfer automatisch. Nach dem Umzug Plugin wieder entfernen.
+
+Der Download ist an den erhöhten Administratorzugang, dieselbe Gerätekennung
+und ein zufälliges Einmalgeheimnis gebunden. Die Freigabe verfällt nach 30 Minuten
+und wird beim Download sofort verbraucht. Keine öffentliche Archiv-URL,
+keine Weiterleitung von Zugangsdaten, kein Mutti-Konto, kein Relay. Das Plugin
+wird nicht in die neue Instanz übernommen; die normale Quellsicherung bleibt
+unter Jellyfins Backupverwaltung. Ein entfernter HTTP-Server wird abgelehnt.
+
+## Daten und Abbruch
+
+Neue Daten liegen privat unter `Mutti Preview/instances/<ID>` beziehungsweise
+`/config/instances/<ID>`. Erst nach erfolgreicher Prüfung und erfolgreichem Start
+wird `active-instance.json` atomar umgeschaltet. Der bisherige Datenbereich bleibt
+bestehen. Bei Startfehler startet Mutti den vorherigen Stand wieder.
+
+Abbrechen oder Beenden stoppt den Import; unvollständige Instanzen werden nicht
+aktiviert. Lokale Restdaten fehlgeschlagener Versuche bleiben für die Diagnose im
+privaten Importordner, ohne gespeicherte Klartextpasswörter. Sicherungen enthalten
+Passworthashes und werden privat gehalten. Die aktive Instanz niemals manuell
+löschen; eine komfortable Wiederherstellungs-/Bereinigungsoberfläche ist noch offen.
+
+Bei der Prüfung sind Hintergrundaufgaben und Dateiwächter ausgesetzt. Auf macOS
+läuft der Prüfserver zusätzlich mit Schreibzugriff nur auf seinen eigenen
+Datenbereich und ohne ausgehenden Internetzugriff. Docker erhält schreibgeschützte
+Medien. Nach der Aktivierung gelten die regulären Bibliothekseinstellungen.
+
+## Reproduzierbare Prüfungen
+
+```sh
+go test -C mutti/migrate -race ./...
+go vet -C mutti/migrate ./...
+swift test --package-path mutti/apps/macos
+MUTTI_FRESH_IMPORT_SMOKE=1 MUTTI_TEST_EXPORT=1 MUTTI_TEST_INTRO_SKIPPER=1 MUTTI_IMPORT_REPO="$PWD" \
+  go test -C mutti/migrate -race -run TestRealMigration -v -count=1
+MUTTI_FRESH_IMPORT_SMOKE=1 MUTTI_TEST_CONFIGURED_TARGET=1 MUTTI_IMPORT_REPO="$PWD" \
+  go test -C mutti/migrate -race -run TestRealMigration -v -count=1
+python3 mutti/tests/import-package-smoke.py
+```
+
+Der vollständige Test erstellt ausschließlich eigene temporäre Server und ein
+synthetisches Video. Er prüft bestehende Owner-/Viewer-Logins, Rechte, identische
+Bibliotheksdaten, Playlist, interne Sammlung samt ID und Inhalt, Profilbild,
+Anzeigeeinstellungen, Favoriten,
+Resume-/Wiedergabedaten, den erhaltenen
+Quellserver, Export-Ticketbindung/-Einmaligkeit und Persistenz nach Neustart.
+Derselbe Test ist für Linux arm64 im Container qualifiziert. Der Pakettest prüft
+zusätzlich den tatsächlichen Docker-Entrypoint, veröffentlichte Loopback-Ports,
+fremde Hosts/Origins und gesperrte Kopplung vor Setup-Abschluss.
+
+Keine echten Benutzerkonten, Passwörter, Bibliotheken oder Medien für diese Tests.
+Reale NAS-Mounts, andere Plattformen/Quellversionen, Internetexport und große
+Bibliotheken bleiben Teil der Owner-/Release-Abnahme.
+
+## Native Freigabe bei vorhandener Preview-Einrichtung
+
+Der Abschlussstatus des früheren Setup-Assistenten löst auf dem Mac keine
+zusätzliche Passwortabfrage mehr aus. Die App erzeugt bei jedem Start eine neue
+256-Bit-Freigabe und übergibt sie ausschließlich über die private Standardeingabe
+an ihren lokalen Importprozess. Ein nativer Bestätigungsdialog erlaubt den
+Wechsel; der bisherige Datenbereich bleibt bestehen. Nur die Hauptseite des
+Importassistenten darf diesen Dialog anfragen. Jellyfin- und Kopplungsseiten,
+Unterframes, fremde Origins und Browser erhalten diese Berechtigung nicht.
+
+Das Geheimnis wird weder im Webinhalt noch in Prozessargumenten, Umgebungsvariablen
+oder Dateien gespeichert. Die normalen CSRF-/Host-/Origin-Prüfungen und die
+Adminprüfung des Quellservers bleiben erforderlich. Docker akzeptiert diesen
+nativen Startmodus nicht. Regressionstests decken erfundene/falsche Freigaben,
+JSON-Manipulation, fehlende Wechselbestätigung und den vollständigen Import mit
+unbekanntem bisherigen Zielpasswort ab.
+
+## Intro Skipper
+
+Die gleiche geprüfte Intro-Skipper-Version wird mit Mac und Docker ausgeliefert,
+einschließlich Lizenz und passendem Quellarchiv. Eine Neuinstallation erhält das
+Plugin automatisch; ein Import übernimmt es auch dann, wenn es bisher fehlte.
+Vorhandene Intro-Skipper-12.0.4.0-Daten werden zusätzlich zur Jellyfin-Sicherung
+übernommen, da diese Plugin-Daten außerhalb des Standardarchivs liegen.
+
+SQLite-Online-Backup erfasst auch bestätigte WAL-Änderungen. Die Quelle wird nur
+gelesen; Segmentdatenbank, ältere Segmentdatenbank (falls vorhanden), Analysecache
+und Konfiguration bleiben erhalten. Vor Aktivierung werden die logischen Inhalte
+verglichen, Pfadausschlüsse angepasst und die Quelle erneut auf Änderungen geprüft.
+Eine laufende Analyse mit neuen Daten kann deshalb eine Wiederholung erforderlich
+machen. Das ist kein Anlass für eine manuelle Plugininstallation.
+
+Der Fernexport benötigt **Mutti Export 0.1.1.0** oder neuer; dessen Einmaltransfer
+enthält jetzt denselben Plugin-Snapshot. Eine ältere Helferversion darf keine
+scheinbar vollständige Übernahme ohne Plugin-Daten melden.
+
+Geprüfte Kombination: Jellyfin 12.1 und Intro Skipper 12.0.4.0. Andere
+Pluginversionen werden nicht stillschweigend gleichgesetzt. Sprungmarken werden
+über Jellyfins Media-Segments-Schnittstelle bereitgestellt; die konkrete
+Sprungschaltfläche hängt vom verwendeten Player ab.
+
+### Layout und Marke – 5. Oktober 2026
+
+Die sieben Schritte stehen jetzt untereinander links; Kurt bespielt die freie
+rechte Spalte. Aktueller Schritt: gelbe Fläche, erledigte Schritte: Haken.
+Statusmeldung, Zeiten, Dateiaktivität und Verbindungszustand folgen darunter.
+Unter 650 px bleibt die Liste vertikal und Kurt steht darunter. Seine vollständige
+Bewegungsfläche bleibt proportional erhalten. Animationen und Importlogik bleiben
+unverändert, einschließlich Pause und reduzierter Bewegung.
+
+Die Owner-Vorlage „03 / Kompakte Bögen“ bestimmt Graphit, Elfenbein und Gelb sowie
+das neue kompakte m mit Ringelschwanz. Die vektorielle Wortmarke und die lokalen
+Sora-Schnitte werden auch für Connect, Web-Bibliothek und Mac-Paket verwendet.
+Kanonische Quellen und Nachbauhinweise: [Mutti Design](../../mutti/design/README.md).

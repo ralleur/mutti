@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Database.Implementations;
@@ -39,6 +41,29 @@ public class BackupService : IBackupService
     {
         AllowTrailingCommas = true,
         ReferenceHandler = ReferenceHandler.IgnoreCycles,
+    };
+
+    // Snapshot imports must retain persisted fields with non-public setters
+    // (for example profile image ownership and display-preference identities).
+    // This resolver is used only by Mutti's isolated validation process.
+    private static readonly JsonSerializerOptions _snapshotRestoreSettings = new(JsonSerializerDefaults.General)
+    {
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver
+        {
+            Modifiers =
+            {
+                typeInfo =>
+                {
+                    foreach (var property in typeInfo.Properties)
+                    {
+                        if (property.Set is null && property.AttributeProvider is PropertyInfo info && info.SetMethod is not null)
+                        {
+                            property.Set = info.SetValue;
+                        }
+                    }
+                }
+            }
+        }
     };
 
     private readonly Version _backupEngineVersion = new Version(0, 2, 0);
@@ -224,7 +249,8 @@ public class BackupService : IBackupService
                             var records = 0;
                             await foreach (var item in JsonSerializer.DeserializeAsyncEnumerable<JsonObject>(zipEntryStream, _serializerSettings).ConfigureAwait(false))
                             {
-                                var entity = item.Deserialize(entityType.Type.PropertyType.GetGenericArguments()[0]);
+                                var restoreOptions = Environment.GetEnvironmentVariable("MUTTI_IMPORT_VALIDATION") == "1" ? _snapshotRestoreSettings : null;
+                                var entity = item.Deserialize(entityType.Type.PropertyType.GetGenericArguments()[0], restoreOptions);
                                 if (entity is null)
                                 {
                                     throw new InvalidOperationException($"Cannot deserialize entity '{item}'");

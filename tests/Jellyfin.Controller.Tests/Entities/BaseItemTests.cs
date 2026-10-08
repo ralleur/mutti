@@ -40,14 +40,18 @@ public class BaseItemTests
         var previousLibrary = BaseItem.LibraryManager;
         var previousRepository = BaseItem.ItemRepository;
         var previousLogger = BaseItem.Logger;
+        var previousMediaSourceManager = BaseItem.MediaSourceManager;
         var library = new Mock<ILibraryManager>(MockBehavior.Strict);
         var repository = new Mock<MediaBrowser.Controller.Persistence.IItemRepository>(MockBehavior.Strict);
+        var mediaSourceManager = new Mock<IMediaSourceManager>();
+        mediaSourceManager.Setup(x => x.GetPathProtocol(It.IsAny<string>())).Returns(MediaProtocol.File);
         var directory = new Mock<IDirectoryService>();
         directory.Setup(d => d.IsAccessible(It.IsAny<string>())).Returns(true);
         try
         {
             BaseItem.LibraryManager = library.Object;
             BaseItem.ItemRepository = repository.Object;
+            BaseItem.MediaSourceManager = mediaSourceManager.Object;
             BaseItem.Logger = Microsoft.Extensions.Logging.Abstractions.NullLogger<BaseItem>.Instance;
             var folder = new FailingEnumerationFolder(failAfterFirstChild, accessDenied)
             {
@@ -64,6 +68,7 @@ public class BaseItemTests
             BaseItem.LibraryManager = previousLibrary;
             BaseItem.ItemRepository = previousRepository;
             BaseItem.Logger = previousLogger;
+            BaseItem.MediaSourceManager = previousMediaSourceManager;
         }
     }
 

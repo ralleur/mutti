@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "product": "Mutti",
+  "version": "0.1.0-dev",
+  "releaseReady": false,
+  "jellyfin": {
+    "version": "12.1",
+    "serverCommit": "ee91c75e777da41a9c4f4855e70adc604fbf2ef8",
+    "webUpstreamCommit": "fae41f33eb7cd636a9ef68984adb82bb247a6e1b"
+  },
+  "web": {
+    "repository": "https://github.com/ralleur/mutti-web.git",
+    "commit": "6732fe42cc94d157c421c12a95c8224bb4a888dc"
+  },
+  "tools": {
+    "dotnetSDK": "10.0.401",
+    "node": "26.7.0",
+    "goExperiment": "1.27.1",
+    "xcodeTested": "27.0",
+    "go": "1.27.1"
+  },
+  "ffmpeg": {
+    "version": "8.1.3-1",
+    "repository": "https://github.com/jellyfin/jellyfin-ffmpeg",
+    "licenses": {
+      "COPYING.GPLv3": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "LICENSE.md": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"
+    },
+    "assets": {
+      "osx-arm64": {
+        "archive": "jellyfin-ffmpeg_8.1.3-1_portable_macarm64-gpl.tar.xz",
+        "sha256": "22445d7299742749ad2eeb9ce87963d50def0357e45b3e6c7b69987c8365dbf6"
+      },
+      "osx-x64": {
+        "archive": "jellyfin-ffmpeg_8.1.3-1_portable_mac64-gpl.tar.xz",
+        "sha256": "cb2b5c154d49a6b6bfe29fa6c16510e85dcbf60b805764121a167b093d4bb6fb"
+      },
+      "linux-arm64": {
+        "archive": "jellyfin-ffmpeg_8.1.3-1_portable_linuxarm64-gpl.tar.xz",
+        "sha256": "7bc8e8d0986f7f4693f63e9728570f671f07b6e21c05d5465dd7ce461d1631dc"
+      },
+      "linux-x64": {
+        "archive": "jellyfin-ffmpeg_8.1.3-1_portable_linux64-gpl.tar.xz",
+        "sha256": "b86dc023c64a5a9a410e6e3a938a970460214fae78f31c1553c9f88f1c289b6a"
+      }
+    },
+    "dockerRuntime": {
+      "version": "8.1.2-Jellyfin",
+      "sourceTag": "v8.1.2-1",
+      "image": "jellyfin/jellyfin:12.1@sha256:78d3ea1207d1322471fcac39a614f004f2ccf7e878f95ab2977d752f07e4dd7e"
+    }
+  },
+  "transport": {
+    "implementation": "mutti/connect",
+    "phase": "test-preview",
+    "pion": "v4.2.22",
+    "yamux": "v0.1.2",
+    "security": "TLS 1.3 with pinned server SPKI and per-device client keys over WebRTC data channels",
+    "relay": false
+  },
+  "introSkipper": {
+    "version": "12.0.4.0",
+    "pluginId": "c83d86bb-a1e0-4c35-a113-e2101cf4ee6b",
+    "repository": "https://github.com/intro-skipper/intro-skipper",
+    "commit": "6e0cb179007ac4c16cd9f358e9a617e791e9bf06",
+    "archiveUrl": "https://github.com/intro-skipper/intro-skipper/releases/download/12.0/v12.0.4.0/intro-skipper-v12.0.4.0.zip",
+    "archiveSha256": "11d7bb171b66a4faa4abb0d9af92d2e9e6ae3ebd6a821bb5aca1d94bff651439",
+    "dllSha256": "f5c10f3453d48bfa210c6c487c67fc3ee7ce4c96c51121b2a6608f8a923399e8",
+    "sourceUrl": "https://codeload.github.com/intro-skipper/intro-skipper/tar.gz/6e0cb179007ac4c16cd9f358e9a617e791e9bf06",
+    "sourceSha256": "e767669a6ca94b185658ac91d7f1c8ea5e20b1d217612669b5381c3acaa68ad2",
+    "license": "GPL-3.0-only"
+  },
+  "aiEngine": {
+    "name": "ollama",
+    "version": "0.32.13",
+    "license": "MIT",
+    "repository": "https://github.com/ollama/ollama",
+    "assets": {
+      "osx-arm64": {
+        "archive": "ollama-darwin.tgz",
+        "sha256": "71efd44f3b5f2019f42bae17ae58eb3de8bd25ce3ca3bc89aea58e53e5d091d1"
+      },
+      "osx-x64": {
+        "archive": "ollama-darwin.tgz",
+        "sha256": "71efd44f3b5f2019f42bae17ae58eb3de8bd25ce3ca3bc89aea58e53e5d091d1"
+      }
+    },
+    "note": "Bundled only in the Mac package. Docker connects to an owner-provided engine on loopback or the private network. Models are separate artifacts pinned in mutti/hub/catalog.go.",
+    "vendored": {
+      "note": "Libraries inside the Ollama archive, at the revisions pinned by the Ollama tag (LLAMA_CPP_VERSION, MLX_VERSION, MLX_C_VERSION). License texts in mutti/packaging/licenses.",
+      "llama.cpp": {
+        "revision": "b10380",
+        "license": "MIT",
+        "licenseText": "llama.cpp-MIT.txt",
+        "licenseSha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+      },
+      "mlx": {
+        "revision": "3abd0fd6b3eb9d9d3a34cb65e8a2189c57260399",
+        "license": "MIT",
+        "licenseText": "MLX-MIT.txt"
+      },
+      "mlx-c": {
+        "revision": "fba4470b89073180056c9ea46c443051375f7399",
+        "license": "MIT",
+        "licenseText": "mlx-c-MIT.txt",
+        "licenseSha256": "44326a4ea062241ae6fc26ee2ec90bdc81af7eb7b9d3966181b733fa69d42057"
+      }
+    }
+  }
+}

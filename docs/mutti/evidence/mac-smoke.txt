@@ -1,0 +1,35 @@
+PASS Product server name
+PASS Foreign Host rejected
+PASS Foreign Origin rejected
+PASS Mutti web title
+PASS Fresh owner setup and authentication
+PASS Playback profile has no administrator rights
+PASS Synthetic media library indexed
+PASS Quick Connect waits for owner approval
+PASS Existing Jellyfin Quick Connect signs in chosen playback profile
+PASS Playback profile cannot administer server
+PASS Authenticated video Range request
+PASS Deleting a device rejects subsequent authenticated requests
+{
+  "result": "pass",
+  "checks": [
+    "Product server name",
+    "Foreign Host rejected",
+    "Foreign Origin rejected",
+    "Mutti web title",
+    "Fresh owner setup and authentication",
+    "Playback profile has no administrator rights",
+    "Synthetic media library indexed",
+    "Quick Connect waits for owner approval",
+    "Existing Jellyfin Quick Connect signs in chosen playback profile",
+    "Playback profile cannot administer server",
+    "Authenticated video Range request",
+    "Deleting a device rejects subsequent authenticated requests"
+  ],
+  "limitations": [
+    "synthetic 12-second media; no real movie playback",
+    "Quick Connect compatibility is not cryptographic enrollment",
+    "revocation checked on new requests, not active streams",
+    "no WAN, NAS hardware or Apple TV validation"
+  ]
+}

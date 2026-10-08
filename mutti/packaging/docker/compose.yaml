@@ -1,0 +1,33 @@
+name: mutti-preview
+services:
+  mutti:
+    image: mutti:dev
+    build:
+      context: ../../..
+      dockerfile: mutti/packaging/docker/Dockerfile
+      additional_contexts:
+        web: ../../../../mutti-web
+    user: "${MUTTI_UID:-1000}:${MUTTI_GID:-1000}"
+    ports:
+      - "127.0.0.1:18594:18594"
+      - "127.0.0.1:18597:8096"
+      - "127.0.0.1:18595:18595"
+      - "${MUTTI_LAN_BIND:-127.0.0.1}:18599:18599"
+      - "40000-40031:40000-40031/udp"
+    environment:
+      MUTTI_SIGNAL_URL: "${MUTTI_SIGNAL_URL:-}"
+      MUTTI_STUN_URL: "${MUTTI_STUN_URL:-}"
+      MUTTI_LAN_ORIGIN: "${MUTTI_LAN_ORIGIN:-http://127.0.0.1:18599}"
+      MUTTI_UDP_MIN: "40000"
+      MUTTI_UDP_MAX: "40031"
+    volumes:
+      - "${MUTTI_DATA:?Set MUTTI_DATA to an empty private directory}:/config"
+      - "${MUTTI_CACHE:?Set MUTTI_CACHE to an empty cache directory}:/cache"
+      - "${MUTTI_MEDIA:?Set MUTTI_MEDIA to the media directory}:/media:ro"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
